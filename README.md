@@ -12,7 +12,7 @@ This repository replaces the old “download a generated zip from Xiaoduiyou” 
 | OpenClaw connector | `plugins/xiaoduiyou-openclaw-connector/` | OpenClaw channel connector for Xiaoduiyou pending Agent turns. |
 | Public usage skill | `skills/xiaoduiyou-usage-workflow/` | Runtime/product-surface usage rules: content packages, product Q&A, image uploads, Growth Diary, travel/social templates. |
 
-`manifest.json` records the upstream Xiaoduiyou app commit that these public packages were synced from.
+`manifest.json` records the Xiaoduiyou app commit that these public packages were synced from. It intentionally does not expose private/local repository paths.
 
 ## Quick install: Hermes Agent
 
@@ -61,21 +61,9 @@ rsync -a --delete plugins/xiaoduiyou-openclaw-connector/ ~/.openclaw/extensions/
 
 Restart the OpenClaw gateway/runtime after updating the connector.
 
-## Update workflow for package maintainers
+## Maintenance
 
-From the Xiaoduiyou app repository, sync the current public package source into this repository:
-
-```bash
-cd /path/to/xiaoduiyou-public
-./scripts/sync-from-xiaolanbi.sh /path/to/xiaolanbi
-
-git diff --stat
-git add plugins skills manifest.json
-git commit -m "Sync Xiaoduiyou public packages"
-git push origin main
-```
-
-Do not add generated `.zip` artifacts here. This repository is meant to be consumed by `git clone` / `git pull`.
+This repository is the public source consumed by Agents via `git clone` / `git pull`. Generated `.zip` artifacts are intentionally not tracked here.
 
 ## Important image/card rule
 

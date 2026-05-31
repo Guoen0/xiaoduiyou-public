@@ -1,6 +1,6 @@
 {
   "name": "xiaoduiyou-public",
-  "source_repo": "https://github.com/Guoen0/xiaolanbi",
+  "source_project": "xiaoduiyou-app",
   "source_commit": "853c62e3316553446eb5b372c46375a4cf025795",
   "source_short_commit": "853c62e",
   "packages": {

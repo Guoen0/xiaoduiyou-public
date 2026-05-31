@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SRC=${1:-/Users/guoen/project/xiaolanbi}
+if [ $# -ne 1 ]; then
+  echo "Usage: $0 /absolute/path/to/xiaoduiyou-app-repo" >&2
+  exit 2
+fi
+
+SRC=$1
 DST=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 if [ ! -d "$SRC/public/plugins/xiaoduiyou-platform" ]; then
@@ -34,7 +39,7 @@ SOURCE_SHORT=$(git -C "$SRC" rev-parse --short HEAD)
 cat > "$DST/manifest.json" <<JSON
 {
   "name": "xiaoduiyou-public",
-  "source_repo": "https://github.com/Guoen0/xiaolanbi",
+  "source_project": "xiaoduiyou-app",
   "source_commit": "$SOURCE_COMMIT",
   "source_short_commit": "$SOURCE_SHORT",
   "packages": {
@@ -45,4 +50,4 @@ cat > "$DST/manifest.json" <<JSON
 }
 JSON
 
-echo "Synced Xiaoduiyou public packages from $SRC @ $SOURCE_SHORT"
+echo "Synced Xiaoduiyou public packages from app repo @ $SOURCE_SHORT"
