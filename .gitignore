@@ -1,0 +1,7 @@
+# Generated archives are intentionally not tracked here.
+*.zip
+
+# OS/editor noise
+.DS_Store
+.idea/
+.vscode/

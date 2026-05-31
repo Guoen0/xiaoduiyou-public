@@ -1,0 +1,37 @@
+{
+  "id": "xiaoduiyou",
+  "kind": "channel",
+  "channels": ["xiaoduiyou"],
+  "name": "Xiaoduiyou",
+  "description": "Poll Xiaoduiyou /api/agent turns and run them through OpenClaw.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "channelConfigs": {
+    "xiaoduiyou": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "baseUrl": { "type": "string" },
+          "connectionToken": { "type": "string" },
+          "allowFrom": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "pollIntervalMs": { "type": "number" },
+          "pollTimeoutMs": { "type": "number" },
+          "botUserId": { "type": "string" },
+          "botDisplayName": { "type": "string" }
+        }
+      },
+      "uiHints": {
+        "baseUrl": { "label": "Xiaoduiyou URL" },
+        "connectionToken": { "label": "Connection token", "sensitive": true }
+      }
+    }
+  }
+}

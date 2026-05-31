@@ -1,0 +1,33 @@
+{
+  "name": "@xiaoduiyou/openclaw-connector",
+  "version": "2026.5.30",
+  "description": "OpenClaw channel connector for Xiaoduiyou Agent turns.",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./setup-entry": "./setup-entry.js"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.5.22"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ],
+    "runtimeExtensions": [
+      "./index.js"
+    ],
+    "setupEntry": "./setup-entry.js",
+    "runtimeSetupEntry": "./setup-entry.js",
+    "channel": {
+      "id": "xiaoduiyou",
+      "label": "Xiaoduiyou",
+      "blurb": "Connect OpenClaw to Xiaoduiyou pending Agent turns."
+    },
+    "compat": {
+      "pluginApi": ">=2026.5.22",
+      "minGatewayVersion": "2026.5.22"
+    }
+  }
+}

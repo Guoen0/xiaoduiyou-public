@@ -1,0 +1,11 @@
+{
+  "name": "xiaoduiyou-public",
+  "source_repo": "https://github.com/Guoen0/xiaolanbi",
+  "source_commit": "442d1f1f0ca34a139e0c528a86e32ac1b4c5c24c",
+  "source_short_commit": "442d1f1",
+  "packages": {
+    "hermes_plugin": "plugins/xiaoduiyou-platform/xiaoduiyou_platform",
+    "openclaw_connector": "plugins/xiaoduiyou-openclaw-connector",
+    "usage_skill": "skills/xiaoduiyou-usage-workflow"
+  }
+}

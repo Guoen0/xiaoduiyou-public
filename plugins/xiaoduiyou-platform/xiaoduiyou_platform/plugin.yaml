@@ -1,0 +1,13 @@
+name: xiaoduiyou-platform
+label: Xiaoduiyou
+kind: platform
+version: 2026.5.30
+description: Hermes Gateway adapter and document tools for Xiaoduiyou.
+author: Hermes Agent
+optional_env:
+  - name: XIAODUIYOU_BASE_URL
+    description: Xiaoduiyou API base URL. Defaults to platforms.xiaoduiyou.extra.base_url.
+    password: false
+  - name: XIAODUIYOU_CONNECTION_TOKEN
+    description: Account-scoped Xiaoduiyou Agent connection token. Defaults to platforms.xiaoduiyou.extra.connection_token.
+    password: true
