@@ -329,6 +329,75 @@ def _request_json(url: str, *, method: str = "GET", payload: Optional[Dict[str, 
     return _json_response(req, timeout=timeout)
 
 
+
+def _upload_asset_file(base_url: str, token: str, path: str, *, session_id: str = "", timeout: float = DEFAULT_TIMEOUT_SECONDS) -> str:
+    boundary = f"----XiaoduiyouHermes{int(time.time() * 1000)}"
+    filename = os.path.basename(path) or "image"
+    mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    fields = {"source": "external_import", "require_remote_storage": "true"}
+    if session_id:
+        fields["session_id"] = session_id
+    chunks: List[bytes] = []
+    for name, value in fields.items():
+        chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+        chunks.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode("utf-8"))
+    chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+    chunks.append(f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode("utf-8"))
+    chunks.append(f"Content-Type: {mime_type}\r\n\r\n".encode("utf-8"))
+    with open(path, "rb") as f:
+        chunks.append(f.read())
+    chunks.append(f"\r\n--{boundary}--\r\n".encode("utf-8"))
+    headers = {
+        "content-type": f"multipart/form-data; boundary={boundary}",
+        "X-XDY-Connector-Version": XIAODUIYOU_HERMES_PLUGIN_VERSION,
+        "X-XDY-Connector-Provider": "hermes",
+    }
+    if token:
+        headers["authorization"] = f"Bearer {token}"
+    req = request.Request(
+        f"{base_url}/api/assets",
+        method="POST",
+        data=b"".join(chunks),
+        headers=headers,
+    )
+    result = _json_response(req, timeout=timeout)
+    url = str(result.get("url") or ((result.get("asset") or {}).get("public_url")) or "").strip()
+    if not url.startswith(("http://", "https://")):
+        raise RuntimeError("Xiaoduiyou asset upload did not return a public URL")
+    return url
+
+
+def _assetize_visual_card_payload(base_url: str, token: str, session_id: str, payload: Dict[str, Any], timeout: float = DEFAULT_TIMEOUT_SECONDS) -> Dict[str, Any]:
+    if not token:
+        return payload
+    next_payload = dict(payload)
+    raw_attachments = next_payload.get("image_attachments")
+    if isinstance(raw_attachments, list):
+        next_attachments: List[Dict[str, Any]] = []
+        for item in raw_attachments:
+            if not isinstance(item, dict):
+                continue
+            attachment = dict(item)
+            image_url = str(attachment.get("image_url") or attachment.get("url") or "").strip()
+            if image_url.startswith(("http://", "https://")) and not image_url.startswith(base_url):
+                try:
+                    media_paths, _media_types = _download_image_attachments([image_url], timeout)
+                    if media_paths:
+                        try:
+                            attachment["image_url"] = _upload_asset_file(base_url, token, media_paths[0], session_id=session_id, timeout=timeout)
+                        finally:
+                            try:
+                                os.unlink(media_paths[0])
+                            except OSError:
+                                pass
+                except Exception as exc:
+                    logger.warning("Xiaoduiyou visual card image asset upload failed for %s: %s", image_url, exc)
+            next_attachments.append(attachment)
+        next_payload["image_attachments"] = next_attachments
+        if "image_urls" not in next_payload:
+            next_payload["image_urls"] = [str(item.get("image_url") or "") for item in next_attachments if isinstance(item, dict) and str(item.get("image_url") or "").startswith(("http://", "https://"))]
+    return next_payload
+
 def _get_session_chat_id() -> str:
     try:
         from gateway.session_context import get_session_env
@@ -587,11 +656,20 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
 
     async def _post_session_message(self, chat_id: str, content: str) -> Dict[str, Any]:
         session_id = await asyncio.to_thread(self._resolve_session_id_for_outbound, chat_id)
+        payload = self._session_message_payload_from_content(content)
+        payload = await asyncio.to_thread(
+            _assetize_visual_card_payload,
+            self.base_url,
+            self.connection_token,
+            session_id,
+            payload,
+            self.request_timeout_seconds,
+        )
         return await asyncio.to_thread(
             _request_json,
             f"{self.base_url}/api/agent/sessions/{session_id}/messages",
             method="POST",
-            payload=self._session_message_payload_from_content(content),
+            payload=payload,
             timeout=self.request_timeout_seconds,
             token=self.connection_token,
         )
