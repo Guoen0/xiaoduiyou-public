@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isOpenClawLifecycleProgress, textFromPayload, xiaoduiyouDispatchDeliveryKind } from "./dispatch.js";
+import {
+  isOpenClawHiddenLifecycleProgress,
+  isOpenClawLifecycleProgress,
+  textFromPayload,
+  xiaoduiyouDispatchDeliveryKind,
+} from "./dispatch.js";
 
 test("OpenClaw compaction status is lifecycle progress, not a final reply", () => {
   assert.equal(isOpenClawLifecycleProgress("🧹 Auto-compaction complete (count 2).", { kind: "final" }), true);
@@ -18,4 +23,12 @@ test("payload text extraction handles OpenClaw text/content shapes", () => {
 
 test("normal final assistant text is not treated as lifecycle progress", () => {
   assert.equal(isOpenClawLifecycleProgress("抱歉，我刚才已经回复了。", { kind: "final" }), false);
+});
+
+test("OpenClaw new-session status is hidden from Xiaoduiyou chat", () => {
+  const status = "🧭 New session: 2f6c045e-b33c-47c5-ac8f-5c986858efd5";
+
+  assert.equal(isOpenClawHiddenLifecycleProgress(status, { kind: "progress" }), true);
+  assert.equal(xiaoduiyouDispatchDeliveryKind(status, { kind: "progress" }), "empty");
+  assert.equal(xiaoduiyouDispatchDeliveryKind("pong", { kind: "final" }), "final");
 });

@@ -25,8 +25,18 @@ export function isOpenClawLifecycleProgress(text, info = {}) {
   return false;
 }
 
+export function isOpenClawHiddenLifecycleProgress(text, info = {}) {
+  const stripped = String(text ?? "").trim();
+  if (!stripped) return false;
+  if (/^🧭\s*New session:\s*[0-9a-f-]{8,}$/i.test(stripped)) return true;
+  const kind = String(info?.kind ?? "").toLowerCase();
+  return (kind === "status" || kind === "progress" || kind === "system")
+    && /^New session:\s*[0-9a-f-]{8,}$/i.test(stripped);
+}
+
 export function xiaoduiyouDispatchDeliveryKind(text, info = {}) {
   if (!String(text ?? "").trim()) return "empty";
+  if (isOpenClawHiddenLifecycleProgress(text, info)) return "empty";
   if (isOpenClawLifecycleProgress(text, info)) return "tool_progress";
   if (info?.kind === "tool") return "tool_progress";
   if (info?.kind === "final") return "final";
