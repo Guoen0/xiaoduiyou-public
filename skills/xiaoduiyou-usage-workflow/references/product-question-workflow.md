@@ -71,6 +71,17 @@ Clean item links before storing/displaying:
 
 For product questions, the Xiaoduiyou chat answer should include image attachment cards whenever reliable images are available. Send them through progress/final payload `image_attachments` so the UI can render clickable visual cards in the conversation.
 
+Do **not** send visual cards to Xiaoduiyou as Markdown images or local `MEDIA:/...` attachments. Xiaoduiyou chat does not render generic Hermes `MEDIA:` attachments. Use the bundled script so every card is uploaded to Xiaoduiyou assets and delivered as structured `image_attachments`:
+
+```bash
+python ~/.hermes/skills/productivity/xiaoduiyou-usage-workflow/scripts/send_visual_cards.py \
+  --list-sessions
+python ~/.hermes/skills/productivity/xiaoduiyou-usage-workflow/scripts/send_visual_cards.py \
+  --session-id sess_0005 \
+  --text '龙柳小红书参考卡片' \
+  --card '{"image_path":"/tmp/card.png","title":"龙柳参考","link_url":"https://www.xiaohongshu.com/explore/...","badge":"参考帖"}'
+```
+
 Use this payload shape on `POST /api/hermes/turns/{turn_id}/events`, final callback progress-equivalent payload, or `POST /api/agent/sessions/{session_id}/messages` when sending outside an active turn:
 
 ```json
