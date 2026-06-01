@@ -8,19 +8,7 @@ import {
   postXiaoduiyouProgress,
   postXiaoduiyouToolProgress,
 } from "./client.js";
-
-function textFromPayload(payload) {
-  if (!payload) return "";
-  if (typeof payload === "string") return payload;
-  if (typeof payload === "object") {
-    if (typeof payload.text === "string") return payload.text;
-    if (typeof payload.content === "string") return payload.content;
-    if (Array.isArray(payload.content)) {
-      return payload.content.map((item) => item?.text ?? "").filter(Boolean).join("\n");
-    }
-  }
-  return String(payload);
-}
+import { textFromPayload, xiaoduiyouDispatchDeliveryKind } from "./dispatch.js";
 
 function normalizeImageUrls(imageUrls, contentParts) {
   const urls = [];
@@ -122,12 +110,13 @@ function commandNoReplyFallbackText(turn) {
 
 async function deliverXiaoduiyouDispatchPayload(account, turnId, payload, info, dispatchState) {
   const text = textFromPayload(payload).trim();
-  if (!text) return;
-  if (info?.kind === "tool") {
+  const deliveryKind = xiaoduiyouDispatchDeliveryKind(text, info);
+  if (deliveryKind === "empty") return;
+  if (deliveryKind === "tool_progress") {
     await postXiaoduiyouToolProgress(account, turnId, text);
     return;
   }
-  if (info?.kind === "final") {
+  if (deliveryKind === "final") {
     dispatchState.finalCompleted = true;
     await completeXiaoduiyouTurn(account, turnId, { progress: text });
     return;
