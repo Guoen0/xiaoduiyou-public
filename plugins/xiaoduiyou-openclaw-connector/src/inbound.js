@@ -104,6 +104,22 @@ function finalFallbackText(dispatchState) {
     .trim();
 }
 
+function isXiaoduiyouCommandTurn(turn) {
+  return turn?.input_type === "command" || String(turn?.user_message ?? "").trim().startsWith("/");
+}
+
+function commandNameFromTurn(turn) {
+  const explicit = String(turn?.command_name ?? "").trim();
+  if (explicit) return explicit;
+  const match = String(turn?.user_message ?? "").trim().match(/^(\/[^\s]+)/);
+  return match?.[1] ?? undefined;
+}
+
+function commandNoReplyFallbackText(turn) {
+  const name = commandNameFromTurn(turn) ?? "该命令";
+  return `⚠️ ${name} 没有返回可显示结果；已结束本轮。请检查 OpenClaw 命令权限或网关日志。`;
+}
+
 async function deliverXiaoduiyouDispatchPayload(account, turnId, payload, info, dispatchState) {
   const text = textFromPayload(payload).trim();
   if (!text) return;
@@ -170,6 +186,10 @@ export async function handleXiaoduiyouTurn({ account, config, turn, runtime }) {
   ].filter(Boolean).join("\n\n");
   const imageUrls = normalizeImageUrls(turn.image_urls, turn.content_parts);
   const dispatchState = { finalCompleted: false, fallbackBlocks: [] };
+  const commandTurn = isXiaoduiyouCommandTurn(turn);
+  const commandName = commandNameFromTurn(turn);
+  const commandOwnerAllowFrom = commandTurn ? [senderId] : undefined;
+  const commandGatewayScopes = commandTurn ? ["operator.admin"] : undefined;
   const routeAccountId = xiaoduiyouRouteAccountId(turn, account);
   const routeConfig = withXiaoduiyouSessionRouteConfig(config);
   const route = runtime.channel.routing.resolveAgentRoute({
@@ -198,6 +218,10 @@ export async function handleXiaoduiyouTurn({ account, config, turn, runtime }) {
     BodyForAgent: agentMessage,
     RawBody: userMessage,
     CommandBody: userMessage,
+    CommandSource: commandTurn ? "text" : undefined,
+    CommandTurn: commandTurn ? { source: "text", authorized: true, commandName, body: userMessage } : undefined,
+    OwnerAllowFrom: commandOwnerAllowFrom,
+    GatewayClientScopes: commandGatewayScopes,
     From: `xiaoduiyou:${sessionId}`,
     To: `session:${sessionId}`,
     SessionKey: route.sessionKey,
@@ -259,6 +283,10 @@ export async function handleXiaoduiyouTurn({ account, config, turn, runtime }) {
         dispatchState.finalCompleted = true;
         await completeXiaoduiyouTurn(account, turnId, { progress: fallbackText });
       }
+    }
+    if (!dispatchState.finalCompleted && commandTurn) {
+      dispatchState.finalCompleted = true;
+      await completeXiaoduiyouTurn(account, turnId, { progress: commandNoReplyFallbackText(turn) });
     }
   } catch (error) {
     await failXiaoduiyouTurn(account, turnId, error);
