@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
 XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.5.30"
-DEFAULT_BASE_URL = "https://fdorkucovcsw.sealosbja.site"
+DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
 
@@ -551,10 +551,45 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
                 pass
         return {"text": raw}
 
+    def _list_agent_sessions(self) -> List[Dict[str, Any]]:
+        result = _request_json(
+            f"{self.base_url}/api/agent/sessions",
+            timeout=self.request_timeout_seconds,
+            token=self.connection_token,
+        )
+        sessions = result.get("sessions")
+        return [session for session in sessions if isinstance(session, dict)] if isinstance(sessions, list) else []
+
+    def _resolve_session_id_for_outbound(self, chat_id: str) -> str:
+        chat_key = str(chat_id or "").strip()
+        try:
+            sessions = self._list_agent_sessions()
+        except Exception as exc:
+            logger.warning("Xiaoduiyou session list lookup failed for outbound target %s: %s", chat_key, exc)
+            return chat_key
+        if not sessions:
+            return chat_key
+
+        for session in sessions:
+            if str(session.get("session_id") or "") == chat_key:
+                return chat_key
+        for session in sessions:
+            if str(session.get("title") or "").strip() == chat_key:
+                return str(session.get("session_id") or chat_key)
+
+        alias_targets = {"", "xiaoduiyou", "home", "default", "悬浮窗", "floating_agent"}
+        if chat_key in alias_targets:
+            for session in sessions:
+                if str(session.get("session_purpose") or "") == "floating_agent":
+                    return str(session.get("session_id") or chat_key)
+            return str(sessions[0].get("session_id") or chat_key)
+        return chat_key
+
     async def _post_session_message(self, chat_id: str, content: str) -> Dict[str, Any]:
+        session_id = await asyncio.to_thread(self._resolve_session_id_for_outbound, chat_id)
         return await asyncio.to_thread(
             _request_json,
-            f"{self.base_url}/api/agent/sessions/{chat_id}/messages",
+            f"{self.base_url}/api/agent/sessions/{session_id}/messages",
             method="POST",
             payload=self._session_message_payload_from_content(content),
             timeout=self.request_timeout_seconds,

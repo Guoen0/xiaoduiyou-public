@@ -1,11 +1,14 @@
 {
   "name": "xiaoduiyou-public",
-  "source_project": "xiaoduiyou-app",
-  "source_commit": "853c62e3316553446eb5b372c46375a4cf025795",
-  "source_short_commit": "853c62e",
+  "distribution_model": "git-repository-source-of-truth",
+  "repository": "https://github.com/Guoen0/xiaoduiyou-public.git",
   "packages": {
     "hermes_plugin": "plugins/xiaoduiyou-platform/xiaoduiyou_platform",
     "openclaw_connector": "plugins/xiaoduiyou-openclaw-connector",
     "usage_skill": "skills/xiaoduiyou-usage-workflow"
-  }
+  },
+  "notes": [
+    "Agents install package directories from this repository via git clone or git pull.",
+    "Generated zip artifacts are intentionally not part of the app project distribution."
+  ]
 }

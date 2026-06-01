@@ -1,6 +1,6 @@
 # Xiaoduiyou Usage Skill
 
-This is the **single public Xiaoduiyou skill package** for connected Agents. Download `xiaoduiyou-usage-workflow.zip`, unzip it, and keep `SKILL.md` and `references/` together.
+This is the **single public Xiaoduiyou skill package** for connected Agents. Install it from the `xiaoduiyou-public` repository checkout and keep `SKILL.md` and `references/` together.
 
 For Hermes Agent, recommended layout:
 
