@@ -57,6 +57,38 @@ function formatScreenContext(screenContext) {
   return lines.join("\n");
 }
 
+function formatAgentRuntimeContext(turn) {
+  const context = turn?.agent_runtime_context ?? turn?.runtime_context;
+  if (!context || typeof context !== "object") return "";
+  const origin = String(context.origin ?? context.base_url ?? context.api_origin ?? "").trim();
+  if (!origin) return "";
+  const lines = ["小队友平台上下文：", "platform=xiaoduiyou", `origin=${origin}`];
+  for (const [label, key] of [
+    ["environment", "environment"],
+    ["home_id", "home_id"],
+    ["family_id", "family_id"],
+    ["session_id", "session_id"],
+    ["session_scope", "session_scope"],
+    ["session_purpose", "session_purpose"],
+    ["surface", "surface"],
+  ]) {
+    const value = String(context[key] ?? "").trim();
+    if (value) lines.push(`${label}=${value}`);
+  }
+  const sender = context.sender && typeof context.sender === "object" ? context.sender : {};
+  const senderBits = [];
+  for (const key of ["display_name", "account_id", "role"]) {
+    const value = String(sender[key] ?? "").trim();
+    if (value) senderBits.push(`${key}=${value}`);
+  }
+  if (senderBits.length > 0) lines.push(`sender: ${senderBits.join(", ")}`);
+  const auth = context.auth && typeof context.auth === "object" ? context.auth : {};
+  const provider = String(auth.provider ?? "").trim();
+  if (provider) lines.push(`auth.provider=${provider}; auth.mode=connection_token_bound`);
+  lines.push("本次 Xiaoduiyou API/成长日记/资产/会话写入必须使用上述 origin 与当前连接 token；禁止改用本地 config、生产/测试默认地址、维护者 URL 或浏览器里打开的其他小队友页面。");
+  return lines.join("\n");
+}
+
 function appendFinalFallbackText(dispatchState, text, kind) {
   if (!text) return;
   if (dispatchState.finalCompleted) return;
@@ -127,10 +159,12 @@ export async function handleXiaoduiyouTurn({ account, config, turn, runtime }) {
   const senderName = String(turn.sender_display_name ?? turn.sender_name ?? turn.display_name ?? turn.sender_email ?? "Xiaoduiyou user");
   const senderId = String(turn.sender_account_id ?? turn.sender_id ?? turn.account_id ?? "xiaoduiyou-user");
   const screenNote = formatScreenContext(turn.screen_context);
+  const runtimeContextNote = formatAgentRuntimeContext(turn);
   const agentNotice = String(turn.agent_notice ?? "").trim();
   const agentMessage = [
     `发送者：${senderName}（${senderId}）`,
     screenNote,
+    runtimeContextNote,
     agentNotice,
     userMessage,
   ].filter(Boolean).join("\n\n");
@@ -216,7 +250,7 @@ export async function handleXiaoduiyouTurn({ account, config, turn, runtime }) {
           },
           onError: (error) => { throw error; },
         },
-        replyOptions: { onModelSelected },
+        replyOptions: { onModelSelected, sourceReplyDeliveryMode: "automatic" },
       }),
     });
     if (!dispatchState.finalCompleted && dispatchState.fallbackBlocks.length > 0) {
