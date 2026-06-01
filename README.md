@@ -7,7 +7,7 @@ This repository is the source of truth for Xiaoduiyou Agent-facing packages. Do 
 Repository URL:
 
 ```text
-https://github.com/Guoen0/xiaoduiyou-public/blob/main/README.md.git
+https://github.com/Guoen0/xiaoduiyou-public.git
 ```
 
 ## Contents
@@ -37,7 +37,7 @@ https://github.com/Guoen0/xiaoduiyou-public/blob/main/README.md
 执行安装与配置：
 
 ```bash
-XDY_PUBLIC_REPO="https://github.com/Guoen0/xiaoduiyou-public/blob/main/README.md.git"
+XDY_PUBLIC_REPO="https://github.com/Guoen0/xiaoduiyou-public.git"
 XDY_PUBLIC_DIR="$HOME/.xiaoduiyou/xiaoduiyou-public"
 mkdir -p "$HOME/.xiaoduiyou"
 if [ -d "$XDY_PUBLIC_DIR/.git" ]; then
@@ -88,7 +88,7 @@ https://github.com/Guoen0/xiaoduiyou-public/blob/main/README.md
 执行安装与配置：
 
 ```bash
-XDY_PUBLIC_REPO="https://github.com/Guoen0/xiaoduiyou-public/blob/main/README.md.git"
+XDY_PUBLIC_REPO="https://github.com/Guoen0/xiaoduiyou-public.git"
 XDY_PUBLIC_DIR="$HOME/.xiaoduiyou/xiaoduiyou-public"
 mkdir -p "$HOME/.xiaoduiyou"
 if [ -d "$XDY_PUBLIC_DIR/.git" ]; then
@@ -115,7 +115,7 @@ openclaw gateway restart
 
 Agents that are not Hermes or OpenClaw should still start from this repository:
 
-1. Clone or pull `https://github.com/Guoen0/xiaoduiyou-public/blob/main/README.md.git`.
+1. Clone or pull `https://github.com/Guoen0/xiaoduiyou-public.git`.
 2. Read `skills/xiaoduiyou-usage-workflow/SKILL.md` and the referenced files under `skills/xiaoduiyou-usage-workflow/references/`.
 3. Use the Xiaoduiyou app-provided base URL and connection token for polling/callbacks.
 4. Do not reimplement product behavior from guesses; follow the usage skill and runtime API reference bundled here.
