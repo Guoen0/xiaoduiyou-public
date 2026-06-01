@@ -1,4 +1,4 @@
-export const XIAODUIYOU_CONNECTOR_VERSION = "2026.5.30";
+export const XIAODUIYOU_CONNECTOR_VERSION = "2026.6.1";
 
 async function readJsonResponse(response, path) {
   const rawText = await response.text();
@@ -73,19 +73,31 @@ export async function failXiaoduiyouTurn(account, turnId, error) {
   });
 }
 
-function sessionMessagePayloadFromText(text) {
+function looksLikeToolProgress(content) {
+  const stripped = String(content ?? "").trim();
+  if (!stripped) return false;
+  const hasToolShape = [': "', "...", "(", "×"].some((marker) => stripped.includes(marker));
+  if (!hasToolShape) return false;
+  return [
+    "🔍", "🔎", "📖", "📚", "🛠", "⚙", "✅", "💻", "🌐", "📝", "📁", "🔧",
+    "📋", "🐍", "🎨", "👁", "🧠",
+  ].some((prefix) => stripped.startsWith(prefix));
+}
+
+export function sessionMessagePayloadFromText(text) {
   const raw = String(text ?? "").trim();
   if (!raw) return { text: "" };
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      if ("image_attachments" in parsed || "image_urls" in parsed || "text" in parsed || "content" in parsed || "detail" in parsed) {
+      if ("message_type" in parsed || "tool_progress" in parsed || "image_attachments" in parsed || "image_urls" in parsed || "text" in parsed || "content" in parsed || "detail" in parsed) {
         return parsed;
       }
     }
   } catch {
     // Plain text message, not a visual-card envelope.
   }
+  if (looksLikeToolProgress(raw)) return { message_type: "tool_progress", tool_progress: raw };
   return { text: raw };
 }
 
