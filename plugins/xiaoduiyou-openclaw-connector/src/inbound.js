@@ -9,6 +9,7 @@ import {
   postXiaoduiyouToolProgress,
 } from "./client.js";
 import { textFromPayload, xiaoduiyouDispatchDeliveryKind } from "./dispatch.js";
+import { runWithXiaoduiyouToolContext } from "./tool-context.js";
 
 function normalizeImageUrls(imageUrls, contentParts) {
   const urls = [];
@@ -92,6 +93,12 @@ function finalFallbackText(dispatchState) {
     .trim();
 }
 
+function completePayloadWithDocumentActions(payload, dispatchState) {
+  if (!Array.isArray(dispatchState.documentActions) || dispatchState.documentActions.length === 0) return payload;
+  const actions = dispatchState.documentActions.splice(0);
+  return { ...payload, document_actions: actions };
+}
+
 function isXiaoduiyouCommandTurn(turn) {
   return turn?.input_type === "command" || String(turn?.user_message ?? "").trim().startsWith("/");
 }
@@ -118,7 +125,7 @@ async function deliverXiaoduiyouDispatchPayload(account, turnId, payload, info, 
   }
   if (deliveryKind === "final") {
     dispatchState.finalCompleted = true;
-    await completeXiaoduiyouTurn(account, turnId, { progress: text });
+    await completeXiaoduiyouTurn(account, turnId, completePayloadWithDocumentActions({ progress: text }, dispatchState));
     return;
   }
 
@@ -166,15 +173,24 @@ export async function handleXiaoduiyouTurn({ account, config, turn, runtime }) {
   const screenNote = formatScreenContext(turn.screen_context);
   const runtimeContextNote = formatAgentRuntimeContext(turn);
   const agentNotice = String(turn.agent_notice ?? "").trim();
+  const documentToolNote = [
+    "Xiaoduiyou connector tools are available.",
+    "For Growth Diary tasks, call xiaoduiyou_growth_diary_get first, then xiaoduiyou_growth_diary_patch for writes; do not search local files/env/config for connection_token and do not call /api/growth-diary manually from terminal.",
+    "For ordinary chat, answer normally and do not call document tools.",
+    "When the user explicitly asks to create, update, append to, or delete a document, call the appropriate xiaoduiyou document tool exactly once before your final reply.",
+    "For content packages, choose UI templates with ui_templates (currently xiaohongshu and/or moments) and fill matching fields.publish_notes.<template> with final result data; process block_json/source_markdown should stay process-only.",
+    "Do not merely promise to create a document.",
+  ].join(" ");
   const agentMessage = [
     `发送者：${senderName}（${senderId}）`,
     screenNote,
     runtimeContextNote,
     agentNotice,
+    documentToolNote,
     userMessage,
   ].filter(Boolean).join("\n\n");
   const imageUrls = normalizeImageUrls(turn.image_urls, turn.content_parts);
-  const dispatchState = { finalCompleted: false, fallbackBlocks: [] };
+  const dispatchState = { finalCompleted: false, fallbackBlocks: [], documentActions: [] };
   const commandTurn = isXiaoduiyouCommandTurn(turn);
   const commandName = commandNameFromTurn(turn);
   const commandOwnerAllowFrom = commandTurn ? [senderId] : undefined;
@@ -243,39 +259,46 @@ export async function handleXiaoduiyouTurn({ account, config, turn, runtime }) {
       channel: "xiaoduiyou",
       accountId: routeAccountId,
     });
-    await runPreparedInboundReplyTurn({
-      channel: "xiaoduiyou",
+    await runWithXiaoduiyouToolContext({
       accountId: routeAccountId,
-      routeSessionKey: route.sessionKey,
-      storePath,
-      ctxPayload,
-      recordInboundSession: runtime.channel.session.recordInboundSession,
-      record: {
-        onRecordError: (error) => { throw error; },
-      },
-      runDispatch: async () => await runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
-        ctx: ctxPayload,
-        cfg: verboseConfig,
-        dispatcherOptions: {
-          ...replyPipeline,
-          deliver: async (payload, info) => {
-            await deliverXiaoduiyouDispatchPayload(account, turnId, payload, info, dispatchState);
-          },
-          onError: (error) => { throw error; },
+      sessionId,
+      turnId,
+      documentActions: dispatchState.documentActions,
+    }, async () => {
+      await runPreparedInboundReplyTurn({
+        channel: "xiaoduiyou",
+        accountId: routeAccountId,
+        routeSessionKey: route.sessionKey,
+        storePath,
+        ctxPayload,
+        recordInboundSession: runtime.channel.session.recordInboundSession,
+        record: {
+          onRecordError: (error) => { throw error; },
         },
-        replyOptions: { onModelSelected, sourceReplyDeliveryMode: "automatic" },
-      }),
+        runDispatch: async () => await runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
+          ctx: ctxPayload,
+          cfg: verboseConfig,
+          dispatcherOptions: {
+            ...replyPipeline,
+            deliver: async (payload, info) => {
+              await deliverXiaoduiyouDispatchPayload(account, turnId, payload, info, dispatchState);
+            },
+            onError: (error) => { throw error; },
+          },
+          replyOptions: { onModelSelected, sourceReplyDeliveryMode: "automatic" },
+        }),
+      });
     });
     if (!dispatchState.finalCompleted && dispatchState.fallbackBlocks.length > 0) {
       const fallbackText = finalFallbackText(dispatchState);
       if (fallbackText) {
         dispatchState.finalCompleted = true;
-        await completeXiaoduiyouTurn(account, turnId, { progress: fallbackText });
+        await completeXiaoduiyouTurn(account, turnId, completePayloadWithDocumentActions({ progress: fallbackText }, dispatchState));
       }
     }
     if (!dispatchState.finalCompleted && commandTurn) {
       dispatchState.finalCompleted = true;
-      await completeXiaoduiyouTurn(account, turnId, { progress: commandNoReplyFallbackText(turn) });
+      await completeXiaoduiyouTurn(account, turnId, completePayloadWithDocumentActions({ progress: commandNoReplyFallbackText(turn) }, dispatchState));
     }
   } catch (error) {
     await failXiaoduiyouTurn(account, turnId, error);

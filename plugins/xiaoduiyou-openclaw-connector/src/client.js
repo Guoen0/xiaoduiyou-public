@@ -1,4 +1,4 @@
-export const XIAODUIYOU_CONNECTOR_VERSION = "2026.6.3";
+export const XIAODUIYOU_CONNECTOR_VERSION = "2026.6.2.2";
 
 async function readJsonResponse(response, path) {
   const rawText = await response.text();
@@ -33,6 +33,27 @@ async function requestJson(account, path, options = {}) {
     signal: options.signal,
   });
   return await readJsonResponse(response, path);
+}
+
+function growthDiaryQuery(params = {}) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue;
+    query.set(key, String(value));
+  }
+  const text = query.toString();
+  return text ? `?${text}` : "";
+}
+
+export async function getXiaoduiyouGrowthDiary(account, params = {}) {
+  return await requestJson(account, `/api/growth-diary${growthDiaryQuery(params)}`);
+}
+
+export async function patchXiaoduiyouGrowthDiary(account, payload) {
+  return await requestJson(account, "/api/growth-diary", {
+    method: "PATCH",
+    body: payload,
+  });
 }
 
 export async function pollXiaoduiyouTurn(account, signal) {

@@ -4,6 +4,15 @@
   "channels": ["xiaoduiyou"],
   "name": "Xiaoduiyou",
   "description": "Poll Xiaoduiyou /api/agent turns and run them through OpenClaw.",
+  "contracts": {
+    "tools": [
+      "xiaoduiyou_growth_diary_get",
+      "xiaoduiyou_growth_diary_patch",
+      "xiaoduiyou_documents_create",
+      "xiaoduiyou_documents_update",
+      "xiaoduiyou_documents_delete"
+    ]
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
