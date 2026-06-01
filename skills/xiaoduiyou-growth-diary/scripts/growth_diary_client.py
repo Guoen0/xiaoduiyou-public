@@ -2,8 +2,11 @@
 """Small Xiaoduiyou Growth Diary helper.
 
 Uses the same config conventions as Xiaoduiyou IM scripts:
-- base_url from platforms.xiaoduiyou.extra.base_url or XDY/XIAODUIYOU env vars
-- connection token from platforms.xiaoduiyou.extra.connection_token or env vars
+- prefer the active turn runtime origin when exported as XDY_RUNTIME_BASE_URL / XIAODUIYOU_RUNTIME_BASE_URL
+- otherwise base_url from explicit --base-url, XDY/XIAODUIYOU env vars, or platforms.xiaoduiyou.extra.base_url
+- connection token from explicit --token, XDY/XIAODUIYOU env vars, or platforms.xiaoduiyou.extra.connection_token
+
+Do not rely on a stale local config when the active Xiaoduiyou turn came from a different product environment.
 
 Examples:
   growth_diary_client.py get
@@ -43,7 +46,7 @@ def config_extra() -> dict[str, Any]:
 
 
 def base_url(arg: str | None) -> str:
-    return str(arg or os.getenv("XIAODUIYOU_BASE_URL") or os.getenv("XDY_BASE_URL") or config_extra().get("base_url") or "http://localhost:5173").rstrip("/")
+    return str(arg or os.getenv("XDY_RUNTIME_BASE_URL") or os.getenv("XIAODUIYOU_RUNTIME_BASE_URL") or os.getenv("XIAODUIYOU_BASE_URL") or os.getenv("XDY_BASE_URL") or config_extra().get("base_url") or "http://localhost:5173").rstrip("/")
 
 
 def token(arg: str | None) -> str:

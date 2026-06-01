@@ -1,6 +1,6 @@
 # Xiaoduiyou runtime API quick reference
 
-This is the compact interface reference for connected usage Agents. Use the Xiaoduiyou origin/auth context provided by the active runtime prompt. Do not invent credentials or call private developer-only endpoints from this public usage skill.
+This is the compact interface reference for connected usage Agents. Use the Xiaoduiyou origin/auth context provided by the active runtime prompt/turn (`runtime_context.base_url` when present). Do not invent credentials, call private developer-only endpoints, use maintainer-specific URLs, or switch to a different Xiaoduiyou origin from local config or an unrelated browser tab.
 
 ## Turn lifecycle
 

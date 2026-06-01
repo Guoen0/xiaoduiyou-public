@@ -19,10 +19,12 @@ Load this when the user asks to:
 ## Non-negotiables
 
 1. Read live Growth Diary schema before writing.
-2. Upload photos/assets via `/api/assets` before saving attachment fields.
-3. Preserve enum option IDs/names from live schema; do not invent options unless the user explicitly asks to add them.
-4. Deduplicate repeated real-world care events: same time + same event = one record with additional source/notes.
-5. Keep family-care records in Feishu when the user is talking about the Feishu family log; use Xiaoduiyou Growth Diary only when the task is clearly Xiaoduiyou/Discord-side diary.
+2. Use the Xiaoduiyou origin/auth context supplied by the active Agent turn. Do not hard-code production, review, localhost, maintainer-specific domains, or URLs copied from an unrelated browser tab/local config.
+3. If the active turn does not provide a usable runtime origin/base URL, ask for the target Xiaoduiyou environment instead of guessing.
+4. Upload photos/assets via `/api/assets` before saving attachment fields.
+5. Preserve enum option IDs/names from live schema; do not invent options unless the user explicitly asks to add them.
+6. Deduplicate repeated real-world care events: same time + same event = one record with additional source/notes.
+7. Keep family-care records in Feishu when the user is talking about the Feishu family log; use Xiaoduiyou Growth Diary only when the task is clearly Xiaoduiyou/Discord-side diary.
 
 ## Case map owned by Growth Diary
 

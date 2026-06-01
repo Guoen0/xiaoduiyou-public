@@ -133,6 +133,20 @@ def _format_screen_context_for_agent(turn: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _format_runtime_context_for_agent(turn: Dict[str, Any]) -> str:
+    runtime_context = turn.get("runtime_context")
+    if not isinstance(runtime_context, dict):
+        return ""
+    base_url = str(runtime_context.get("base_url") or runtime_context.get("api_origin") or "").strip()
+    if not base_url:
+        return ""
+    return (
+        "小队友运行环境：\n"
+        f"base_url={base_url}\n"
+        "对本次小队友 API/成长日记/资产写入，必须使用这个 base_url 和当前连接 token；不要改用本地配置、生产/测试默认地址或浏览器里打开的其他小队友页面。"
+    )
+
+
 def _agent_event_text_for_turn(turn_or_message: Any) -> str:
     if not isinstance(turn_or_message, dict):
         return str(turn_or_message or "").strip()
@@ -141,8 +155,9 @@ def _agent_event_text_for_turn(turn_or_message: Any) -> str:
     sender_id = _sender_id_from_turn(turn_or_message)
     audio_note = _format_audio_attachments_for_agent(turn_or_message)
     screen_note = _format_screen_context_for_agent(turn_or_message)
+    runtime_note = _format_runtime_context_for_agent(turn_or_message)
     agent_notice = str(turn_or_message.get("agent_notice") or "").strip()
-    parts = [f"发送者：{sender_name}（{sender_id}）", screen_note, agent_notice, user_message]
+    parts = [f"发送者：{sender_name}（{sender_id}）", screen_note, runtime_note, agent_notice, user_message]
     if audio_note:
         parts.append(audio_note)
     return "\n\n".join(part for part in parts if part).strip()
