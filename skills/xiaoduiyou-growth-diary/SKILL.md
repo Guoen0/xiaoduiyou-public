@@ -19,7 +19,7 @@ Load this when the user asks to:
 ## Non-negotiables
 
 1. Read live Growth Diary schema before writing.
-2. Use first-class Xiaoduiyou connector tools for diary I/O: `xiaoduiyou_growth_diary_get` before writes, then `xiaoduiyou_growth_diary_patch` for mutations. The connector owns origin/auth; the model must not search local files, env vars, config, browser cookies, or terminal history for `connection_token`.
+2. Use first-class Xiaoduiyou connector tools for diary I/O: `xiaoduiyou_growth_diary_get` before writes, then `xiaoduiyou_growth_diary_patch` for mutations. When the user gives a target date/range, pass `date`, `start_date`/`end_date`, and/or `record_limit` to `xiaoduiyou_growth_diary_get` so the connector returns live schema plus only relevant records instead of the full table. The connector owns origin/auth; the model must not search local files, env vars, config, browser cookies, or terminal history for `connection_token`.
 3. Use the active turn's `agent_runtime_context` (`origin/base_url`, `home_id/family_id`, `session_id`, `surface`, `sender`) as scope context only. Do not hard-code production, review, localhost, maintainer-specific domains, or URLs copied from an unrelated browser tab/local config.
 4. If connector diary tools are unavailable or `agent_runtime_context.origin` is absent/unusable, ask for reconnection/target environment and family/home scope instead of guessing.
 5. Upload photos/assets via connector-supported `/api/assets` tooling before saving attachment fields.

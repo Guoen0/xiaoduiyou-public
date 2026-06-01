@@ -1015,7 +1015,133 @@ def _tool_growth_diary_get(args: Dict[str, Any], **_: Any) -> str:
         timeout=DEFAULT_TIMEOUT_SECONDS,
         token=context["token"],
     )
-    return json.dumps({"ok": True, "context": _safe_tool_context(context), "growth_diary": result}, ensure_ascii=False)
+    filter_spec = _growth_diary_filter_spec(args)
+    if filter_spec:
+        result = _compact_growth_diary_result(result, filter_spec)
+    return json.dumps({"ok": True, "context": _safe_tool_context(context), "filter": filter_spec or None, "growth_diary": result}, ensure_ascii=False)
+
+
+def _growth_diary_filter_spec(args: Dict[str, Any]) -> Dict[str, Any]:
+    date = str(args.get("date") or "").strip()
+    start_date = str(args.get("start_date") or args.get("from_date") or "").strip()
+    end_date = str(args.get("end_date") or args.get("to_date") or "").strip()
+    record_limit_raw = args.get("record_limit", args.get("limit", 80))
+    try:
+        record_limit = int(record_limit_raw)
+    except Exception:
+        record_limit = 80
+    record_limit = max(1, min(record_limit, 500))
+    if date:
+        start_date = date
+        end_date = date
+    spec: Dict[str, Any] = {"record_limit": record_limit}
+    if start_date:
+        spec["start_date"] = start_date[:10]
+    if end_date:
+        spec["end_date"] = end_date[:10]
+    # Without a date/range/explicit cap, preserve legacy full GET behavior.
+    if not (date or start_date or end_date or "record_limit" in args or "limit" in args):
+        return {}
+    return spec
+
+
+def _compact_growth_diary_result(result: Any, filter_spec: Dict[str, Any]) -> Any:
+    if not isinstance(result, dict):
+        return result
+    base = result.get("base")
+    if not isinstance(base, dict):
+        return result
+    next_base = dict(base)
+    next_tables = []
+    total_before = 0
+    total_after = 0
+    table_list = base.get("tables")
+    if not isinstance(table_list, list):
+        table_list = []
+    for table in table_list:
+        if not isinstance(table, dict):
+            next_tables.append(table)
+            continue
+        table_records = table.get("records")
+        records: List[Any] = table_records if isinstance(table_records, list) else []
+        total_before += len(records)
+        filtered = _filter_growth_diary_records(records, filter_spec)
+        total_after += len(filtered)
+        next_table = dict(table)
+        next_table["records"] = filtered
+        next_table["records_filtered"] = {
+            "total_before_filter": len(records),
+            "returned": len(filtered),
+            "filter": filter_spec,
+        }
+        next_tables.append(next_table)
+    next_base["tables"] = next_tables
+    return {
+        **result,
+        "base": next_base,
+        "compact": True,
+        "records_filtered": {
+            "total_before_filter": total_before,
+            "returned": total_after,
+            "filter": filter_spec,
+        },
+    }
+
+
+def _filter_growth_diary_records(records: List[Any], filter_spec: Dict[str, Any]) -> List[Any]:
+    start_date = str(filter_spec.get("start_date") or "")[:10]
+    end_date = str(filter_spec.get("end_date") or "")[:10]
+    limit = int(filter_spec.get("record_limit") or 80)
+    filtered: List[Any] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        record_date = _growth_diary_record_date(record)
+        if start_date and (not record_date or record_date < start_date):
+            continue
+        if end_date and (not record_date or record_date > end_date):
+            continue
+        filtered.append(record)
+    filtered.sort(key=lambda record: (_growth_diary_record_datetime(record), str(record.get("record_id") or "")))
+    return filtered[:limit]
+
+
+def _growth_diary_record_date(record: Dict[str, Any]) -> str:
+    raw_values = record.get("values")
+    values: Dict[str, Any] = raw_values if isinstance(raw_values, dict) else {}
+    for key in ("date", "occurred_at"):
+        value = _growth_diary_value_to_string(values.get(key))
+        if value:
+            return value[:10]
+    for key in ("date", "occurred_at", "created_at", "updated_at"):
+        value = str(record.get(key) or "").strip()
+        if value:
+            return value[:10]
+    return ""
+
+
+def _growth_diary_record_datetime(record: Dict[str, Any]) -> str:
+    raw_values = record.get("values")
+    values: Dict[str, Any] = raw_values if isinstance(raw_values, dict) else {}
+    occurred_at = _growth_diary_value_to_string(values.get("occurred_at"))
+    date = _growth_diary_value_to_string(values.get("date")) or _growth_diary_record_date(record)
+    if occurred_at:
+        return occurred_at if "T" in occurred_at or " " in occurred_at else f"{date} {occurred_at}"
+    return date
+
+
+def _growth_diary_value_to_string(value: Any) -> str:
+    if isinstance(value, dict):
+        for key in ("value", "date", "datetime"):
+            raw = value.get(key)
+            if raw is not None:
+                return str(raw).strip()
+        if value.get("type") == "number" and value.get("value") is not None:
+            return str(value.get("value")).strip()
+        return ""
+    if value is None:
+        return ""
+    return str(value).strip()
 
 
 def _tool_growth_diary_patch(args: Dict[str, Any], **_: Any) -> str:
@@ -1072,8 +1198,16 @@ def register(ctx) -> None:
         emoji="📖",
         schema={
             "name": "xiaoduiyou_growth_diary_get",
-            "description": "Read Growth Diary schema/records for the current Xiaoduiyou home. Use this before any Growth Diary write; do not search for connection_token manually.",
-            "parameters": {"type": "object", "properties": {}},
+            "description": "Read Growth Diary schema/records for the current Xiaoduiyou home. Use this before any Growth Diary write; pass date/start_date/end_date to return a compact schema + targeted records instead of the full table. Do not search for connection_token manually.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "date": {"type": "string", "description": "Optional YYYY-MM-DD date to return only that day's records while preserving schema/options/views."},
+                    "start_date": {"type": "string", "description": "Optional inclusive YYYY-MM-DD range start."},
+                    "end_date": {"type": "string", "description": "Optional inclusive YYYY-MM-DD range end."},
+                    "record_limit": {"type": "integer", "description": "Maximum records to return after filtering. Defaults to 80 when any filter is used; capped at 500."},
+                },
+            },
         },
         handler=_tool_growth_diary_get,
         check_fn=check_requirements,
