@@ -1,6 +1,6 @@
 # Xiaoduiyou Growth Diary Agent Contract
 
-This reference is bundled inside `xiaoduiyou-usage-workflow`. Use it when a connected Agent needs to operate Xiaoduiyou 成长日记 through runtime APIs. It documents the public runtime contract only: no source-code edits, no deployment steps, no private database surgery, and no credentials.
+This reference is bundled inside `xiaoduiyou-growth-diary`. Use it when a connected Agent needs to operate Xiaoduiyou 成长日记 through runtime APIs. It documents the public runtime contract only: no source-code edits, no deployment steps, no private database surgery, and no credentials.
 
 ## When to use
 

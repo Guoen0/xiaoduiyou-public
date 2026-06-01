@@ -49,7 +49,7 @@ Capture for each candidate:
 
 - `title`
 - `item_url`: clean clickable item URL
-- `image_url`: durable Xiaoduiyou asset URL if rendered in Xiaoduiyou. For a direct product link or product candidate card, this must come from the actual first product image on the product page/listing, uploaded to Xiaoduiyou `/api/assets`/TOS first; do not use placeholders, screenshots, local `MEDIA:` files, or raw Taobao/Tmall CDN hotlinks as the final card image.
+- `image_url`: durable Xiaoduiyou asset URL if rendered in Xiaoduiyou
 - `price` / `price_note` when visible
 - `shop` / `seller` when visible
 - `option` / `sku_note` for the exact variant if the user constraint depends on it
@@ -71,12 +71,14 @@ Clean item links before storing/displaying:
 
 For product questions, the Xiaoduiyou chat answer should include image attachment cards whenever reliable images are available. Send them through progress/final payload `image_attachments` so the UI can render clickable visual cards in the conversation.
 
+If the user asks “用视觉卡片 / 换成卡片 / 点图能跳转” after a text-only source list, treat that as a formatting correction and send cards immediately; do not repeat the text list or explain the format first. Use 2–6 high-signal cards, with image + title + short subtitle + clean `link_url`.
+
 Do **not** send visual cards to Xiaoduiyou as Markdown images or local `MEDIA:/...` attachments. Xiaoduiyou chat does not render generic Hermes `MEDIA:` attachments. Use the bundled script so every card is uploaded to Xiaoduiyou assets and delivered as structured `image_attachments`:
 
 ```bash
-python ~/.hermes/skills/productivity/xiaoduiyou-usage-workflow/scripts/send_visual_cards.py \
+python ~/.hermes/skills/productivity/xiaoduiyou-im/scripts/send_visual_cards.py \
   --list-sessions
-python ~/.hermes/skills/productivity/xiaoduiyou-usage-workflow/scripts/send_visual_cards.py \
+python ~/.hermes/skills/productivity/xiaoduiyou-im/scripts/send_visual_cards.py \
   --session-id sess_0005 \
   --text '龙柳小红书参考卡片' \
   --card '{"image_path":"/tmp/card.png","title":"龙柳参考","link_url":"https://www.xiaohongshu.com/explore/...","badge":"参考帖"}'
@@ -110,7 +112,6 @@ Use this payload shape on `POST /api/hermes/turns/{turn_id}/events`, final callb
 Card rules:
 
 - `image_url` must be a durable Xiaoduiyou/TOS/asset URL verified with HTTP 200 and image content-type.
-- For Taobao/Tmall product-link cards, `image_url` must be the product page/listing's first real product image after upload to Xiaoduiyou `/api/assets`/TOS; never use a placeholder graphic, generated generic card, temporary screenshot, local `MEDIA:` path, or third-party hotlink as the final `image_url`.
 - `image_url` must not be a server-local/static URL such as `/official-replay/...`, `/replay-images/...`, `/public/...`, `/tmp/...`, or `/Users/...`.
 - `link_url` must be the clean source/product link that the user can click.
 - Use `badge: "参考帖"` for Xiaohongshu; use `badge: "商品候选"` for Taobao/Tmall.
@@ -173,7 +174,7 @@ Do not overstate scraped information. Prices, stock, promotions, and reviews cha
 - [ ] At least one Xiaohongshu source or a stated reason why none could be used.
 - [ ] At least one Taobao/Tmall candidate or a stated reason why none could be used.
 - [ ] Source links are clean and verified enough to click.
-- [ ] Rendered images are uploaded through `/api/assets`, not hotlinked from temporary XHS/Taobao CDNs; Taobao/Tmall product cards use the first real product image, not placeholders or generic generated images.
+- [ ] Rendered images are uploaded through `/api/assets`, not hotlinked from temporary XHS/Taobao CDNs.
 - [ ] Chat payload includes `image_attachments` for high-signal visual sources when images are available.
 - [ ] Xiaohongshu cards are labeled `参考帖`; Taobao/Tmall cards are labeled `商品候选`.
 - [ ] The final answer separates experience evidence from purchase candidates and names uncertainties.

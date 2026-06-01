@@ -16,9 +16,23 @@ https://github.com/Guoen0/xiaoduiyou-public.git
 |---|---|---|
 | Hermes platform plugin | `plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform/` | Hermes Gateway platform adapter: pending-turn polling, progress/final callbacks, document tools, outbound session messages. |
 | OpenClaw connector | `plugins/xiaoduiyou-openclaw-connector/` | OpenClaw channel connector for Xiaoduiyou pending Agent turns. |
-| Public usage skill | `skills/xiaoduiyou-usage-workflow/` | Runtime/product-surface usage rules: content packages, product Q&A, image uploads, Growth Diary, travel/social templates. |
+| Xiaoduiyou IM skill | `skills/xiaoduiyou-im/` | First entry for Xiaoduiyou Agent chat/IM intents: visual cards, product/source cards, Taobao/Xiaohongshu candidates, asset uploads, runtime messages, and chat-only delivery. |
+| Xiaoduiyou document/content-package skill | `skills/xiaoduiyou-doc-content-package/` | Document artifacts, content packages, publish tabs, process docs, travel plans, and document create/update/delete operations. |
+| Xiaoduiyou Growth Diary skill | `skills/xiaoduiyou-growth-diary/` | Growth Diary records, photos, summaries, schema-aware updates, and diary views. |
 
 `manifest.json` describes the package paths in this public repository. It intentionally does not expose maintainer-local paths, deploy hosts, or secrets.
+
+## Runtime skill routing
+
+Connected Agents should use these three skills directly:
+
+| User/task shape | Load |
+|---|---|
+| Agent 对话页 / chat-only task / cards / product-source candidates / runtime messages | `xiaoduiyou-im` |
+| 文档 / 内容包 / 发布稿 / 旅游规划 / process docs / `ui_templates` / `publish_notes` | `xiaoduiyou-doc-content-package` |
+| 成长日记 / 宝宝记录 / diary photos / diary schema or views | `xiaoduiyou-growth-diary` |
+
+There is no public `xiaoduiyou-usage-workflow` router. Cases live in the skill that owns the surface.
 
 ## Agent setup prompt: Hermes Agent
 
@@ -49,8 +63,12 @@ fi
 mkdir -p ~/.hermes/plugins/xiaoduiyou_hermes_platform
 rsync -a --delete "$XDY_PUBLIC_DIR/plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform/" ~/.hermes/plugins/xiaoduiyou_hermes_platform/
 
-mkdir -p ~/.hermes/skills/productivity/xiaoduiyou-usage-workflow
-rsync -a --delete "$XDY_PUBLIC_DIR/skills/xiaoduiyou-usage-workflow/" ~/.hermes/skills/productivity/xiaoduiyou-usage-workflow/
+mkdir -p ~/.hermes/skills/productivity
+for skill in xiaoduiyou-im xiaoduiyou-doc-content-package xiaoduiyou-growth-diary; do
+  rm -rf "$HOME/.hermes/skills/productivity/$skill"
+  rsync -a --delete "$XDY_PUBLIC_DIR/skills/$skill/" "$HOME/.hermes/skills/productivity/$skill/"
+done
+rm -rf ~/.hermes/skills/productivity/xiaoduiyou-usage-workflow
 
 hermes config set plugins.enabled '["xiaoduiyou-hermes-platform"]'
 hermes config set platforms.xiaoduiyou.enabled true
@@ -65,7 +83,9 @@ hermes gateway restart
 ```
 
 运行规则：
-- 处理任何小队友任务前，先加载 skill：`xiaoduiyou-usage-workflow`。
+- Agent 对话页 / 卡片 / 商品候选 / runtime message：先加载 `xiaoduiyou-im`。
+- 文档 / 内容包 / 发布稿 / 旅游规划 / publish tabs：加载 `xiaoduiyou-doc-content-package`。
+- 成长日记 / 宝宝记录 / diary photos：加载 `xiaoduiyou-growth-diary`。
 - 不要把 `platform_toolsets.xiaoduiyou` 只配置成 `["xiaoduiyou"]`；要保留本地文件、终端、搜索、浏览器等 Hermes 工具。
 - 不要修改小队友网站代码、UI、样式、接口实现或部署。
 - 同一时间只允许一个 Agent 接入；如果你开始连接，就视为替换掉其他 Agent。
@@ -97,7 +117,10 @@ else
   git clone "$XDY_PUBLIC_REPO" "$XDY_PUBLIC_DIR"
 fi
 
-openclaw skills install "$XDY_PUBLIC_DIR/skills/xiaoduiyou-usage-workflow" --as xiaoduiyou-usage-workflow --force
+for skill in xiaoduiyou-im xiaoduiyou-doc-content-package xiaoduiyou-growth-diary; do
+  openclaw skills install "$XDY_PUBLIC_DIR/skills/$skill" --as "$skill" --force
+done
+openclaw skills uninstall xiaoduiyou-usage-workflow || true
 openclaw plugins install "$XDY_PUBLIC_DIR/plugins/xiaoduiyou-openclaw-connector" --force
 openclaw config set channels.xiaoduiyou.enabled true
 openclaw config set channels.xiaoduiyou.baseUrl "$XDY_BASE_URL"
@@ -106,7 +129,9 @@ openclaw gateway restart
 ```
 
 运行规则：
-- 处理任何小队友任务前，先加载 skill：`xiaoduiyou-usage-workflow`。
+- Agent 对话页 / 卡片 / 商品候选 / runtime message：先加载 `xiaoduiyou-im`。
+- 文档 / 内容包 / 发布稿 / 旅游规划 / publish tabs：加载 `xiaoduiyou-doc-content-package`。
+- 成长日记 / 宝宝记录 / diary photos：加载 `xiaoduiyou-growth-diary`。
 - 不要修改小队友网站代码、UI、样式、接口实现或部署。
 - 同一时间只允许一个 Agent 接入；如果你开始连接，就视为替换掉其他 Agent。
 ````
@@ -116,9 +141,12 @@ openclaw gateway restart
 Agents that are not Hermes or OpenClaw should still start from this repository:
 
 1. Clone or pull `https://github.com/Guoen0/xiaoduiyou-public.git`.
-2. Read `skills/xiaoduiyou-usage-workflow/SKILL.md` and the referenced files under `skills/xiaoduiyou-usage-workflow/references/`.
+2. Read the matching skill under `skills/`:
+   - `skills/xiaoduiyou-im/SKILL.md`
+   - `skills/xiaoduiyou-doc-content-package/SKILL.md`
+   - `skills/xiaoduiyou-growth-diary/SKILL.md`
 3. Use the Xiaoduiyou app-provided base URL and connection token for polling/callbacks.
-4. Do not reimplement product behavior from guesses; follow the usage skill and runtime API reference bundled here.
+4. Do not reimplement product behavior from guesses; follow the bundled skill references.
 
 ## Important image/card rule
 

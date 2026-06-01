@@ -17,7 +17,7 @@ Official replay/reference/product images must not be stored in the app server re
 
 ## Upload flow
 
-1. Generate or obtain the final image file. For product-link visual cards, obtain the product page/listing's actual first product image; do not substitute a placeholder, generic generated graphic, screenshot crop, local `MEDIA:` file, or raw third-party hotlink as the final card image.
+1. Generate or obtain the final image file.
 2. Upload it to Xiaoduiyou:
    - endpoint: `POST /api/assets`
    - multipart file field: `file`
@@ -30,8 +30,7 @@ Official replay/reference/product images must not be stored in the app server re
    - `publish_notes.*.images`
    - legacy `publish_note.images`
    - `generated_images`
-   - process sync image blocks;
-   - chat `image_urls` and `image_attachments[].image_url`.
+   - process sync image blocks.
 
 ## Verification before final callback
 

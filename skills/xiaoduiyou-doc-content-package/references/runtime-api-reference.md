@@ -97,7 +97,8 @@ Compatibility notes:
 }
 ```
 
-- Hermes/OpenClaw platform `send_message` / outbound text tools may only expose a text field. In that case send the same object as a JSON string; the Xiaoduiyou plugin/connector will parse it and POST the structured payload.
+- Hermes/OpenClaw platform `send_message` / outbound text tools may only expose a text field. In that case send the same object as a JSON string; the Xiaoduiyou plugin/connector will parse it and POST the structured payload. This is the fastest path when the user asks to convert an existing answer into visual cards in the current chat.
+- If direct `POST /api/assets` returns `UNAUTHENTICATED` because the agent is outside an active Xiaoduiyou runtime/auth context, do not stall. Prefer the platform `send_message` JSON-string path for chat-only visual cards, clearly using already obtained image URLs. Only claim durable Xiaoduiyou asset upload when `/api/assets` returned and the URL was verified.
 - This session-message endpoint is for chat bubbles and visual cards. It still does **not** mutate `artifact` or run `document_actions`; use active-turn `events` / `callback` plus document tools for artifacts and document mutations.
 
 ### Complete turn

@@ -5,10 +5,15 @@
   "packages": {
     "hermes_plugin": "plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform",
     "openclaw_connector": "plugins/xiaoduiyou-openclaw-connector",
-    "usage_skill": "skills/xiaoduiyou-usage-workflow"
+    "skills": {
+      "xiaoduiyou_im": "skills/xiaoduiyou-im",
+      "xiaoduiyou_doc_content_package": "skills/xiaoduiyou-doc-content-package",
+      "xiaoduiyou_growth_diary": "skills/xiaoduiyou-growth-diary"
+    }
   },
   "notes": [
     "Agents install package directories from this repository via git clone or git pull.",
-    "Generated zip artifacts are intentionally not part of the app project distribution."
+    "Generated zip artifacts are intentionally not part of the app project distribution.",
+    "There is no xiaoduiyou-usage-workflow router; public runtime cases are split across the three surface-specific skills."
   ]
 }
