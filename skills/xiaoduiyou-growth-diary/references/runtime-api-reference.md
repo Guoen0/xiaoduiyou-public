@@ -22,7 +22,7 @@ Every claimed turn should identify the exact product scope the Agent is serving:
 }
 ```
 
-Use `origin`/`base_url` plus the active connection token for `/api/growth-diary`, `/api/assets`, events, callbacks, and outbound session messages. Use `home_id`/`family_id`, `session_id`, `surface`, and `sender` to resolve which family/service/user this turn belongs to.
+Use `origin`/`base_url` plus connector-owned auth for `/api/growth-diary`, `/api/assets`, events, callbacks, and outbound session messages. Use `home_id`/`family_id`, `session_id`, `surface`, and `sender` to resolve which family/service/user this turn belongs to. The Agent model must not search local files, env vars, config, browser cookies, or terminal history for `connection_token`; tokens are connector implementation details surfaced only as authenticated tools/API calls.
 
 ## Turn lifecycle
 

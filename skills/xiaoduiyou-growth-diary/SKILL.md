@@ -19,12 +19,13 @@ Load this when the user asks to:
 ## Non-negotiables
 
 1. Read live Growth Diary schema before writing.
-2. Use the active turn's `agent_runtime_context` (`origin/base_url`, `home_id/family_id`, `session_id`, `surface`, `sender`, and connection-token auth). Do not hard-code production, review, localhost, maintainer-specific domains, or URLs copied from an unrelated browser tab/local config.
-3. If `agent_runtime_context.origin` is absent or unusable, ask for the target Xiaoduiyou environment and family/home scope instead of guessing.
-4. Upload photos/assets via `/api/assets` before saving attachment fields.
-5. Preserve enum option IDs/names from live schema; do not invent options unless the user explicitly asks to add them.
-6. Deduplicate repeated real-world care events: same time + same event = one record with additional source/notes.
-7. Keep family-care records in Feishu when the user is talking about the Feishu family log; use Xiaoduiyou Growth Diary only when the task is clearly Xiaoduiyou/Discord-side diary.
+2. Use first-class Xiaoduiyou connector tools for diary I/O: `xiaoduiyou_growth_diary_get` before writes, then `xiaoduiyou_growth_diary_patch` for mutations. The connector owns origin/auth; the model must not search local files, env vars, config, browser cookies, or terminal history for `connection_token`.
+3. Use the active turn's `agent_runtime_context` (`origin/base_url`, `home_id/family_id`, `session_id`, `surface`, `sender`) as scope context only. Do not hard-code production, review, localhost, maintainer-specific domains, or URLs copied from an unrelated browser tab/local config.
+4. If connector diary tools are unavailable or `agent_runtime_context.origin` is absent/unusable, ask for reconnection/target environment and family/home scope instead of guessing.
+5. Upload photos/assets via connector-supported `/api/assets` tooling before saving attachment fields.
+6. Preserve enum option IDs/names from live schema; do not invent options unless the user explicitly asks to add them.
+7. Deduplicate repeated real-world care events: same time + same event = one record with additional source/notes.
+8. Keep family-care records in Feishu when the user is talking about the Feishu family log; use Xiaoduiyou Growth Diary only when the task is clearly Xiaoduiyou/Discord-side diary.
 
 ## Case map owned by Growth Diary
 

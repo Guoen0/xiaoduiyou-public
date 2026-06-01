@@ -37,6 +37,14 @@ _PENDING_DOCUMENT_ACTIONS: ContextVar[List[Dict[str, Any]] | None] = ContextVar(
     default=None,
 )
 
+# First-class Xiaoduiyou tools (Growth Diary, assets, etc.) must use the
+# connector-owned origin/token for the active turn. The model should never have
+# to inspect local env/config files or search for connection_token itself.
+_ACTIVE_XIAODUIYOU_TOOL_CONTEXT: ContextVar[Dict[str, Any] | None] = ContextVar(
+    "XIAODUIYOU_ACTIVE_TOOL_CONTEXT",
+    default=None,
+)
+
 # Gateway delivery may call send() through the runner's adapter lookup rather than
 # the exact object that claimed the turn, so keep a module-level fallback map in
 # addition to per-adapter state. This is intentionally tiny and drained on send.
@@ -573,6 +581,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             self._turn_by_session[session_id] = turn_id
             _TURN_BY_SESSION[session_id] = turn_id
             _PENDING_DOCUMENT_ACTIONS.set([])
+            _ACTIVE_XIAODUIYOU_TOOL_CONTEXT.set(self._tool_context_for_turn(turn, session_id=session_id, turn_id=turn_id))
             _ACTIONS_BY_SESSION.pop(session_id, None)
             command_text = str(turn.get("command_name") or user_message).strip() or user_message
             if not command_text.startswith("/"):
@@ -599,10 +608,13 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         self._turn_by_session[session_id] = turn_id
         _TURN_BY_SESSION[session_id] = turn_id
         _PENDING_DOCUMENT_ACTIONS.set([])
+        _ACTIVE_XIAODUIYOU_TOOL_CONTEXT.set(self._tool_context_for_turn(turn, session_id=session_id, turn_id=turn_id))
         _ACTIONS_BY_SESSION.pop(session_id, None)
 
         document_tool_note = (
-            "Xiaoduiyou document tools are available. "
+            "Xiaoduiyou connector tools are available. "
+            "For Growth Diary tasks, call xiaoduiyou_growth_diary_get first, then xiaoduiyou_growth_diary_patch for writes; "
+            "do not search local files/env/config for connection_token and do not call /api/growth-diary manually from terminal. "
             "For ordinary chat, answer normally and do not call document tools. "
             "When the user explicitly asks to create, update, append to, or delete a document, "
             "call the appropriate xiaoduiyou document tool exactly once before your final reply. "
@@ -641,6 +653,26 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             channel_prompt=document_tool_note,
         )
         await self.handle_message(event)
+
+    def _tool_context_for_turn(self, turn: Dict[str, Any], *, session_id: str = "", turn_id: str = "") -> Dict[str, Any]:
+        runtime_context = turn.get("agent_runtime_context") or turn.get("runtime_context")
+        runtime_context = runtime_context if isinstance(runtime_context, dict) else {}
+        base_url = str(
+            runtime_context.get("api_origin")
+            or runtime_context.get("base_url")
+            or runtime_context.get("origin")
+            or self.base_url
+            or ""
+        ).rstrip("/")
+        return {
+            "base_url": base_url,
+            "token": self.connection_token,
+            "session_id": session_id or str(runtime_context.get("session_id") or ""),
+            "turn_id": turn_id,
+            "home_id": str(runtime_context.get("home_id") or ""),
+            "family_id": str(runtime_context.get("family_id") or ""),
+            "environment": str(runtime_context.get("environment") or ""),
+        }
 
     async def _post_turn_event(self, turn_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         return await asyncio.to_thread(
@@ -962,6 +994,59 @@ def _tool_delete_document(args: Dict[str, Any], **_: Any) -> str:
     return _queued_result("delete", action)
 
 
+def _active_tool_context() -> Dict[str, Any]:
+    context = _ACTIVE_XIAODUIYOU_TOOL_CONTEXT.get() or {}
+    base_url = str(context.get("base_url") or _base_url_from_config() or "").rstrip("/")
+    token = str(context.get("token") or _connection_token_from_config() or "").strip()
+    if not base_url:
+        raise RuntimeError("Xiaoduiyou tool context is missing base_url")
+    if not token:
+        raise RuntimeError("Xiaoduiyou connector is missing connection token; reconnect Xiaoduiyou Agent instead of asking the model to find a token")
+    next_context = dict(context)
+    next_context["base_url"] = base_url
+    next_context["token"] = token
+    return next_context
+
+
+def _tool_growth_diary_get(args: Dict[str, Any], **_: Any) -> str:
+    context = _active_tool_context()
+    result = _request_json(
+        f"{context['base_url']}/api/growth-diary",
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+        token=context["token"],
+    )
+    return json.dumps({"ok": True, "context": _safe_tool_context(context), "growth_diary": result}, ensure_ascii=False)
+
+
+def _tool_growth_diary_patch(args: Dict[str, Any], **_: Any) -> str:
+    context = _active_tool_context()
+    payload = args.get("payload")
+    if payload is None:
+        payload = {key: value for key, value in args.items() if key not in {"payload"}}
+    if not isinstance(payload, dict):
+        raise RuntimeError("payload must be an object matching /api/growth-diary PATCH")
+    result = _request_json(
+        f"{context['base_url']}/api/growth-diary",
+        method="PATCH",
+        payload=payload,
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+        token=context["token"],
+    )
+    return json.dumps({"ok": True, "context": _safe_tool_context(context), "result": result}, ensure_ascii=False)
+
+
+def _safe_tool_context(context: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "base_url": context.get("base_url"),
+        "environment": context.get("environment"),
+        "home_id": context.get("home_id"),
+        "family_id": context.get("family_id"),
+        "session_id": context.get("session_id"),
+        "turn_id": context.get("turn_id"),
+        "auth": "connector_token_bound",
+    }
+
+
 def register(ctx) -> None:
     ctx.register_platform(
         name="xiaoduiyou",
@@ -978,6 +1063,39 @@ def register(ctx) -> None:
             "Content packages may select ui_templates (xiaohongshu, moments) and fill fields.publish_notes for those templates."
         ),
         max_message_length=XiaoduiyouAdapter.MAX_MESSAGE_LENGTH,
+    )
+
+    ctx.register_tool(
+        name="xiaoduiyou_growth_diary_get",
+        toolset=TOOLSET,
+        description="Read Xiaoduiyou Growth Diary data through the connector-owned origin/token for the current Xiaoduiyou turn.",
+        emoji="📖",
+        schema={
+            "name": "xiaoduiyou_growth_diary_get",
+            "description": "Read Growth Diary schema/records for the current Xiaoduiyou home. Use this before any Growth Diary write; do not search for connection_token manually.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+        handler=_tool_growth_diary_get,
+        check_fn=check_requirements,
+    )
+    ctx.register_tool(
+        name="xiaoduiyou_growth_diary_patch",
+        toolset=TOOLSET,
+        description="Patch Xiaoduiyou Growth Diary data through the connector-owned origin/token for the current Xiaoduiyou turn.",
+        emoji="🍼",
+        schema={
+            "name": "xiaoduiyou_growth_diary_patch",
+            "description": "Create/update/delete Growth Diary records/options/views for the current Xiaoduiyou home. The connector supplies auth; the model must pass only the PATCH payload.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "payload": {"type": "object", "description": "Exact JSON payload for PATCH /api/growth-diary after reading the live schema."},
+                },
+                "required": ["payload"],
+            },
+        },
+        handler=_tool_growth_diary_patch,
+        check_fn=check_requirements,
     )
 
     ctx.register_tool(
