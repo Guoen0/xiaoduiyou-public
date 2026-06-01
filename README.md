@@ -55,7 +55,9 @@ XDY_PUBLIC_REPO="https://github.com/Guoen0/xiaoduiyou-public.git"
 XDY_PUBLIC_DIR="$HOME/.xiaoduiyou/xiaoduiyou-public"
 mkdir -p "$HOME/.xiaoduiyou"
 if [ -d "$XDY_PUBLIC_DIR/.git" ]; then
-  git -C "$XDY_PUBLIC_DIR" pull --ff-only
+  git -C "$XDY_PUBLIC_DIR" fetch origin main
+  git -C "$XDY_PUBLIC_DIR" reset --hard origin/main
+  git -C "$XDY_PUBLIC_DIR" clean -fd
 else
   git clone "$XDY_PUBLIC_REPO" "$XDY_PUBLIC_DIR"
 fi
@@ -109,12 +111,15 @@ https://github.com/Guoen0/xiaoduiyou-public/blob/main/README.md
 
 ```bash
 XDY_PUBLIC_REPO="https://github.com/Guoen0/xiaoduiyou-public.git"
-XDY_PUBLIC_DIR="$HOME/.xiaoduiyou/xiaoduiyou-public"
-mkdir -p "$HOME/.xiaoduiyou"
-if [ -d "$XDY_PUBLIC_DIR/.git" ]; then
-  git -C "$XDY_PUBLIC_DIR" pull --ff-only
-else
+XDY_PUBLIC_DIR="$HOME/.openclaw/vendor/xiaoduiyou-public"
+mkdir -p "$(dirname "$XDY_PUBLIC_DIR")"
+if [ ! -d "$XDY_PUBLIC_DIR/.git" ]; then
+  rm -rf "$XDY_PUBLIC_DIR"
   git clone "$XDY_PUBLIC_REPO" "$XDY_PUBLIC_DIR"
+else
+  git -C "$XDY_PUBLIC_DIR" fetch origin main
+  git -C "$XDY_PUBLIC_DIR" reset --hard origin/main
+  git -C "$XDY_PUBLIC_DIR" clean -fd
 fi
 
 for skill in xiaoduiyou-im xiaoduiyou-doc-content-package xiaoduiyou-growth-diary; do
@@ -125,10 +130,12 @@ openclaw plugins install "$XDY_PUBLIC_DIR/plugins/xiaoduiyou-openclaw-connector"
 openclaw config set channels.xiaoduiyou.enabled true
 openclaw config set channels.xiaoduiyou.baseUrl "$XDY_BASE_URL"
 openclaw config set channels.xiaoduiyou.connectionToken "$XDY_CONNECTION_TOKEN"
+openclaw config set channels.xiaoduiyou.allowFrom '["*"]'
 openclaw gateway restart
 ```
 
 运行规则：
+- `XDY_PUBLIC_DIR` 必须是专用安装缓存目录；不要指向 `~/.openclaw/workspace`，也不要在 `~/.openclaw/workspace` 里 clone / pull 这个仓库。
 - Agent 对话页 / 卡片 / 商品候选 / runtime message：先加载 `xiaoduiyou-im`。
 - 文档 / 内容包 / 发布稿 / 旅游规划 / publish tabs：加载 `xiaoduiyou-doc-content-package`。
 - 成长日记 / 宝宝记录 / diary photos：加载 `xiaoduiyou-growth-diary`。
@@ -140,7 +147,7 @@ openclaw gateway restart
 
 Agents that are not Hermes or OpenClaw should still start from this repository:
 
-1. Clone or pull `https://github.com/Guoen0/xiaoduiyou-public.git`.
+1. Clone or update `https://github.com/Guoen0/xiaoduiyou-public.git` in a dedicated install/cache directory.
 2. Read the matching skill under `skills/`:
    - `skills/xiaoduiyou-im/SKILL.md`
    - `skills/xiaoduiyou-doc-content-package/SKILL.md`
@@ -154,6 +161,7 @@ When an Agent renders product-link visual cards in Xiaoduiyou, it must use the p
 
 ## Maintenance
 
-- This repository is consumed by Agents via `git clone` / `git pull`.
+- This repository is consumed by Agents via `git clone` / `git fetch` in dedicated install/cache directories.
+- OpenClaw Agents must not use `~/.openclaw/workspace` as the clone or update target; that directory is reserved for Agent work files.
 - Generated `.zip` artifacts are intentionally not tracked here.
 - Do not add maintainer-local paths, private repo URLs, Sealos devbox paths, or credentials to this README or package files.
