@@ -24,7 +24,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.5.30"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.1"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -614,7 +614,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         if raw:
             try:
                 parsed = json.loads(raw)
-                if isinstance(parsed, dict) and any(key in parsed for key in ("image_attachments", "image_urls", "text", "content", "detail")):
+                if isinstance(parsed, dict) and any(key in parsed for key in ("message_type", "tool_progress", "image_attachments", "image_urls", "text", "content", "detail")):
                     return parsed
             except Exception:
                 pass
@@ -703,7 +703,14 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             if "▉" in (content or ""):
                 return SendResult(success=False, error="Xiaoduiyou does not stream assistant text; final reply is delivered through callback")
             try:
-                result = await self._post_session_message(chat_key, content or "")
+                fallback_content = content or ""
+                if _looks_like_tool_progress(fallback_content):
+                    result = await self._post_session_message(
+                        chat_key,
+                        json.dumps({"message_type": "tool_progress", "tool_progress": fallback_content}, ensure_ascii=False),
+                    )
+                else:
+                    result = await self._post_session_message(chat_key, fallback_content)
                 return SendResult(success=True, message_id=str(result.get("message_id") or f"xiaoduiyou:{int(time.time() * 1000)}"), raw_response=result)
             except Exception as exc:
                 logger.error("Xiaoduiyou session message failed: %s", exc, exc_info=True)
