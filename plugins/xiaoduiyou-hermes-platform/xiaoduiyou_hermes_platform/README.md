@@ -26,8 +26,8 @@ else
   git clone "$XDY_PUBLIC_REPO" "$XDY_PUBLIC_DIR"
 fi
 
-mkdir -p ~/.hermes/plugins/xiaoduiyou_platform
-rsync -a --delete "$XDY_PUBLIC_DIR/plugins/xiaoduiyou-platform/xiaoduiyou_platform/" ~/.hermes/plugins/xiaoduiyou_platform/
+mkdir -p ~/.hermes/plugins/xiaoduiyou_hermes_platform
+rsync -a --delete "$XDY_PUBLIC_DIR/plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform/" ~/.hermes/plugins/xiaoduiyou_hermes_platform/
 ```
 
 Enable it in `~/.hermes/config.yaml` with a Xiaoduiyou-issued base URL and connection token. See the root `README.md` for the full Agent setup prompt.

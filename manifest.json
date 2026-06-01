@@ -3,7 +3,7 @@
   "distribution_model": "git-repository-source-of-truth",
   "repository": "https://github.com/Guoen0/xiaoduiyou-public.git",
   "packages": {
-    "hermes_plugin": "plugins/xiaoduiyou-platform/xiaoduiyou_platform",
+    "hermes_plugin": "plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform",
     "openclaw_connector": "plugins/xiaoduiyou-openclaw-connector",
     "usage_skill": "skills/xiaoduiyou-usage-workflow"
   },

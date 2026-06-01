@@ -16,7 +16,7 @@ This is the maintained Hermes Gateway platform plugin for Xiaoduiyou. Install it
 Recommended installation path:
 
 ```text
-~/.hermes/plugins/xiaoduiyou_platform/
+~/.hermes/plugins/xiaoduiyou_hermes_platform/
   plugin.yaml
   adapter.py
   __init__.py
@@ -29,7 +29,7 @@ Enable the plugin and platform in `~/.hermes/config.yaml`:
 ```yaml
 plugins:
   enabled:
-    - xiaoduiyou-platform
+    - xiaoduiyou-hermes-platform
 
 platforms:
   xiaoduiyou:
