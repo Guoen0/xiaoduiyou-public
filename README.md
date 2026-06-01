@@ -62,29 +62,11 @@ else
   git clone "$XDY_PUBLIC_REPO" "$XDY_PUBLIC_DIR"
 fi
 
-mkdir -p ~/.hermes/plugins/xiaoduiyou_hermes_platform
-rsync -a --delete "$XDY_PUBLIC_DIR/plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform/" ~/.hermes/plugins/xiaoduiyou_hermes_platform/
-
-mkdir -p ~/.hermes/skills/productivity
-for skill in xiaoduiyou-im xiaoduiyou-doc-content-package xiaoduiyou-growth-diary; do
-  rm -rf "$HOME/.hermes/skills/productivity/$skill"
-  rsync -a --delete "$XDY_PUBLIC_DIR/skills/$skill/" "$HOME/.hermes/skills/productivity/$skill/"
-done
-rm -rf ~/.hermes/skills/productivity/xiaoduiyou-usage-workflow
-
-hermes config set plugins.enabled '["xiaoduiyou-hermes-platform"]'
-hermes config set platforms.xiaoduiyou.enabled true
-hermes config set platforms.xiaoduiyou.extra.base_url "$XDY_BASE_URL"
-hermes config set platforms.xiaoduiyou.extra.connection_token "$XDY_CONNECTION_TOKEN"
-hermes config set platforms.xiaoduiyou.extra.poll_interval_seconds 1.0
-hermes config set platforms.xiaoduiyou.home_channel.platform xiaoduiyou
-hermes config set platforms.xiaoduiyou.home_channel.chat_id xiaoduiyou
-hermes config set platforms.xiaoduiyou.home_channel.name Xiaoduiyou
-hermes config set platform_toolsets.xiaoduiyou '["web","browser","terminal","file","code_execution","vision","image_gen","tts","skills","todo","memory","session_search","clarify","delegation","cronjob","messaging","xiaoduiyou"]'
-hermes gateway restart
+"$XDY_PUBLIC_DIR/scripts/install-hermes.sh"
 ```
 
 运行规则：
+- Hermes 只安装小队友 platform 插件；不要从这个仓库安装或覆盖 Hermes skills，skills 由 Hermes 自己整理和更新。
 - Agent 对话页 / 卡片 / 商品候选 / runtime message：先加载 `xiaoduiyou-im`。
 - 文档 / 内容包 / 发布稿 / 旅游规划 / publish tabs：加载 `xiaoduiyou-doc-content-package`。
 - 成长日记 / 宝宝记录 / diary photos：加载 `xiaoduiyou-growth-diary`。
@@ -122,20 +104,12 @@ else
   git -C "$XDY_PUBLIC_DIR" clean -fd
 fi
 
-for skill in xiaoduiyou-im xiaoduiyou-doc-content-package xiaoduiyou-growth-diary; do
-  openclaw skills install "$XDY_PUBLIC_DIR/skills/$skill" --as "$skill" --force
-done
-openclaw skills uninstall xiaoduiyou-usage-workflow || true
-openclaw plugins install "$XDY_PUBLIC_DIR/plugins/xiaoduiyou-openclaw-connector" --force
-openclaw config set channels.xiaoduiyou.enabled true
-openclaw config set channels.xiaoduiyou.baseUrl "$XDY_BASE_URL"
-openclaw config set channels.xiaoduiyou.connectionToken "$XDY_CONNECTION_TOKEN"
-openclaw config set channels.xiaoduiyou.allowFrom '["*"]'
-openclaw gateway restart
+"$XDY_PUBLIC_DIR/scripts/install-openclaw.sh"
 ```
 
 运行规则：
 - `XDY_PUBLIC_DIR` 必须是专用安装缓存目录；不要指向 `~/.openclaw/workspace`，也不要在 `~/.openclaw/workspace` 里 clone / pull 这个仓库。
+- OpenClaw skill 只有进入当前 Agent 的 `agents.list[0].skills` allowlist 后才会进入模型上下文；仅安装到 `~/.openclaw/workspace/skills` 不够。
 - Agent 对话页 / 卡片 / 商品候选 / runtime message：先加载 `xiaoduiyou-im`。
 - 文档 / 内容包 / 发布稿 / 旅游规划 / publish tabs：加载 `xiaoduiyou-doc-content-package`。
 - 成长日记 / 宝宝记录 / diary photos：加载 `xiaoduiyou-growth-diary`。
