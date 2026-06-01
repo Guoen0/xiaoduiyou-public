@@ -134,17 +134,45 @@ def _format_screen_context_for_agent(turn: Dict[str, Any]) -> str:
 
 
 def _format_runtime_context_for_agent(turn: Dict[str, Any]) -> str:
-    runtime_context = turn.get("runtime_context")
+    runtime_context = turn.get("agent_runtime_context") or turn.get("runtime_context")
     if not isinstance(runtime_context, dict):
         return ""
-    base_url = str(runtime_context.get("base_url") or runtime_context.get("api_origin") or "").strip()
+    base_url = str(runtime_context.get("base_url") or runtime_context.get("origin") or runtime_context.get("api_origin") or "").strip()
     if not base_url:
         return ""
-    return (
-        "小队友运行环境：\n"
-        f"base_url={base_url}\n"
-        "对本次小队友 API/成长日记/资产写入，必须使用这个 base_url 和当前连接 token；不要改用本地配置、生产/测试默认地址或浏览器里打开的其他小队友页面。"
-    )
+    sender_raw = runtime_context.get("sender")
+    auth_raw = runtime_context.get("auth")
+    sender: Dict[str, Any] = sender_raw if isinstance(sender_raw, dict) else {}
+    auth: Dict[str, Any] = auth_raw if isinstance(auth_raw, dict) else {}
+    lines = [
+        "小队友平台上下文：",
+        "platform=xiaoduiyou",
+        f"origin={base_url}",
+    ]
+    for label, key in (
+        ("environment", "environment"),
+        ("home_id", "home_id"),
+        ("family_id", "family_id"),
+        ("session_id", "session_id"),
+        ("session_scope", "session_scope"),
+        ("session_purpose", "session_purpose"),
+        ("surface", "surface"),
+    ):
+        value = str(runtime_context.get(key) or "").strip()
+        if value:
+            lines.append(f"{label}={value}")
+    sender_bits = []
+    for key in ("display_name", "account_id", "role"):
+        value = str(sender.get(key) or "").strip()
+        if value:
+            sender_bits.append(f"{key}={value}")
+    if sender_bits:
+        lines.append(f"sender: {', '.join(sender_bits)}")
+    provider = str(auth.get("provider") or "").strip()
+    if provider:
+        lines.append(f"auth.provider={provider}; auth.mode=connection_token_bound")
+    lines.append("本次 Xiaoduiyou API/成长日记/资产/会话写入必须使用上述 origin 与当前连接 token；禁止改用本地 config、生产/测试默认地址、维护者 URL 或浏览器里打开的其他小队友页面。")
+    return "\n".join(lines)
 
 
 def _agent_event_text_for_turn(turn_or_message: Any) -> str:

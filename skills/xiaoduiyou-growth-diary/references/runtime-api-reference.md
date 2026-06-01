@@ -1,6 +1,28 @@
 # Xiaoduiyou runtime API quick reference
 
-This is the compact interface reference for connected usage Agents. Use the Xiaoduiyou origin/auth context provided by the active runtime prompt/turn (`runtime_context.base_url` when present). Do not invent credentials, call private developer-only endpoints, use maintainer-specific URLs, or switch to a different Xiaoduiyou origin from local config or an unrelated browser tab.
+This is the compact interface reference for connected usage Agents. Use the Xiaoduiyou platform context provided by the active runtime prompt/turn (`agent_runtime_context`, falling back to legacy `runtime_context` only for old connectors). Do not invent credentials, call private developer-only endpoints, use maintainer-specific URLs, or switch to a different Xiaoduiyou origin from local config or an unrelated browser tab.
+
+Every claimed turn should identify the exact product scope the Agent is serving:
+
+```json
+{
+  "agent_runtime_context": {
+    "platform": "xiaoduiyou",
+    "origin": "https://current-xiaoduiyou-origin.example",
+    "environment": "review",
+    "home_id": "home_xxx",
+    "family_id": "home_xxx",
+    "session_id": "sess_xxx",
+    "session_scope": "family",
+    "session_purpose": "growth_diary",
+    "surface": "growth_diary",
+    "sender": { "account_id": "acct_xxx", "display_name": "妈妈", "role": "member" },
+    "auth": { "mode": "connection_token_bound", "provider": "hermes" }
+  }
+}
+```
+
+Use `origin`/`base_url` plus the active connection token for `/api/growth-diary`, `/api/assets`, events, callbacks, and outbound session messages. Use `home_id`/`family_id`, `session_id`, `surface`, and `sender` to resolve which family/service/user this turn belongs to.
 
 ## Turn lifecycle
 
