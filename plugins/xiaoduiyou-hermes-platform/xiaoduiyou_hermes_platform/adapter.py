@@ -613,7 +613,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
 
         document_tool_note = (
             "Xiaoduiyou connector tools are available. "
-            "For Growth Diary tasks, call xiaoduiyou_growth_diary_get first, then xiaoduiyou_growth_diary_patch for writes; "
+            "For Growth Diary tasks, use skill xiaoduiyou-growth-diary, call xiaoduiyou_growth_diary_get first, then xiaoduiyou_growth_diary_patch for writes; "
             "do not search local files/env/config for connection_token and do not call /api/growth-diary manually from terminal. "
             "For ordinary chat, answer normally and do not call document tools. "
             "When the user explicitly asks to create, update, append to, or delete a document, "
@@ -1236,6 +1236,20 @@ def _summarize_growth_diary_patch_result(payload: Dict[str, Any], result: Any) -
     }
 
 
+def _growth_diary_patch_failure_result(exc: Exception) -> Dict[str, Any]:
+    return {
+        "ok": False,
+        "error": str(exc),
+        "skill": "xiaoduiyou-growth-diary",
+        "hint": (
+            "Read/use skill xiaoduiyou-growth-diary, then retry with payload.records[].table_id "
+            "and source at the record root, and field values inside records[].values. Example: "
+            "{ records: [{ table_id: 'tbl_growth_events', source: 'agent', values: { title: '喝奶 150ml', "
+            "event_type: 'milk', quantity: 150, unit: 'ml' } }] }. Use updates for existing cells and deletions for deletes."
+        ),
+    }
+
+
 def _tool_growth_diary_patch(args: Dict[str, Any], **_: Any) -> str:
     context = _active_tool_context()
     payload = args.get("payload")
@@ -1243,13 +1257,20 @@ def _tool_growth_diary_patch(args: Dict[str, Any], **_: Any) -> str:
         payload = {key: value for key, value in args.items() if key not in {"payload"}}
     if not isinstance(payload, dict):
         raise RuntimeError("payload must be an object matching /api/growth-diary PATCH")
-    result = _request_json(
-        f"{context['base_url']}/api/growth-diary",
-        method="PATCH",
-        payload=payload,
-        timeout=DEFAULT_TIMEOUT_SECONDS,
-        token=context["token"],
-    )
+    try:
+        result = _request_json(
+            f"{context['base_url']}/api/growth-diary",
+            method="PATCH",
+            payload=payload,
+            timeout=DEFAULT_TIMEOUT_SECONDS,
+            token=context["token"],
+        )
+    except Exception as exc:
+        return json.dumps({
+            "ok": False,
+            "context": _safe_tool_context(context),
+            "result": _growth_diary_patch_failure_result(exc),
+        }, ensure_ascii=False)
     return json.dumps({
         "ok": True,
         "context": _safe_tool_context(context),
@@ -1290,11 +1311,11 @@ def register(ctx) -> None:
     ctx.register_tool(
         name="xiaoduiyou_growth_diary_get",
         toolset=TOOLSET,
-        description="Read Xiaoduiyou Growth Diary data through the connector-owned origin/token for the current Xiaoduiyou turn.",
+        description="Read Xiaoduiyou Growth Diary data through the connector-owned origin/token for the current Xiaoduiyou turn. Use skill xiaoduiyou-growth-diary before writes.",
         emoji="📖",
         schema={
             "name": "xiaoduiyou_growth_diary_get",
-            "description": "Read Growth Diary schema/records for the current Xiaoduiyou home. Use this before any Growth Diary write; pass date/start_date/end_date to return a compact schema + targeted records instead of the full table. Do not search for connection_token manually.",
+            "description": "Read Growth Diary schema/records for the current Xiaoduiyou home. Use skill xiaoduiyou-growth-diary and call this before any Growth Diary write; pass date/start_date/end_date to return a compact schema + targeted records instead of the full table. Do not search for connection_token manually.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1311,15 +1332,15 @@ def register(ctx) -> None:
     ctx.register_tool(
         name="xiaoduiyou_growth_diary_patch",
         toolset=TOOLSET,
-        description="Patch Xiaoduiyou Growth Diary data through the connector-owned origin/token for the current Xiaoduiyou turn.",
+        description="Patch Xiaoduiyou Growth Diary data through the connector-owned origin/token for the current Xiaoduiyou turn. Use skill xiaoduiyou-growth-diary and call get first.",
         emoji="🍼",
         schema={
             "name": "xiaoduiyou_growth_diary_patch",
-            "description": "Create/update/delete Growth Diary records/options/views for the current Xiaoduiyou home. The connector supplies auth; the model must pass only the PATCH payload. Use records only for new records, updates for existing cells, deletions for deletes, and never send values:null. The result is a concise verification summary, not the full base.",
+            "description": "Create/update/delete Growth Diary records/options/views for the current Xiaoduiyou home. The connector supplies auth; the model must pass only the PATCH payload. Use skill xiaoduiyou-growth-diary first. For new records, records items must look like { table_id, source, values }; put title/event_type/quantity/unit/date/occurred_at/risk inside values, not at the record root. Use updates for existing cells, deletions for deletes, and never send values:null. The result is a concise verification summary, not the full base.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "payload": {"type": "object", "description": "Exact JSON payload for PATCH /api/growth-diary after reading the live schema. New record values should be plain field_id values such as { occurred_at, event_type, title, content, quantity, unit, risk }; do not send values:null."},
+                    "payload": {"type": "object", "description": "Exact JSON payload for PATCH /api/growth-diary after reading the live schema and using skill xiaoduiyou-growth-diary. Use records only to add records; each record must have table_id/source at the record root and field values under values, e.g. { records: [{ table_id: 'tbl_growth_events', source: 'agent', values: { occurred_at, event_type, title, content, quantity, unit, risk } }] }. Use updates for existing cells, deletions for deletes, and never send values:null."},
                 },
                 "required": ["payload"],
             },

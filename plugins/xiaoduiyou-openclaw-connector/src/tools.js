@@ -32,7 +32,7 @@ const GrowthDiaryPatchSchema = {
   properties: {
     payload: {
       type: "object",
-      description: "Exact PATCH /api/growth-diary payload after reading the live schema first. Use records only to add records, updates to edit existing cells, and deletions to delete records. New record values should be plain field_id values such as { occurred_at, event_type, title, content, quantity, unit, risk }; do not send values:null.",
+      description: "Exact PATCH /api/growth-diary payload after reading the live schema first and using skill xiaoduiyou-growth-diary. Use records only to add records; each record must have table_id/source at the record root and field values under values, e.g. { records: [{ table_id: 'tbl_growth_events', source: 'agent', values: { occurred_at, event_type, title, content, quantity, unit, risk } }] }. Use updates for existing cells, deletions for deletes, and never send values:null.",
       additionalProperties: true,
     },
     account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the default/current connector account." },
@@ -130,11 +130,24 @@ function queuedResult(operation, action) {
   return jsonResult({ ok: true, queued: true, operation, document_action: action });
 }
 
+function growthDiaryPatchFailureResult(error) {
+  return {
+    ok: false,
+    error: {
+      message: String(error?.message ?? error ?? "PATCH_FAILED"),
+      code: error?.code,
+      status: error?.status,
+    },
+    skill: "xiaoduiyou-growth-diary",
+    hint: "Read/use skill xiaoduiyou-growth-diary, then retry with payload.records[].table_id and source at the record root, and field values inside records[].values. Example: { records: [{ table_id: \"tbl_growth_events\", source: \"agent\", values: { title: \"喝奶 150ml\", event_type: \"milk\", quantity: 150, unit: \"ml\" } }] }. Use updates for existing cells and deletions for deletes.",
+  };
+}
+
 function createGrowthDiaryGetTool(config) {
   return {
     name: "xiaoduiyou_growth_diary_get",
     label: "Xiaoduiyou Growth Diary Get",
-    description: "Read Xiaoduiyou Growth Diary schema and targeted records for the current connected Xiaoduiyou account. Use before any diary write.",
+    description: "Read Xiaoduiyou Growth Diary schema and targeted records for the current connected Xiaoduiyou account. Use skill xiaoduiyou-growth-diary and call this before any diary write.",
     parameters: GrowthDiaryGetSchema,
     execute: async (_toolCallId, rawParams = {}) => {
       const account = resolveToolAccount(config, rawParams);
@@ -153,7 +166,7 @@ function createGrowthDiaryPatchTool(config) {
   return {
     name: "xiaoduiyou_growth_diary_patch",
     label: "Xiaoduiyou Growth Diary Patch",
-    description: "Create/update/delete Xiaoduiyou Growth Diary records/options/views for the current connected Xiaoduiyou account. Call xiaoduiyou_growth_diary_get first. Use records only for new records, updates for existing cells, deletions for deletes, and never send values:null. The result is a concise verification summary, not the full base.",
+    description: "Create/update/delete Xiaoduiyou Growth Diary records/options/views for the current connected Xiaoduiyou account. Use skill xiaoduiyou-growth-diary, then call xiaoduiyou_growth_diary_get first. For new records, records items must look like { table_id, source, values }; put title/event_type/quantity/unit/date/occurred_at/risk inside values, not at the record root. Use updates for existing cells, deletions for deletes, and never send values:null. The result is a concise verification summary, not the full base.",
     parameters: GrowthDiaryPatchSchema,
     execute: async (_toolCallId, rawParams = {}) => {
       const account = resolveToolAccount(config, rawParams);
@@ -161,8 +174,12 @@ function createGrowthDiaryPatchTool(config) {
       if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
         throw new Error("payload must be a JSON object");
       }
-      const result = await patchXiaoduiyouGrowthDiary(account, payload);
-      return jsonResult(summarizeGrowthDiaryPatchResult(payload, result));
+      try {
+        const result = await patchXiaoduiyouGrowthDiary(account, payload);
+        return jsonResult(summarizeGrowthDiaryPatchResult(payload, result));
+      } catch (error) {
+        return jsonResult(growthDiaryPatchFailureResult(error));
+      }
     },
   };
 }
