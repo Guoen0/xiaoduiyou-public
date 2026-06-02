@@ -1144,6 +1144,98 @@ def _growth_diary_value_to_string(value: Any) -> str:
     return str(value).strip()
 
 
+def _growth_diary_record_summary(record: Any) -> Dict[str, Any]:
+    record_dict: Dict[str, Any] = record if isinstance(record, dict) else {}
+    raw_values = record_dict.get("values")
+    values: Dict[str, Any] = raw_values if isinstance(raw_values, dict) else {}
+    return {
+        "record_id": record_dict.get("record_id"),
+        "source": record_dict.get("source"),
+        "date": _growth_diary_value_to_string(values.get("date")),
+        "occurred_at": _growth_diary_value_to_string(values.get("occurred_at")),
+        "event_type": _growth_diary_value_to_string(values.get("event_type")),
+        "title": _growth_diary_value_to_string(values.get("title")),
+        "content": _growth_diary_value_to_string(values.get("content")),
+        "quantity": _growth_diary_value_to_string(values.get("quantity")),
+        "unit": _growth_diary_value_to_string(values.get("unit")),
+        "risk": _growth_diary_value_to_string(values.get("risk")),
+        "updated_at": record_dict.get("updated_at"),
+    }
+
+
+def _summarize_growth_diary_patch_result(payload: Dict[str, Any], result: Any) -> Dict[str, Any]:
+    result_dict: Dict[str, Any] = result if isinstance(result, dict) else {}
+    base = result_dict.get("base") if isinstance(result_dict.get("base"), dict) else {}
+    tables = base.get("tables") if isinstance(base.get("tables"), list) else []
+    updated_at = str(base.get("updated_at") or "").strip()
+    requested_records = payload.get("records") if isinstance(payload.get("records"), list) else []
+    requested_updates = payload.get("updates") if isinstance(payload.get("updates"), list) else []
+    requested_deletions = payload.get("deletions") if isinstance(payload.get("deletions"), list) else []
+    requested_field_options = payload.get("field_options") if isinstance(payload.get("field_options"), list) else []
+    requested_views = payload.get("views") if isinstance(payload.get("views"), list) else []
+
+    table_summaries: List[Dict[str, Any]] = []
+    changed_record_ids = {
+        str(item.get("record_id") or "")
+        for item in [*requested_updates, *requested_deletions]
+        if isinstance(item, dict) and item.get("record_id")
+    }
+    created_records: List[Dict[str, Any]] = []
+    changed_records: List[Dict[str, Any]] = []
+    deletion_results: List[Dict[str, Any]] = [
+        {
+            "table_id": item.get("table_id") if isinstance(item, dict) else None,
+            "record_id": item.get("record_id") if isinstance(item, dict) else None,
+            "deleted": True,
+        }
+        for item in requested_deletions
+    ]
+
+    for table in tables:
+        if not isinstance(table, dict):
+            continue
+        records = table.get("records") if isinstance(table.get("records"), list) else []
+        table_summaries.append({
+            "table_id": table.get("table_id"),
+            "record_count": len(records),
+            "updated_at": table.get("updated_at"),
+        })
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            record_id = str(record.get("record_id") or "")
+            if record_id in changed_record_ids:
+                changed_records.append(_growth_diary_record_summary(record))
+            if record_id not in changed_record_ids and requested_records and str(record.get("updated_at") or "") == updated_at:
+                created_records.append(_growth_diary_record_summary(record))
+        for deletion_result in deletion_results:
+            if deletion_result.get("table_id") != table.get("table_id"):
+                continue
+            deletion_result["deleted"] = not any(
+                isinstance(record, dict) and record.get("record_id") == deletion_result.get("record_id")
+                for record in records
+            )
+
+    return {
+        "ok": True,
+        "summary": {
+            "updated_at": updated_at or None,
+            "tables": table_summaries,
+            "requested": {
+                "records": len(requested_records),
+                "updates": len(requested_updates),
+                "deletions": len(requested_deletions),
+                "field_options": len(requested_field_options),
+                "views": len(requested_views),
+            },
+            "created_records": created_records[:max(5, len(requested_records))],
+            "changed_records": changed_records[:max(5, len(requested_updates))],
+            "deletion_results": deletion_results,
+            "note": "PATCH succeeded. This is a concise verification summary; the full Growth Diary base is intentionally omitted to avoid Hermes output truncation.",
+        },
+    }
+
+
 def _tool_growth_diary_patch(args: Dict[str, Any], **_: Any) -> str:
     context = _active_tool_context()
     payload = args.get("payload")
@@ -1158,7 +1250,11 @@ def _tool_growth_diary_patch(args: Dict[str, Any], **_: Any) -> str:
         timeout=DEFAULT_TIMEOUT_SECONDS,
         token=context["token"],
     )
-    return json.dumps({"ok": True, "context": _safe_tool_context(context), "result": result}, ensure_ascii=False)
+    return json.dumps({
+        "ok": True,
+        "context": _safe_tool_context(context),
+        "result": _summarize_growth_diary_patch_result(payload, result),
+    }, ensure_ascii=False)
 
 
 def _safe_tool_context(context: Dict[str, Any]) -> Dict[str, Any]:
@@ -1219,11 +1315,11 @@ def register(ctx) -> None:
         emoji="🍼",
         schema={
             "name": "xiaoduiyou_growth_diary_patch",
-            "description": "Create/update/delete Growth Diary records/options/views for the current Xiaoduiyou home. The connector supplies auth; the model must pass only the PATCH payload.",
+            "description": "Create/update/delete Growth Diary records/options/views for the current Xiaoduiyou home. The connector supplies auth; the model must pass only the PATCH payload. Use records only for new records, updates for existing cells, deletions for deletes, and never send values:null. The result is a concise verification summary, not the full base.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "payload": {"type": "object", "description": "Exact JSON payload for PATCH /api/growth-diary after reading the live schema."},
+                    "payload": {"type": "object", "description": "Exact JSON payload for PATCH /api/growth-diary after reading the live schema. New record values should be plain field_id values such as { occurred_at, event_type, title, content, quantity, unit, risk }; do not send values:null."},
                 },
                 "required": ["payload"],
             },
