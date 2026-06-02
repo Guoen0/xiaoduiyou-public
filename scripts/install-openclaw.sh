@@ -27,6 +27,7 @@ require_cmd() {
 require_env XDY_BASE_URL
 require_env XDY_CONNECTION_TOKEN
 require_cmd git
+require_cmd node
 require_cmd openclaw
 
 if [ "$repo_dir" = "$workspace_dir" ] || [[ "$repo_dir" == "$workspace_dir"/* ]]; then
@@ -48,6 +49,21 @@ done
 
 openclaw skills uninstall xiaoduiyou-usage-workflow >/dev/null 2>&1 || true
 openclaw config set "agents.list[$XDY_OPENCLAW_AGENT_INDEX].skills" '["xiaoduiyou-im","xiaoduiyou-doc-content-package","xiaoduiyou-growth-diary"]' --strict-json
+tools_also_allow="$(
+  node - <<'NODE'
+const fs = require('node:fs');
+const path = `${process.env.HOME}/.openclaw/openclaw.json`;
+let current = [];
+try {
+  const config = JSON.parse(fs.readFileSync(path, 'utf8'));
+  if (Array.isArray(config?.tools?.alsoAllow)) current = config.tools.alsoAllow;
+} catch {
+}
+const merged = [...new Set([...current.filter((item) => typeof item === 'string'), 'group:plugins'])];
+process.stdout.write(JSON.stringify(merged));
+NODE
+)"
+openclaw config set tools.alsoAllow "$tools_also_allow" --strict-json
 openclaw plugins install "$repo_dir/plugins/xiaoduiyou-openclaw-connector" --force
 openclaw config set channels.xiaoduiyou.enabled true
 openclaw config set channels.xiaoduiyou.baseUrl "$XDY_BASE_URL"
@@ -59,5 +75,6 @@ openclaw skills info xiaoduiyou-im >/dev/null
 openclaw skills info xiaoduiyou-doc-content-package >/dev/null
 openclaw skills info xiaoduiyou-growth-diary >/dev/null
 openclaw plugins list | grep -i xiaoduiyou >/dev/null
+openclaw config get tools.alsoAllow | grep -F 'group:plugins' >/dev/null
 
 echo "Xiaoduiyou OpenClaw connector and skills are installed."
