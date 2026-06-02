@@ -1,5 +1,6 @@
 import { resolveXiaoduiyouAccount } from "./accounts.js";
 import { getXiaoduiyouGrowthDiary, patchXiaoduiyouGrowthDiary } from "./client.js";
+import { summarizeGrowthDiaryPatchResult } from "./growth-diary-summary.js";
 import { queueXiaoduiyouDocumentAction } from "./tool-context.js";
 
 function jsonResult(value) {
@@ -29,7 +30,11 @@ const GrowthDiaryPatchSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    payload: { type: "object", description: "Exact PATCH /api/growth-diary payload after reading the live schema first.", additionalProperties: true },
+    payload: {
+      type: "object",
+      description: "Exact PATCH /api/growth-diary payload after reading the live schema first. Use records only to add records, updates to edit existing cells, and deletions to delete records. New record values should be plain field_id values such as { occurred_at, event_type, title, content, quantity, unit, risk }; do not send values:null.",
+      additionalProperties: true,
+    },
     account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the default/current connector account." },
   },
   required: ["payload"],
@@ -148,7 +153,7 @@ function createGrowthDiaryPatchTool(config) {
   return {
     name: "xiaoduiyou_growth_diary_patch",
     label: "Xiaoduiyou Growth Diary Patch",
-    description: "Create/update/delete Xiaoduiyou Growth Diary records/options/views for the current connected Xiaoduiyou account. Call xiaoduiyou_growth_diary_get first and pass only the PATCH payload.",
+    description: "Create/update/delete Xiaoduiyou Growth Diary records/options/views for the current connected Xiaoduiyou account. Call xiaoduiyou_growth_diary_get first. Use records only for new records, updates for existing cells, deletions for deletes, and never send values:null. The result is a concise verification summary, not the full base.",
     parameters: GrowthDiaryPatchSchema,
     execute: async (_toolCallId, rawParams = {}) => {
       const account = resolveToolAccount(config, rawParams);
@@ -157,7 +162,7 @@ function createGrowthDiaryPatchTool(config) {
         throw new Error("payload must be a JSON object");
       }
       const result = await patchXiaoduiyouGrowthDiary(account, payload);
-      return jsonResult(result);
+      return jsonResult(summarizeGrowthDiaryPatchResult(payload, result));
     },
   };
 }
