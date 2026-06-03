@@ -30,6 +30,7 @@ There is no public `xiaoduiyou-usage-workflow` router. Cases live in the skill t
 - Use the Xiaoduiyou app-provided `XDY_BASE_URL` and `XDY_CONNECTION_TOKEN` for the active connection.
 - Do not modify Xiaoduiyou website code, UI, styles, API implementation, or deployment.
 - Only one Agent should be connected at a time; starting a connection replaces the previous Agent.
+- For Growth Diary writes, event time must come from the user's message. If the user gives an explicit time/date, use that. If the user says "now", "刚才", or gives no time, use the current Xiaoduiyou turn/user-message `created_at` timestamp as the basis for `occurred_at` and `date`. Do not invent a time, round to an arbitrary clock time, or use the Agent's local/system time unless it is the same turn timestamp provided by Xiaoduiyou.
 - Product-link visual cards must use the product page/listing's actual first product image, uploaded through Xiaoduiyou assets/TOS, and the returned durable URL in `image_urls` and `image_attachments[].image_url`.
 - Do not add maintainer-local paths, private repo URLs, deploy hosts, or credentials to this repository.
 

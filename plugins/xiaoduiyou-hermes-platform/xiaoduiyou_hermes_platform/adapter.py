@@ -24,7 +24,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.3.2"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.3.3"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -615,6 +615,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             "Xiaoduiyou connector tools are available. "
             "For Growth Diary tasks, use skill xiaoduiyou-growth-diary, call xiaoduiyou_growth_diary_get first, then xiaoduiyou_growth_diary_patch for writes; "
             "do not search local files/env/config for connection_token and do not call /api/growth-diary manually from terminal. "
+            "For Growth Diary event time, use explicit user wording first; if absent, use this Xiaoduiyou turn's created_at, never the Agent runtime clock or an invented time. "
             "For ordinary chat, answer normally and do not call document tools. "
             "When the user explicitly asks to create, update, append to, or delete a document, "
             "call the appropriate xiaoduiyou document tool exactly once before your final reply. "

@@ -213,6 +213,7 @@ Notes:
 
 - Set `source: "agent"` for Agent-created rows.
 - If `date` is omitted, runtime derives it from `occurred_at`.
+- Choose `occurred_at` from the user's wording first. If the user gives no specific time, use the current Xiaoduiyou turn/user-message `created_at` timestamp; do not substitute the Agent runtime clock or fabricate an approximate time.
 - If `title` is omitted, runtime derives it from `content`.
 - Prefer option ids from the live schema. Labels are accepted for common aliases, but ids are safer.
 - Do not invent enum labels. If a needed value is missing, either add a colored option through `field_options` after user intent, or leave the field blank when no true schema value exists.
@@ -315,6 +316,7 @@ Before final user-facing reply:
 
 - [ ] Read live schema first and used `tbl_growth_events` unless the live table differs.
 - [ ] Used `source: "agent"` for Agent-created records.
+- [ ] Set `occurred_at` from explicit user wording, or from the Xiaoduiyou turn/user-message `created_at` timestamp when the user gave no specific time. Did not invent a time or use the Agent runtime clock.
 - [ ] Preserved user/source wording in `original_message` when available; left it empty for scheduled `每日汇总`.
 - [ ] For `每日汇总`, left `advice` empty and put concise `【汇总评估】` / `【明日建议】` text in `content`.
 - [ ] Set `recorder` when known.
