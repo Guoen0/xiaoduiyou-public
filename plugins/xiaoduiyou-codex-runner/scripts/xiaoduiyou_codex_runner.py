@@ -18,7 +18,7 @@ from typing import Any
 from urllib import error, parse, request
 
 
-RUNNER_VERSION = "2026.6.3.2-codex-runner"
+RUNNER_VERSION = "2026.6.3.3-codex-runner"
 DEFAULT_HOME = Path.home() / ".codex" / "xiaoduiyou-runner"
 DEFAULT_CONFIG = DEFAULT_HOME / "config.json"
 DEFAULT_LOG = DEFAULT_HOME / "runner.log"
@@ -173,6 +173,8 @@ def run_codex(config: dict[str, Any], turn_payload: dict[str, Any]) -> str:
 
     cmd = [
         str(config.get("codex_bin") or "codex"),
+        "--ask-for-approval",
+        "never",
         "exec",
         "--skip-git-repo-check",
         "--sandbox",
