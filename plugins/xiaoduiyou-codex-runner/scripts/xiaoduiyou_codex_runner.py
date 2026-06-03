@@ -19,7 +19,7 @@ from typing import Any
 from urllib import error, parse, request
 
 
-RUNNER_VERSION = "2026.6.3.6-codex-runner"
+RUNNER_VERSION = "2026.6.3.7-codex-runner"
 DEFAULT_HOME = Path.home() / ".codex" / "xiaoduiyou-runner"
 DEFAULT_CONFIG = DEFAULT_HOME / "config.json"
 DEFAULT_LOG = DEFAULT_HOME / "runner.log"
@@ -150,6 +150,9 @@ class XiaoduiyouClient:
 
     def document_create(self, payload: dict[str, Any]) -> Any:
         return self.request_json("/api/docs", method="POST", body=payload)
+
+    def document_delete(self, document_id: str) -> Any:
+        return self.request_json(f"/api/drive/files/{parse.quote(document_id)}", method="DELETE")
 
 
 def turn_dict(payload: dict[str, Any]) -> dict[str, Any]:
@@ -305,13 +308,50 @@ def sanitize_growth_patch(patch: Any) -> dict[str, Any] | None:
     return clean or None
 
 
-def document_planner_prompt(payload: dict[str, Any]) -> str:
+def compact_document_context(client: XiaoduiyouClient, payload: dict[str, Any]) -> dict[str, Any]:
+    turn = turn_dict(payload)
+    session_id = str(turn.get("session_id") or "").strip()
+    try:
+        sessions_payload = client.sessions()
+    except Exception as exc:
+        sessions_payload = {"error": str(exc)}
+    sessions = sessions_payload.get("sessions", []) if isinstance(sessions_payload, dict) else []
+    if isinstance(sessions, list):
+        sessions = [session for session in sessions if isinstance(session, dict)]
+        sessions.sort(key=lambda session: str(session.get("updated_at") or session.get("created_at") or ""), reverse=True)
+    else:
+        sessions = []
+    current_session = next((session for session in sessions if str(session.get("session_id") or "") == session_id), None)
+    recent_documents = []
+    for session in sessions[:20]:
+        document_id = str(session.get("document_id") or "").strip()
+        if not document_id:
+            continue
+        recent_documents.append({
+            "document_id": document_id,
+            "session_id": session.get("session_id"),
+            "title": session.get("title"),
+            "session_purpose": session.get("session_purpose"),
+            "updated_at": session.get("updated_at"),
+        })
+    return {
+        "current_session_id": session_id or None,
+        "current_document_id": current_session.get("document_id") if isinstance(current_session, dict) else None,
+        "current_session": current_session,
+        "recent_documents": recent_documents,
+    }
+
+
+def document_planner_prompt(payload: dict[str, Any], context: dict[str, Any]) -> str:
     return f"""你是小队友 Codex runner 的内容包规划器。你只负责理解用户意图并输出 JSON；不要调用任何工具。
 
 输出必须是一个 JSON object，不能有 Markdown，格式：
 {{
   "handled": true/false,
   "reply": "给用户看的简短中文回复",
+  "document_delete": null 或 {{
+    "document_id": "要删除的文档 ID"
+  }},
   "document_create": null 或 {{
     "title": "内容包标题",
     "body": "内容包正文",
@@ -340,10 +380,12 @@ def document_planner_prompt(payload: dict[str, Any]) -> str:
 }}
 
 规则：
-- 只在用户明确要求“生成/创建/写一个 内容包/文档/发布稿/小红书/朋友圈/旅行计划/素材包”等可保存内容产物时 handled=true。
+- 只在用户明确要求“生成/创建/写一个 内容包/文档/发布稿/小红书/朋友圈/旅行计划/素材包”等可保存内容产物，或明确要求删除当前内容包/文档时 handled=true。
 - 普通聊天、ping、成长日记、删除记录、喝奶拉臭等不是内容包任务，handled=false，document_create=null。
 - 你不能要求用户在桌面 Codex 授权、确认或继续处理。
 - 如果用户说“随便写点东西/测试一下”，也要直接生成一个可保存的测试内容包。
+- 如果用户说“把这个删了/删除这份/删掉当前内容包/删文档”，从 Document context 选择要删除的 document_id，优先用 current_document_id。
+- 删除文档时 document_delete 必须有 document_id，document_create 必须为 null。
 - document_create.title 必须简洁可读；body 必须包含可查看的主要内容。
 - ui_templates 只能从 xiaohongshu、moments、travel_plan 中选择；默认内容包用 xiaohongshu 和 moments。
 - fields.ui_templates 必须和顶层 ui_templates 一致。
@@ -354,6 +396,9 @@ def document_planner_prompt(payload: dict[str, Any]) -> str:
 
 Xiaoduiyou turn:
 {json.dumps(turn_dict(payload), ensure_ascii=False, indent=2)}
+
+Document context:
+{json.dumps(context, ensure_ascii=False, indent=2)}
 """
 
 
@@ -402,6 +447,15 @@ def sanitize_document_create(document: Any) -> dict[str, Any] | None:
         "ui_templates": ui_templates,
         "fields": fields,
     }
+
+
+def sanitize_document_delete(document: Any) -> dict[str, str] | None:
+    if not isinstance(document, dict):
+        return None
+    document_id = str(document.get("document_id") or "").strip()
+    if not document_id:
+        raise ValueError("document_delete.document_id is required")
+    return {"document_id": document_id}
 
 
 def prompt_for_turn(payload: dict[str, Any]) -> str:
@@ -510,10 +564,22 @@ def handle_model_planned_growth_diary_turn(config: dict[str, Any], client: Xiaod
 
 
 def handle_model_planned_document_turn(config: dict[str, Any], client: XiaoduiyouClient, payload: dict[str, Any]) -> str | None:
-    raw = run_codex_prompt(config, document_planner_prompt(payload), log_label="document planner")
+    context = compact_document_context(client, payload)
+    raw = run_codex_prompt(config, document_planner_prompt(payload, context), log_label="document planner")
     plan = parse_json_object(raw)
     if not plan.get("handled"):
         return None
+    deletion = sanitize_document_delete(plan.get("document_delete"))
+    if deletion:
+        deleted = client.document_delete(deletion["document_id"])
+        deleted_document = deleted.get("document") if isinstance(deleted, dict) else None
+        deleted_title = ""
+        if isinstance(deleted_document, dict):
+            deleted_title = str(deleted_document.get("title") or "").strip()
+        reply = str(plan.get("reply") or "").strip()
+        if reply:
+            return reply
+        return f"已删除：{deleted_title or deletion['document_id']}。"
     document = sanitize_document_create(plan.get("document_create"))
     if document:
         created = client.document_create(document)
