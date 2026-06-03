@@ -15,7 +15,7 @@ import tempfile
 import time
 from contextvars import ContextVar
 from typing import Any, Dict, List, Optional, Tuple
-from urllib import error, request
+from urllib import error, parse, request
 
 from gateway.config import Platform, PlatformConfig
 from gateway.platforms.base import BasePlatformAdapter, MessageEvent, MessageType, SendResult
@@ -24,7 +24,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.3.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.3.2"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -1010,15 +1010,38 @@ def _active_tool_context() -> Dict[str, Any]:
 
 def _tool_growth_diary_get(args: Dict[str, Any], **_: Any) -> str:
     context = _active_tool_context()
+    filter_spec = _growth_diary_filter_spec(args)
+    view = str(args.get("view") or "").strip()
+    record_query = _growth_diary_records_query(args, filter_spec, view)
+    query_string = f"?{parse.urlencode(record_query)}" if record_query else ""
     result = _request_json(
-        f"{context['base_url']}/api/growth-diary",
+        f"{context['base_url']}/api/growth-diary{query_string}",
         timeout=DEFAULT_TIMEOUT_SECONDS,
         token=context["token"],
     )
-    filter_spec = _growth_diary_filter_spec(args)
-    if filter_spec:
+    if filter_spec and record_query.get("view") != "records":
         result = _compact_growth_diary_result(result, filter_spec)
     return json.dumps({"ok": True, "context": _safe_tool_context(context), "filter": filter_spec or None, "growth_diary": result}, ensure_ascii=False)
+
+
+def _growth_diary_records_query(args: Dict[str, Any], filter_spec: Dict[str, Any], view: str) -> Dict[str, Any]:
+    event_type = str(args.get("event_type") or "").strip()
+    query = str(args.get("query") or args.get("q") or "").strip()
+    unit = str(args.get("unit") or "").strip()
+    quantity = args.get("quantity")
+    has_record_filter = bool(filter_spec or event_type or query or unit or quantity is not None)
+    if view != "records" and (view == "full" or not has_record_filter):
+        return {}
+    params: Dict[str, Any] = {"view": "records", **filter_spec}
+    if event_type:
+        params["event_type"] = event_type
+    if query:
+        params["query"] = query
+    if unit:
+        params["unit"] = unit
+    if quantity is not None:
+        params["quantity"] = quantity
+    return params
 
 
 def _growth_diary_filter_spec(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -1315,13 +1338,18 @@ def register(ctx) -> None:
         emoji="📖",
         schema={
             "name": "xiaoduiyou_growth_diary_get",
-            "description": "Read Growth Diary schema/records for the current Xiaoduiyou home. Use skill xiaoduiyou-growth-diary and call this before any Growth Diary write; pass date/start_date/end_date to return a compact schema + targeted records instead of the full table. Do not search for connection_token manually.",
+            "description": "Read Growth Diary data for the current Xiaoduiyou home. Use skill xiaoduiyou-growth-diary. To find a record_id before update/delete, pass date/event_type/query/quantity/unit; filtered calls default to view=records and return concise records instead of the full base. Do not search for connection_token manually.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "date": {"type": "string", "description": "Optional YYYY-MM-DD date to return only that day's records while preserving schema/options/views."},
+                    "view": {"type": "string", "enum": ["full", "records"], "description": "Use records to return a concise record_id-friendly list. Omit for full legacy base only when schema/options/views are needed."},
+                    "date": {"type": "string", "description": "Optional YYYY-MM-DD date. When present, the connector defaults to view=records."},
                     "start_date": {"type": "string", "description": "Optional inclusive YYYY-MM-DD range start."},
                     "end_date": {"type": "string", "description": "Optional inclusive YYYY-MM-DD range end."},
+                    "event_type": {"type": "string", "description": "Optional event type option id such as milk, poop, food, height, weight, note."},
+                    "query": {"type": "string", "description": "Optional text query matched against title/content/original_message/recorder. Use this to find a record_id before deletion."},
+                    "quantity": {"type": "number", "description": "Optional numeric quantity filter, such as 150."},
+                    "unit": {"type": "string", "description": "Optional unit option id such as ml, times, kg, cm."},
                     "record_limit": {"type": "integer", "description": "Maximum records to return after filtering. Defaults to 80 when any filter is used; capped at 500."},
                 },
             },

@@ -18,9 +18,14 @@ const GrowthDiaryGetSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    date: { type: "string", description: "Optional YYYY-MM-DD date to return only that day's records while preserving schema/options/views." },
+    view: { type: "string", enum: ["full", "records"], description: "Use records to return a concise record_id-friendly list. Omit for full legacy base only when schema/options/views are needed." },
+    date: { type: "string", description: "Optional YYYY-MM-DD date. When present, the connector defaults to view=records." },
     start_date: { type: "string", description: "Optional inclusive YYYY-MM-DD range start." },
     end_date: { type: "string", description: "Optional inclusive YYYY-MM-DD range end." },
+    event_type: { type: "string", description: "Optional event type option id such as milk, poop, food, height, weight, note." },
+    query: { type: "string", description: "Optional text query matched against title/content/original_message/recorder. Use this to find a record_id before deletion." },
+    quantity: { type: "number", description: "Optional numeric quantity filter, such as 150." },
+    unit: { type: "string", description: "Optional unit option id such as ml, times, kg, cm." },
     record_limit: { type: "integer", description: "Maximum records to return after filtering.", minimum: 1, maximum: 500 },
     account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the default/current connector account." },
   },
@@ -147,14 +152,21 @@ function createGrowthDiaryGetTool(config) {
   return {
     name: "xiaoduiyou_growth_diary_get",
     label: "Xiaoduiyou Growth Diary Get",
-    description: "Read Xiaoduiyou Growth Diary schema and targeted records for the current connected Xiaoduiyou account. Use skill xiaoduiyou-growth-diary and call this before any diary write.",
+    description: "Read Xiaoduiyou Growth Diary data for the current connected account. Use skill xiaoduiyou-growth-diary. To find a record_id before update/delete, pass date/event_type/query/quantity/unit; filtered calls default to view=records and return concise records instead of the full base.",
     parameters: GrowthDiaryGetSchema,
     execute: async (_toolCallId, rawParams = {}) => {
       const account = resolveToolAccount(config, rawParams);
+      const hasRecordFilter = Boolean(rawParams.date || rawParams.start_date || rawParams.end_date || rawParams.event_type || rawParams.query || rawParams.quantity !== undefined || rawParams.unit || rawParams.record_limit);
+      const view = rawParams.view === "records" || (rawParams.view !== "full" && hasRecordFilter) ? "records" : undefined;
       const result = await getXiaoduiyouGrowthDiary(account, {
+        view,
         date: rawParams.date,
         start_date: rawParams.start_date,
         end_date: rawParams.end_date,
+        event_type: rawParams.event_type,
+        query: rawParams.query,
+        quantity: rawParams.quantity,
+        unit: rawParams.unit,
         record_limit: rawParams.record_limit,
       });
       return jsonResult(result);
