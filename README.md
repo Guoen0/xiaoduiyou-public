@@ -151,7 +151,9 @@ export XDY_CONNECTION_TOKEN="<由小队友设置页提供>"
 然后在 Codex 里启用 `xiaoduiyou-codex-platform` 插件，并使用 `xiaoduiyou-codex-platform` skill：
 
 - 先调用 `xiaoduiyou_connection_status` 检查连接。
+- 如果显示未配置，调用 `xiaoduiyou_connection_configure` 写入上述 `XDY_BASE_URL` 和 `XDY_CONNECTION_TOKEN`，再用 `probe: true` 检查一次。
 - 再调用 `xiaoduiyou_agent_turn_claim` 领取小队友任务。
+- 要持续等待平台消息时，调用 `xiaoduiyou_agent_turn_watch`；Codex 线程 idle 后不会后台收消息。
 - 处理过程中用 `xiaoduiyou_agent_turn_progress` 回写进度。
 - 完成时用 `xiaoduiyou_agent_turn_complete` 回写结果。
 - 按 README 的 Runtime skill routing 和 Common Agent rules 执行。

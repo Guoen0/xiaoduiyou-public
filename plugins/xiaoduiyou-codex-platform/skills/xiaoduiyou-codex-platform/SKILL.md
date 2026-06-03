@@ -13,16 +13,21 @@ The MCP server reads connection values from:
 
 - `XDY_BASE_URL` or `XIAODUIYOU_BASE_URL`
 - `XDY_CONNECTION_TOKEN` or `XIAODUIYOU_CONNECTION_TOKEN`
+- `~/.codex/xiaoduiyou-connection.json`, written by `xiaoduiyou_connection_configure`
 
 Use the values supplied by the Xiaoduiyou settings page for the active connection.
 
 ## Workflow
 
 1. Call `xiaoduiyou_connection_status` first to verify the server has a base URL and token.
-2. For platform turns, call `xiaoduiyou_agent_turn_claim`.
-3. Use `xiaoduiyou_agent_turn_progress` for visible progress.
-4. Complete with `xiaoduiyou_agent_turn_complete`, including `document_actions` only when the user explicitly asked for document creation, update, or deletion.
-5. Use `xiaoduiyou_agent_turn_fail` only when the turn cannot be completed.
+2. If status is not configured, call `xiaoduiyou_connection_configure` with the `XDY_BASE_URL` and `XDY_CONNECTION_TOKEN` from the Xiaoduiyou prompt, then call status again with `probe: true`.
+3. For platform turns, call `xiaoduiyou_agent_turn_claim`.
+4. To wait for new platform messages in an active Codex thread, call `xiaoduiyou_agent_turn_watch`.
+5. Use `xiaoduiyou_agent_turn_progress` for visible progress.
+6. Complete with `xiaoduiyou_agent_turn_complete`, including `document_actions` only when the user explicitly asked for document creation, update, or deletion.
+7. Use `xiaoduiyou_agent_turn_fail` only when the turn cannot be completed.
+
+Codex does not run a hidden background receiver after the thread goes idle. To behave like a connected Agent, keep the thread active by watching for one turn, handling it, completing it, then watching again.
 
 ## Runtime Skill Routing
 

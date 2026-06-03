@@ -6,25 +6,61 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import traceback
+from pathlib import Path
 from typing import Any
 from urllib import error, parse, request
 
 
-VERSION = "0.1.0"
-CONNECTOR_VERSION = "2026.6.3.4-codex.0"
+VERSION = "0.1.1"
+CONNECTOR_VERSION = "2026.6.3.4-codex.1"
+DEFAULT_CONFIG_PATH = Path.home() / ".codex" / "xiaoduiyou-connection.json"
 
 
 def _env(name: str, fallback: str) -> str:
     return os.environ.get(name, "").strip() or os.environ.get(fallback, "").strip()
 
 
+def config_path() -> Path:
+    override = os.environ.get("XIAODUIYOU_CODEX_CONFIG", "").strip()
+    return Path(override).expanduser() if override else DEFAULT_CONFIG_PATH
+
+
+def read_config() -> dict[str, str]:
+    path = config_path()
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return {
+        "base_url": str(payload.get("base_url") or payload.get("XDY_BASE_URL") or "").strip(),
+        "connection_token": str(payload.get("connection_token") or payload.get("XDY_CONNECTION_TOKEN") or "").strip(),
+    }
+
+
+def write_config(origin: str, token: str) -> Path:
+    path = config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"base_url": origin.rstrip("/"), "connection_token": token}
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    return path
+
+
 def base_url() -> str:
-    return _env("XDY_BASE_URL", "XIAODUIYOU_BASE_URL").rstrip("/")
+    return (_env("XDY_BASE_URL", "XIAODUIYOU_BASE_URL") or read_config().get("base_url", "")).rstrip("/")
 
 
 def connection_token() -> str:
-    return _env("XDY_CONNECTION_TOKEN", "XIAODUIYOU_CONNECTION_TOKEN")
+    return _env("XDY_CONNECTION_TOKEN", "XIAODUIYOU_CONNECTION_TOKEN") or read_config().get("connection_token", "")
 
 
 def configured_account() -> dict[str, str]:
@@ -137,10 +173,26 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             "has_connection_token": bool(token),
             "connector_provider": "codex",
             "connector_version": CONNECTOR_VERSION,
+            "config_path": str(config_path()),
+            "source": "env" if _env("XDY_BASE_URL", "XIAODUIYOU_BASE_URL") or _env("XDY_CONNECTION_TOKEN", "XIAODUIYOU_CONNECTION_TOKEN") else "config",
         }
         if origin and token and args.get("probe"):
             status["probe"] = request_json("/api/agent/sessions")
         return text_result(status)
+
+    if name == "xiaoduiyou_connection_configure":
+        origin = required(args, "base_url").rstrip("/")
+        token = required(args, "connection_token")
+        if not origin.startswith(("http://", "https://")):
+            raise ValueError("base_url must start with http:// or https://")
+        path = write_config(origin, token)
+        return text_result({
+            "configured": True,
+            "base_url": origin,
+            "has_connection_token": True,
+            "config_path": str(path),
+            "next_step": "Call xiaoduiyou_connection_status with probe=true, then xiaoduiyou_agent_turn_claim or xiaoduiyou_agent_turn_watch.",
+        })
 
     if name == "xiaoduiyou_agent_turn_claim":
         try:
@@ -149,6 +201,24 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             if getattr(exc, "status", None) == 404:
                 return text_result({"turn": None, "status": "NO_PENDING_TURN"})
             raise
+
+    if name == "xiaoduiyou_agent_turn_watch":
+        timeout_seconds = max(1.0, min(float(args.get("timeout_seconds") or 60), 300.0))
+        interval_seconds = max(0.5, min(float(args.get("interval_seconds") or 2), 10.0))
+        deadline = time.time() + timeout_seconds
+        attempts = 0
+        last_error: dict[str, Any] | None = None
+        while time.time() <= deadline:
+            attempts += 1
+            try:
+                result = request_json("/api/agent/turns/pending")
+                return text_result({"status": "TURN_CLAIMED", "attempts": attempts, **(result if isinstance(result, dict) else {"result": result})})
+            except RuntimeError as exc:
+                if getattr(exc, "status", None) != 404:
+                    raise
+                last_error = {"status": getattr(exc, "status", None), "message": str(exc)}
+            time.sleep(interval_seconds)
+        return text_result({"turn": None, "status": "NO_PENDING_TURN", "attempts": attempts, "last_error": last_error})
 
     if name == "xiaoduiyou_agent_turn_progress":
         turn_id = required(args, "turn_id")
@@ -263,9 +333,19 @@ TOOLS = [
         "inputSchema": schema({"probe": {"type": "boolean"}}),
     },
     {
+        "name": "xiaoduiyou_connection_configure",
+        "description": "Persist Xiaoduiyou connection values from the app settings prompt so already-running Codex MCP processes can connect.",
+        "inputSchema": schema({"base_url": {"type": "string"}, "connection_token": {"type": "string"}}, ["base_url", "connection_token"]),
+    },
+    {
         "name": "xiaoduiyou_agent_turn_claim",
         "description": "Claim the next pending Xiaoduiyou Agent turn for Codex.",
         "inputSchema": schema({}),
+    },
+    {
+        "name": "xiaoduiyou_agent_turn_watch",
+        "description": "Long-poll for a pending Xiaoduiyou turn and claim it when available. Use only while the Codex thread should stay actively connected.",
+        "inputSchema": schema({"timeout_seconds": {"type": "number", "minimum": 1, "maximum": 300}, "interval_seconds": {"type": "number", "minimum": 0.5, "maximum": 10}}),
     },
     {
         "name": "xiaoduiyou_agent_turn_progress",
