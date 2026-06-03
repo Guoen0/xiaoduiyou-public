@@ -93,6 +93,11 @@ if [ "$(uname -s)" = "Darwin" ]; then
   <true/>
   <key>KeepAlive</key>
   <true/>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>$(dirname "$XDY_CODEX_BIN"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <key>StandardOutPath</key>
   <string>$RUNNER_HOME/launchd.out.log</string>
   <key>StandardErrorPath</key>

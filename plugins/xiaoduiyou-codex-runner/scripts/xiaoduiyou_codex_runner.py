@@ -185,8 +185,21 @@ def run_codex(config: dict[str, Any], turn_payload: dict[str, Any]) -> str:
     cmd.append(prompt_for_turn(turn_payload))
 
     log(f"codex exec start workdir={workdir}")
+    env = os.environ.copy()
+    codex_bin_parent = str(Path(str(config.get("codex_bin") or "")).expanduser().parent)
+    path_parts = [
+        codex_bin_parent if codex_bin_parent not in ("", ".") else "",
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+        env.get("PATH", ""),
+    ]
+    env["PATH"] = ":".join(part for part in path_parts if part)
     try:
-        completed = subprocess.run(cmd, text=True, capture_output=True, timeout=float(config.get("codex_timeout_seconds") or 900))
+        completed = subprocess.run(cmd, text=True, capture_output=True, timeout=float(config.get("codex_timeout_seconds") or 900), env=env)
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError("Codex timed out while handling the turn") from exc
     if completed.returncode != 0:
