@@ -1,7 +1,7 @@
 import { resolveXiaoduiyouAccount } from "./accounts.js";
-import { getXiaoduiyouGrowthDiary, patchXiaoduiyouGrowthDiary } from "./client.js";
+import { getXiaoduiyouDocument, getXiaoduiyouGrowthDiary, patchXiaoduiyouGrowthDiary } from "./client.js";
 import { summarizeGrowthDiaryPatchResult } from "./growth-diary-summary.js";
-import { queueXiaoduiyouDocumentAction } from "./tool-context.js";
+import { activeXiaoduiyouToolContext, queueXiaoduiyouDocumentAction } from "./tool-context.js";
 
 function jsonResult(value) {
   return JSON.stringify(value, null, 2);
@@ -43,6 +43,21 @@ const GrowthDiaryPatchSchema = {
     account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the default/current connector account." },
   },
   required: ["payload"],
+};
+
+const DocumentGetSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    document_id: { type: "string", description: "Optional document id. Use when known." },
+    session_id: { type: "string", description: "Optional Xiaoduiyou session id. Omit to read the current Xiaoduiyou turn's attached document." },
+    view: { type: "string", enum: ["summary", "field", "blocks", "full"], description: "Default summary is concise. Use field for one metadata field, blocks for paged block_json, and full only when the user explicitly needs the entire document." },
+    field: { type: "string", description: "Required for view=field. Dot path under fields, e.g. publish_notes.xiaohongshu or source_markdown." },
+    start: { type: "integer", description: "For view=blocks: zero-based block offset.", minimum: 0 },
+    block_limit: { type: "integer", description: "For summary/blocks: max blocks/previews returned.", minimum: 1, maximum: 100 },
+    char_limit: { type: "integer", description: "For view=field: max string/JSON preview chars.", minimum: 200, maximum: 20000 },
+    account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the current connector account." },
+  },
 };
 
 const DocumentCreateSchema = {
@@ -132,7 +147,16 @@ function mergeUiTemplatesIntoFields(rawParams, fields) {
 }
 
 function queuedResult(operation, action) {
-  return jsonResult({ ok: true, queued: true, operation, document_action: action });
+  const target = action.document_id ? { document_id: action.document_id } : { current_session_document: true };
+  return jsonResult({
+    ok: true,
+    queued: true,
+    operation,
+    ...target,
+    attach_to_session: action.operation === "create" ? Boolean(action.attach_to_session ?? true) : undefined,
+    will_apply_on: "final_callback",
+    next_step: "Continue the answer normally. Do not repeat this tool call just to verify; use xiaoduiyou_documents_get after the final callback or in a later turn.",
+  });
 }
 
 function growthDiaryPatchFailureResult(error) {
@@ -192,6 +216,29 @@ function createGrowthDiaryPatchTool(config) {
       } catch (error) {
         return jsonResult(growthDiaryPatchFailureResult(error));
       }
+    },
+  };
+}
+
+function createDocumentGetTool(config) {
+  return {
+    name: "xiaoduiyou_documents_get",
+    label: "Xiaoduiyou Documents Get",
+    description: "Read the current Xiaoduiyou content-package document without loading everything by default. Omit document_id/session_id inside an active Xiaoduiyou turn to read the current session document. Default view=summary. Use view=field for one field such as publish_notes.xiaohongshu/source_markdown, view=blocks for paged blocks, and view=full only when explicitly necessary.",
+    parameters: DocumentGetSchema,
+    execute: async (_toolCallId, rawParams = {}) => {
+      const context = activeXiaoduiyouToolContext();
+      const account = resolveToolAccount(config, { ...rawParams, account_id: rawParams.account_id || context.accountId });
+      const result = await getXiaoduiyouDocument(account, {
+        document_id: rawParams.document_id,
+        session_id: rawParams.session_id || context.sessionId,
+        view: rawParams.view || "summary",
+        field: rawParams.field,
+        start: rawParams.start,
+        block_limit: rawParams.block_limit,
+        char_limit: rawParams.char_limit,
+      });
+      return jsonResult(result);
     },
   };
 }
@@ -282,6 +329,7 @@ function createDocumentDeleteTool() {
 export function registerXiaoduiyouTools(api) {
   api.registerTool(createGrowthDiaryGetTool(api.config), { name: "xiaoduiyou_growth_diary_get" });
   api.registerTool(createGrowthDiaryPatchTool(api.config), { name: "xiaoduiyou_growth_diary_patch" });
+  api.registerTool(createDocumentGetTool(api.config), { name: "xiaoduiyou_documents_get" });
   api.registerTool(createDocumentCreateTool(), { name: "xiaoduiyou_documents_create" });
   api.registerTool(createDocumentUpdateTool(), { name: "xiaoduiyou_documents_update" });
   api.registerTool(createDocumentDeleteTool(), { name: "xiaoduiyou_documents_delete" });

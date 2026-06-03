@@ -24,7 +24,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.3.3"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.3.4"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -884,7 +884,20 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
 
 
 def _queued_result(operation: str, action: Dict[str, Any]) -> str:
-    return json.dumps({"ok": True, "queued": True, "operation": operation, "document_action": action}, ensure_ascii=False)
+    payload: Dict[str, Any] = {
+        "ok": True,
+        "queued": True,
+        "operation": operation,
+        "will_apply_on": "final_callback",
+        "next_step": "Continue the answer normally. Do not repeat this tool call just to verify; use xiaoduiyou_documents_get after the final callback or in a later turn.",
+    }
+    if action.get("document_id"):
+        payload["document_id"] = action.get("document_id")
+    else:
+        payload["current_session_document"] = True
+    if operation == "create":
+        payload["attach_to_session"] = bool(action.get("attach_to_session", True))
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def _next_progress_message_id(chat_id: str, kind: str = "progress") -> str:
@@ -993,6 +1006,32 @@ def _tool_delete_document(args: Dict[str, Any], **_: Any) -> str:
         action["document_id"] = document_id
     _queue_action(action)
     return _queued_result("delete", action)
+
+
+def _tool_get_document(args: Dict[str, Any], **_: Any) -> str:
+    context = _active_tool_context()
+    document_id = str(args.get("document_id") or "").strip()
+    session_id = str(args.get("session_id") or context.get("session_id") or "").strip()
+    query: Dict[str, Any] = {
+        "view": str(args.get("view") or "summary").strip() or "summary",
+    }
+    for key in ("field", "start", "block_limit", "char_limit"):
+        value = args.get(key)
+        if value is not None and value != "":
+            query[key] = value
+    query_string = f"?{parse.urlencode(query)}" if query else ""
+    if document_id:
+        path = f"/api/docs/{parse.quote(document_id, safe='')}"
+    elif session_id:
+        path = f"/api/sessions/{parse.quote(session_id, safe='')}/document"
+    else:
+        raise RuntimeError("xiaoduiyou_documents_get requires document_id or an active Xiaoduiyou session")
+    result = _request_json(
+        f"{context['base_url']}{path}{query_string}",
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+        token=context["token"],
+    )
+    return json.dumps({"ok": True, "context": _safe_tool_context(context), "document": result}, ensure_ascii=False)
 
 
 def _active_tool_context() -> Dict[str, Any]:
@@ -1375,6 +1414,31 @@ def register(ctx) -> None:
             },
         },
         handler=_tool_growth_diary_patch,
+        check_fn=check_requirements,
+    )
+
+    ctx.register_tool(
+        name="xiaoduiyou_documents_get",
+        toolset=TOOLSET,
+        description="Read the current Xiaoduiyou content-package document concisely through the connector-owned origin/token.",
+        emoji="📄",
+        schema={
+            "name": "xiaoduiyou_documents_get",
+            "description": "Read Xiaoduiyou content-package documents without loading everything by default. Omit document_id/session_id inside an active Xiaoduiyou turn to read the current session document. Default view=summary. Use view=field for one field such as publish_notes.xiaohongshu/source_markdown, view=blocks for paged blocks, and view=full only when explicitly necessary.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "string", "description": "Optional document id. Use when known."},
+                    "session_id": {"type": "string", "description": "Optional Xiaoduiyou session id. Omit to read the current Xiaoduiyou turn's attached document."},
+                    "view": {"type": "string", "enum": ["summary", "field", "blocks", "full"], "description": "Default summary is concise. Use field for one metadata field, blocks for paged block_json, and full only when explicitly needed."},
+                    "field": {"type": "string", "description": "Required for view=field. Dot path under fields, e.g. publish_notes.xiaohongshu or source_markdown."},
+                    "start": {"type": "integer", "description": "For view=blocks: zero-based block offset."},
+                    "block_limit": {"type": "integer", "description": "For summary/blocks: max blocks/previews returned."},
+                    "char_limit": {"type": "integer", "description": "For view=field: max string/JSON preview chars."},
+                },
+            },
+        },
+        handler=_tool_get_document,
         check_fn=check_requirements,
     )
 

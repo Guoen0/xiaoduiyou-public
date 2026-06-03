@@ -53,7 +53,7 @@ Load this when the user asks for:
 
 ## Validation
 
-- Prefer the first-class document tools for create/update/delete: `xiaoduiyou_documents_create`, `xiaoduiyou_documents_update`, `xiaoduiyou_documents_delete`.
+- Prefer the first-class document tools for read/create/update/delete: `xiaoduiyou_documents_get`, `xiaoduiyou_documents_create`, `xiaoduiyou_documents_update`, `xiaoduiyou_documents_delete`.
 - Before calling them, manually validate: `ui_templates` matches `fields.publish_notes`, visible publish tabs contain only final material, and all images are browser-accessible `http(s)` URLs.
 - A local validator script may exist in some Hermes installs as an optional lint aid, but public Xiaoduiyou usage skills must not depend on scripts being available.
 
@@ -62,3 +62,4 @@ Load this when the user asks for:
 - Use `xiaoduiyou_documents_create` only for new requested documents/artifacts.
 - Use `xiaoduiyou_documents_update` only for explicit edits/append/patches.
 - Use `xiaoduiyou_documents_delete` only when explicitly asked to delete.
+- Use `xiaoduiyou_documents_get` with default `view=summary`; use `view=field` for one field or `view=blocks` for paged blocks. Use `view=full` only when explicitly necessary.

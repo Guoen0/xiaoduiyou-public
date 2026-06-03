@@ -1,4 +1,4 @@
-export const XIAODUIYOU_CONNECTOR_VERSION = "2026.6.3.3";
+export const XIAODUIYOU_CONNECTOR_VERSION = "2026.6.3.4";
 
 async function readJsonResponse(response, path) {
   const rawText = await response.text();
@@ -35,7 +35,7 @@ async function requestJson(account, path, options = {}) {
   return await readJsonResponse(response, path);
 }
 
-function growthDiaryQuery(params = {}) {
+function compactQuery(params = {}) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null || value === "") continue;
@@ -46,7 +46,7 @@ function growthDiaryQuery(params = {}) {
 }
 
 export async function getXiaoduiyouGrowthDiary(account, params = {}) {
-  return await requestJson(account, `/api/growth-diary${growthDiaryQuery(params)}`);
+  return await requestJson(account, `/api/growth-diary${compactQuery(params)}`);
 }
 
 export async function patchXiaoduiyouGrowthDiary(account, payload) {
@@ -54,6 +54,21 @@ export async function patchXiaoduiyouGrowthDiary(account, payload) {
     method: "PATCH",
     body: payload,
   });
+}
+
+export async function getXiaoduiyouDocument(account, params = {}) {
+  const documentId = String(params.document_id ?? "").trim();
+  const sessionId = String(params.session_id ?? "").trim();
+  const query = compactQuery({
+    view: params.view || "summary",
+    field: params.field,
+    start: params.start,
+    block_limit: params.block_limit,
+    char_limit: params.char_limit,
+  });
+  if (documentId) return await requestJson(account, `/api/docs/${encodeURIComponent(documentId)}${query}`);
+  if (sessionId) return await requestJson(account, `/api/sessions/${encodeURIComponent(sessionId)}/document${query}`);
+  throw new Error("xiaoduiyou_documents_get requires document_id or an active Xiaoduiyou session");
 }
 
 export async function pollXiaoduiyouTurn(account, signal) {

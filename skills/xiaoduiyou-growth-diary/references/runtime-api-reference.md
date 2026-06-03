@@ -183,8 +183,11 @@ Always verify rendered image URLs with `GET` or `HEAD`: HTTP `200` and `content-
 When the runtime exposes Xiaoduiyou document tools, use them instead of direct database writes:
 
 - `xiaoduiyou_documents_create(title, body?, block_json?, ui_templates?, fields?, attach_to_session?)`
+- `xiaoduiyou_documents_get(document_id?, session_id?, view?, field?, start?, block_limit?, char_limit?)`
 - `xiaoduiyou_documents_update(document_id?, command?, title?, body?, block_json?, ui_templates?, fields?, blocks?)`
 - `xiaoduiyou_documents_delete(document_id?)`
+
+Use `xiaoduiyou_documents_get` default `view=summary` before edits. Use `view=field` for one metadata field such as `publish_notes.xiaohongshu` or `source_markdown`, and `view=blocks` for paged block content. Avoid `view=full` unless the user explicitly needs the entire document.
 
 Supported update commands:
 

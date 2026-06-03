@@ -8,6 +8,7 @@
     "tools": [
       "xiaoduiyou_growth_diary_get",
       "xiaoduiyou_growth_diary_patch",
+      "xiaoduiyou_documents_get",
       "xiaoduiyou_documents_create",
       "xiaoduiyou_documents_update",
       "xiaoduiyou_documents_delete"
