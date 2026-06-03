@@ -1477,11 +1477,11 @@ def register(ctx) -> None:
         emoji="✏️",
         schema={
             "name": "xiaoduiyou_documents_update",
-            "description": "Update a Xiaoduiyou document only when the user explicitly asks to modify a document. Omit document_id to update the current session document.",
+            "description": "Update a Xiaoduiyou document only when the user explicitly asks to modify a document. Omit document_id to target the current screen document/content package; Xiaoduiyou falls back to the current session document.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "document_id": {"type": "string", "description": "Optional document id. If omitted, Xiaoduiyou updates the current session document."},
+                    "document_id": {"type": "string", "description": "Optional document id. If omitted, Xiaoduiyou updates the current screen document/content package, then falls back to the current session document."},
                     "command": {"type": "string", "enum": ["overwrite", "append_blocks", "patch_fields"], "description": "Update mode. Defaults overwrite."},
                     "title": {"type": "string", "description": "New title for overwrite or patch_fields."},
                     "body": {"type": "string", "description": "New/append body text."},
@@ -1513,11 +1513,11 @@ def register(ctx) -> None:
         emoji="🗑️",
         schema={
             "name": "xiaoduiyou_documents_delete",
-            "description": "Delete a Xiaoduiyou document only when the user explicitly asks to delete a document. Omit document_id to delete the current session document.",
+            "description": "Delete a Xiaoduiyou document only when the user explicitly asks to delete a document. Omit document_id to target the current screen document/content package; Xiaoduiyou falls back to the current session document.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "document_id": {"type": "string", "description": "Optional document id. If omitted, Xiaoduiyou deletes the current session document."},
+                    "document_id": {"type": "string", "description": "Optional document id. If omitted, Xiaoduiyou deletes the current screen document/content package, then falls back to the current session document."},
                 },
             },
         },

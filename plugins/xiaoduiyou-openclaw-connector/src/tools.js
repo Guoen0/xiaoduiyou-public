@@ -82,7 +82,7 @@ const DocumentUpdateSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    document_id: { type: "string", description: "Optional document id. If omitted, Xiaoduiyou updates the current session document." },
+    document_id: { type: "string", description: "Optional document id. If omitted, Xiaoduiyou updates the current screen document/content package, then falls back to the current session document." },
     command: { type: "string", enum: ["overwrite", "append_blocks", "patch_fields"], description: "Update mode. Defaults overwrite." },
     title: { type: "string", description: "New title for overwrite or patch_fields." },
     body: { type: "string", description: "New/append body text." },
@@ -105,7 +105,7 @@ const DocumentDeleteSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    document_id: { type: "string", description: "Optional document id. If omitted, Xiaoduiyou deletes the current session document." },
+    document_id: { type: "string", description: "Optional document id. If omitted, Xiaoduiyou deletes the current screen document/content package, then falls back to the current session document." },
   },
 };
 
@@ -274,7 +274,7 @@ function createDocumentUpdateTool() {
   return {
     name: "xiaoduiyou_documents_update",
     label: "Xiaoduiyou Documents Update",
-    description: "Update a Xiaoduiyou document only when the user explicitly asks to modify a document. Omit document_id to update the current session document.",
+    description: "Update a Xiaoduiyou document only when the user explicitly asks to modify a document. Omit document_id to target the current screen document/content package; Xiaoduiyou falls back to the current session document.",
     parameters: DocumentUpdateSchema,
     execute: async (_toolCallId, rawParams = {}) => {
       const command = String(rawParams.command ?? "overwrite").trim();
@@ -314,7 +314,7 @@ function createDocumentDeleteTool() {
   return {
     name: "xiaoduiyou_documents_delete",
     label: "Xiaoduiyou Documents Delete",
-    description: "Delete a Xiaoduiyou document only when the user explicitly asks to delete a document. Omit document_id to delete the current session document.",
+    description: "Delete a Xiaoduiyou document only when the user explicitly asks to delete a document. Omit document_id to target the current screen document/content package; Xiaoduiyou falls back to the current session document.",
     parameters: DocumentDeleteSchema,
     execute: async (_toolCallId, rawParams = {}) => {
       const documentId = String(rawParams.document_id ?? "").trim();
