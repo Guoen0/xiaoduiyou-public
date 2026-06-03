@@ -66,6 +66,7 @@ On macOS, prefer the LaunchAgent installed by `install-codex-runner.sh`.
 - Do not expose local paths, tokens, or internal stack traces to Xiaoduiyou users.
 - Do not ask the Xiaoduiyou user to authorize, confirm, or continue processing in desktop Codex.
 - For Xiaoduiyou platform reads/writes, use the installed `xiaoduiyou-codex-platform` MCP tools directly.
+- The runner should handle simple Growth Diary writes/deletes directly through Xiaoduiyou platform APIs before falling back to `codex exec`, so background turns do not depend on interactive MCP authorization.
 - For Growth Diary writes, call `xiaoduiyou_growth_diary_get` before `xiaoduiyou_growth_diary_patch`, then write the record directly with `records[].table_id`, `records[].source`, and `records[].values`.
 - If `codex exec` fails, call the Xiaoduiyou failure endpoint with a short actionable error.
 - Use `xiaoduiyou-codex-platform` tools for platform reads/writes when a live Codex session is handling a task directly.

@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
+import re
 import signal
 import shutil
 import subprocess
@@ -18,7 +20,7 @@ from typing import Any
 from urllib import error, parse, request
 
 
-RUNNER_VERSION = "2026.6.3.3-codex-runner"
+RUNNER_VERSION = "2026.6.3.4-codex-runner"
 DEFAULT_HOME = Path.home() / ".codex" / "xiaoduiyou-runner"
 DEFAULT_CONFIG = DEFAULT_HOME / "config.json"
 DEFAULT_LOG = DEFAULT_HOME / "runner.log"
@@ -139,10 +141,148 @@ class XiaoduiyouClient:
     def sessions(self) -> Any:
         return self.request_json("/api/agent/sessions")
 
+    def growth_diary_get(self, params: dict[str, Any]) -> Any:
+        clean = {key: str(value) for key, value in params.items() if value not in (None, "")}
+        query = f"?{parse.urlencode(clean)}" if clean else ""
+        return self.request_json(f"/api/growth-diary{query}")
+
+    def growth_diary_patch(self, payload: dict[str, Any]) -> Any:
+        return self.request_json("/api/growth-diary", method="PATCH", body=payload)
+
+
+def turn_dict(payload: dict[str, Any]) -> dict[str, Any]:
+    return payload.get("turn") if isinstance(payload.get("turn"), dict) else {}
+
+
+def turn_message(payload: dict[str, Any]) -> str:
+    return str(turn_dict(payload).get("user_message") or "").strip()
+
+
+def local_datetime_from_turn(payload: dict[str, Any]) -> dt.datetime:
+    turn = turn_dict(payload)
+    raw = str(turn.get("created_at") or turn.get("user_message_created_at") or "").strip()
+    if raw:
+        try:
+            parsed = dt.datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=dt.timezone.utc)
+            return parsed.astimezone(dt.timezone(dt.timedelta(hours=8))).replace(tzinfo=None)
+        except ValueError:
+            pass
+    return dt.datetime.now()
+
+
+def sender_name(payload: dict[str, Any]) -> str:
+    turn = turn_dict(payload)
+    return str(turn.get("sender_display_name") or turn.get("sender_name") or "").strip()
+
+
+def direct_growth_record_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+    message = turn_message(payload)
+    compact = re.sub(r"\s+", "", message)
+    occurred_at = local_datetime_from_turn(payload)
+    occurred = occurred_at.strftime("%Y-%m-%d %H:%M:%S")
+    date_value = occurred_at.strftime("%Y-%m-%d")
+    recorder = sender_name(payload)
+
+    milk_match = re.search(r"(?:喝奶|奶)(\d+(?:\.\d+)?)ml|(\d+(?:\.\d+)?)ml(?:奶|喝奶)", compact, re.IGNORECASE)
+    if milk_match:
+        amount_text = milk_match.group(1) or milk_match.group(2)
+        amount = float(amount_text)
+        quantity: int | float = int(amount) if amount.is_integer() else amount
+        return {
+            "records": [{
+                "table_id": "tbl_growth_events",
+                "source": "agent",
+                "values": {
+                    "title": f"喝奶 {quantity}ml",
+                    "content": f"喝奶 {quantity}ml。",
+                    "event_type": "milk",
+                    "date": date_value,
+                    "occurred_at": occurred,
+                    "quantity": quantity,
+                    "unit": "ml",
+                    "risk": "normal",
+                    "tags": [],
+                    "recorder": recorder,
+                    "original_message": message,
+                    "advice": "",
+                },
+            }],
+        }
+
+    poop_match = re.search(r"(?:拉屎|拉臭|大便|便便)(\d+(?:\.\d+)?)?次?", compact)
+    if poop_match:
+        amount_text = poop_match.group(1) or "1"
+        amount = float(amount_text)
+        quantity = int(amount) if amount.is_integer() else amount
+        return {
+            "records": [{
+                "table_id": "tbl_growth_events",
+                "source": "agent",
+                "values": {
+                    "title": f"拉臭 {quantity} 次",
+                    "content": f"拉臭 {quantity} 次；具体性状未说明。",
+                    "event_type": "poop",
+                    "date": date_value,
+                    "occurred_at": occurred,
+                    "quantity": quantity,
+                    "unit": "times",
+                    "risk": "normal",
+                    "tags": [],
+                    "recorder": recorder,
+                    "original_message": message,
+                    "advice": "",
+                },
+            }],
+        }
+
+    return None
+
+
+def direct_delete_payload(client: XiaoduiyouClient, payload: dict[str, Any]) -> tuple[dict[str, Any], str] | None:
+    message = turn_message(payload)
+    compact = re.sub(r"\s+", "", message)
+    if not re.search(r"(删|删除)", compact):
+        return None
+    if not re.search(r"(这条|上一条|刚才|上条)", compact):
+        return None
+
+    date_value = local_datetime_from_turn(payload).strftime("%Y-%m-%d")
+    records_payload = client.growth_diary_get({"view": "records", "date": date_value, "record_limit": 50})
+    records = records_payload.get("records") if isinstance(records_payload, dict) else []
+    if not isinstance(records, list):
+        return None
+    agent_records = [record for record in records if isinstance(record, dict) and record.get("source") == "agent" and record.get("record_id")]
+    if not agent_records:
+        return {"deletions": []}, "没有找到今天由 Codex 记录的上一条成长日记。"
+    agent_records.sort(key=lambda record: str(record.get("occurred_at") or record.get("updated_at") or ""), reverse=True)
+    record = agent_records[0]
+    title = str(record.get("title") or "上一条记录")
+    return {
+        "deletions": [{"table_id": str(record.get("table_id") or "tbl_growth_events"), "record_id": str(record["record_id"])}],
+    }, f"已删除：{title}。"
+
+
+def handle_direct_growth_diary_turn(client: XiaoduiyouClient, payload: dict[str, Any]) -> str | None:
+    delete_payload = direct_delete_payload(client, payload)
+    if delete_payload:
+        patch_payload, reply = delete_payload
+        if patch_payload.get("deletions"):
+            client.growth_diary_patch(patch_payload)
+        return reply
+
+    record_payload = direct_growth_record_payload(payload)
+    if not record_payload:
+        return None
+    client.growth_diary_get({"view": "records", "date": record_payload["records"][0]["values"]["date"], "record_limit": 5})
+    client.growth_diary_patch(record_payload)
+    values = record_payload["records"][0]["values"]
+    return f"已记录：{values['title']}。"
+
 
 def prompt_for_turn(payload: dict[str, Any]) -> str:
-    turn = payload.get("turn") if isinstance(payload.get("turn"), dict) else {}
-    user_message = str(turn.get("user_message") or "")
+    user_message = turn_message(payload)
     return f"""你正在作为小队友平台的桌面 Codex Agent 处理一个用户消息。
 
 规则：
@@ -229,7 +369,9 @@ def handle_one(config: dict[str, Any], client: XiaoduiyouClient) -> bool:
         return True
     log(f"claimed turn {turn_id}")
     try:
-        reply = run_codex(config, claimed)
+        reply = handle_direct_growth_diary_turn(client, claimed)
+        if reply is None:
+            reply = run_codex(config, claimed)
         client.complete(turn_id, reply)
         log(f"completed turn {turn_id}")
     except Exception as exc:
