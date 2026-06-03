@@ -28,6 +28,12 @@ XDY_CONNECTION_TOKEN="<from Xiaoduiyou setup prompt>" \
 
 Do not print the connection token back to the user.
 
+The installer installs or updates three Codex plugins:
+
+- `xiaoduiyou-runtime-skills`: provides `xiaoduiyou-im`, `xiaoduiyou-doc-content-package`, and `xiaoduiyou-growth-diary`.
+- `xiaoduiyou-codex-platform`: provides Xiaoduiyou MCP tools.
+- `xiaoduiyou-codex-runner`: provides this runner skill and the local runner script.
+
 ## Verify
 
 After install, run:
@@ -65,6 +71,7 @@ On macOS, prefer the LaunchAgent installed by `install-codex-runner.sh`.
 - For simple chat turns, return a concise user-facing response.
 - Do not expose local paths, tokens, or internal stack traces to Xiaoduiyou users.
 - Do not ask the Xiaoduiyou user to authorize, confirm, or continue processing in desktop Codex.
+- Follow the installed runtime skills for user intent: `xiaoduiyou-im` for chat/cards, `xiaoduiyou-doc-content-package` for documents/content packages, and `xiaoduiyou-growth-diary` for baby diary data.
 - For Xiaoduiyou platform reads/writes, use the installed `xiaoduiyou-codex-platform` MCP tools directly.
 - For background Growth Diary turns, use the model to produce a structured action plan, then let the runner execute Xiaoduiyou platform APIs; do not depend on interactive MCP authorization inside `codex exec`.
 - For Growth Diary writes, call `xiaoduiyou_growth_diary_get` before `xiaoduiyou_growth_diary_patch`, then write the record directly with `records[].table_id`, `records[].source`, and `records[].values`.

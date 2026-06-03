@@ -8,6 +8,7 @@ Source of truth: `https://github.com/Guoen0/xiaoduiyou-public.git`. Clone or pul
 
 - Hermes platform plugin: `plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform/`
 - OpenClaw connector: `plugins/xiaoduiyou-openclaw-connector/`
+- Codex runtime skills plugin: `plugins/xiaoduiyou-runtime-skills/`
 - Codex platform plugin: `plugins/xiaoduiyou-codex-platform/`
 - Codex runner plugin: `plugins/xiaoduiyou-codex-runner/`
 - IM skill: `skills/xiaoduiyou-im/`
@@ -118,10 +119,10 @@ XDY_CONNECTION_TOKEN="<由小队友设置页提供>" \
 
 ## Agent setup prompt: Codex
 
-When a Xiaoduiyou user asks Codex to connect, copy this prompt. The Xiaoduiyou app provides the current `XDY_BASE_URL` and `XDY_CONNECTION_TOKEN`. Codex should install both public Codex plugins and start the local desktop runner; the user should not need to understand or run a polling loop manually.
+When a Xiaoduiyou user asks Codex to connect, copy this prompt. The Xiaoduiyou app provides the current `XDY_BASE_URL` and `XDY_CONNECTION_TOKEN`. Codex should install the public runtime skills plugin, platform plugin, and runner plugin, then start the local runner; the user should not need to understand or run a polling loop manually.
 
 ````text
-你现在要连接到小队友，作为当前唯一启用的桌面端 Codex Agent。
+你现在要连接到小队友，作为当前唯一启用的 Codex。
 
 先读取并遵循 Xiaoduiyou public 仓库 README：
 https://github.com/Guoen0/xiaoduiyou-public/blob/main/README.md
@@ -150,9 +151,10 @@ export XDY_CONNECTION_TOKEN="<由小队友设置页提供>"
 "$XDY_PUBLIC_DIR/scripts/install-codex-runner.sh"
 ```
 
-- 安装脚本会安装/更新 `xiaoduiyou-codex-platform` 和 `xiaoduiyou-codex-runner` 两个 Codex 插件。
+- 安装脚本会安装/更新三个 Codex 插件：`xiaoduiyou-runtime-skills`、`xiaoduiyou-codex-platform`、`xiaoduiyou-codex-runner`。
+- `xiaoduiyou-runtime-skills` 会把 `xiaoduiyou-im`、`xiaoduiyou-doc-content-package`、`xiaoduiyou-growth-diary` 装进 Codex；这些 runtime skills 是 IM、内容包、成长日记行为的来源。
 - 安装脚本会写入本地连接配置，启动后台 runner，并验证平台连接。
-- 安装后使用 `xiaoduiyou-codex-runner` skill 检查 runner 状态；使用 `xiaoduiyou-codex-platform` skill 处理需要平台 MCP 工具的任务。
+- 安装后使用 `xiaoduiyou-codex-runner` skill 检查 runner 状态；使用 `xiaoduiyou-codex-platform` skill 处理需要平台 MCP 工具的任务；按 `xiaoduiyou-im` / `xiaoduiyou-doc-content-package` / `xiaoduiyou-growth-diary` 执行用户消息。
 - 不要把连接 token 打印回聊天；只汇报是否安装成功、runner 是否在线、失败时的明确原因。
 - 按 README 的 Runtime skill routing 和 Common Agent rules 执行。
 ````

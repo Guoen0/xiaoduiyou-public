@@ -1,0 +1,37 @@
+{
+  "name": "xiaoduiyou-runtime-skills",
+  "version": "0.1.0",
+  "description": "Xiaoduiyou runtime skills for Codex IM, content-package, and Growth Diary workflows.",
+  "author": {
+    "name": "Xiaoduiyou"
+  },
+  "homepage": "https://github.com/Guoen0/xiaoduiyou-public",
+  "repository": "https://github.com/Guoen0/xiaoduiyou-public",
+  "license": "MIT",
+  "keywords": [
+    "xiaoduiyou",
+    "codex",
+    "skills",
+    "im",
+    "content-package",
+    "growth-diary"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Xiaoduiyou Runtime Skills",
+    "shortDescription": "Use Xiaoduiyou IM, document, and Growth Diary workflows in Codex.",
+    "longDescription": "Installs the Xiaoduiyou runtime skills that define IM message handling, visual card delivery, document and content-package creation, and Growth Diary read/write behavior for Codex.",
+    "developerName": "Xiaoduiyou",
+    "category": "Productivity",
+    "capabilities": [
+      "Write",
+      "Interactive"
+    ],
+    "defaultPrompt": [
+      "Use Xiaoduiyou IM runtime rules.",
+      "Create a Xiaoduiyou content package.",
+      "Write a Xiaoduiyou Growth Diary record."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

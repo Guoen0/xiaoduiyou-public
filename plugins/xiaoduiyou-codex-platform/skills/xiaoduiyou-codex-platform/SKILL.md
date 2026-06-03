@@ -31,6 +31,8 @@ Codex does not run a hidden background receiver after the thread goes idle. For 
 
 ## Runtime Skill Routing
 
+These runtime skills are installed by the `xiaoduiyou-runtime-skills` Codex plugin. If they are missing from the Codex skill list, rerun `scripts/install-codex-runner.sh` before guessing platform behavior.
+
 - Chat-only tasks, cards, runtime messages: follow `xiaoduiyou-im`.
 - Documents, content packages, process docs, publish notes: follow `xiaoduiyou-doc-content-package`.
 - Growth Diary records, schema, views, and diary photos: follow `xiaoduiyou-growth-diary`.

@@ -19,6 +19,7 @@ RUNNER_HOME="$CODEX_HOME/xiaoduiyou-runner"
 RUNNER_SCRIPT="$RUNNER_HOME/xiaoduiyou_codex_runner.py"
 PLATFORM_PLUGIN_SRC="$PUBLIC_DIR/plugins/xiaoduiyou-codex-platform"
 RUNNER_PLUGIN_SRC="$PUBLIC_DIR/plugins/xiaoduiyou-codex-runner"
+RUNTIME_SKILLS_PLUGIN_SRC="$PUBLIC_DIR/plugins/xiaoduiyou-runtime-skills"
 PERSONAL_MARKETPLACE="$HOME/.agents/plugins/marketplace.json"
 PERSONAL_PLUGIN_DIR="$HOME/plugins"
 
@@ -40,7 +41,7 @@ if [ ! -f "$PERSONAL_MARKETPLACE" ]; then
 JSON
 fi
 
-python3 - "$PERSONAL_MARKETPLACE" "$PERSONAL_PLUGIN_DIR" "$PLATFORM_PLUGIN_SRC" "$RUNNER_PLUGIN_SRC" <<'PY'
+python3 - "$PERSONAL_MARKETPLACE" "$PERSONAL_PLUGIN_DIR" "$RUNTIME_SKILLS_PLUGIN_SRC" "$PLATFORM_PLUGIN_SRC" "$RUNNER_PLUGIN_SRC" <<'PY'
 import json
 import shutil
 import sys
@@ -48,7 +49,7 @@ from pathlib import Path
 
 marketplace = Path(sys.argv[1])
 plugin_dir = Path(sys.argv[2])
-sources = [Path(sys.argv[3]), Path(sys.argv[4])]
+sources = [Path(arg) for arg in sys.argv[3:]]
 payload = json.loads(marketplace.read_text(encoding="utf-8"))
 payload.setdefault("name", "personal")
 payload.setdefault("interface", {"displayName": "Personal"})
@@ -71,8 +72,17 @@ for source in sources:
 marketplace.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 
+for skill in xiaoduiyou-im xiaoduiyou-doc-content-package xiaoduiyou-growth-diary; do
+  if [ ! -f "$PERSONAL_PLUGIN_DIR/xiaoduiyou-runtime-skills/skills/$skill/SKILL.md" ]; then
+    echo "Codex runtime skill was not installed correctly: $skill" >&2
+    exit 1
+  fi
+done
+
+codex plugin add xiaoduiyou-runtime-skills@personal >/dev/null
 codex plugin add xiaoduiyou-codex-platform@personal >/dev/null
 codex plugin add xiaoduiyou-codex-runner@personal >/dev/null
+echo "Installed Codex plugins: xiaoduiyou-runtime-skills, xiaoduiyou-codex-platform, xiaoduiyou-codex-runner"
 
 if [ "$(uname -s)" = "Darwin" ]; then
   PLIST="$HOME/Library/LaunchAgents/com.xiaoduiyou.codex-runner.plist"
