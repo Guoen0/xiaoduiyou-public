@@ -20,7 +20,7 @@ from typing import Any
 from urllib import error, parse, request
 
 
-RUNNER_VERSION = "2026.6.3.8-codex-runner"
+RUNNER_VERSION = "2026.6.3.9-codex-runner"
 DEFAULT_HOME = Path.home() / ".codex" / "xiaoduiyou-runner"
 DEFAULT_CONFIG = DEFAULT_HOME / "config.json"
 DEFAULT_LOG = DEFAULT_HOME / "runner.log"
@@ -132,6 +132,9 @@ class XiaoduiyouClient:
     def progress(self, turn_id: str, text: str) -> None:
         self.request_json(f"/api/agent/turns/{parse.quote(turn_id)}/events", method="POST", body={"progress": text})
 
+    def progress_payload(self, turn_id: str, payload: dict[str, Any]) -> Any:
+        return self.request_json(f"/api/agent/turns/{parse.quote(turn_id)}/events", method="POST", body=payload)
+
     def complete(self, turn_id: str, text: str) -> None:
         self.request_json(f"/api/agent/turns/{parse.quote(turn_id)}/callback", method="POST", body={"progress": text})
 
@@ -196,7 +199,15 @@ class XiaoduiyouClient:
         url = str(payload.get("url") or payload.get("asset", {}).get("public_url") or "").strip()
         if not url:
             raise RuntimeError("asset url missing")
+        self.verify_image_url(url)
         return url
+
+    def verify_image_url(self, url: str) -> None:
+        req = request.Request(url, method="GET", headers={"user-agent": "Xiaoduiyou-Codex-Runner/1.0"})
+        with request.urlopen(req, timeout=45) as resp:
+            content_type = str(resp.headers.get("content-type") or "").split(";")[0].lower()
+            if resp.status != 200 or not content_type.startswith("image/"):
+                raise RuntimeError(f"image URL verification failed: status={resp.status} content_type={content_type}")
 
 
 def turn_dict(payload: dict[str, Any]) -> dict[str, Any]:
@@ -717,11 +728,15 @@ def handle_model_planned_visual_card_turn(config: dict[str, Any], client: Xiaodu
     session_id = str(turn_dict(payload).get("session_id") or "").strip()
     if not session_id:
         return "我理解你要做视觉卡片，但当前消息没有会话 ID，无法把图片发回小队友。"
+    turn_id = str(turn_dict(payload).get("turn_id") or "").strip()
+    if not turn_id:
+        return "我理解你要做视觉卡片，但当前消息没有 turn_id，无法把图片发回小队友。"
     svg = render_visual_card_svg(card)
     image_url = client.upload_svg_asset(session_id, "codex-visual-card.svg", svg)
     reply = str(plan.get("reply") or "").strip() or f"已生成视觉卡片：{card['title']}。"
-    client.session_message(session_id, {
-        "text": reply,
+    result = client.progress_payload(turn_id, {
+        "detail": reply,
+        "image_urls": [image_url],
         "image_attachments": [{
             "image_url": image_url,
             "title": str(card["title"]),
@@ -729,6 +744,9 @@ def handle_model_planned_visual_card_turn(config: dict[str, Any], client: Xiaodu
             "badge": "视觉卡片",
         }],
     })
+    event = result.get("events", 0) if isinstance(result, dict) else 0
+    if event != 1:
+        raise RuntimeError("visual-card progress event was not accepted")
     return reply
 
 
