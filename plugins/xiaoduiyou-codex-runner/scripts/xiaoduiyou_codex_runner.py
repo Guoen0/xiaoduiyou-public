@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import html
 import json
 import os
 import signal
@@ -19,7 +20,7 @@ from typing import Any
 from urllib import error, parse, request
 
 
-RUNNER_VERSION = "2026.6.3.7-codex-runner"
+RUNNER_VERSION = "2026.6.3.8-codex-runner"
 DEFAULT_HOME = Path.home() / ".codex" / "xiaoduiyou-runner"
 DEFAULT_CONFIG = DEFAULT_HOME / "config.json"
 DEFAULT_LOG = DEFAULT_HOME / "runner.log"
@@ -153,6 +154,49 @@ class XiaoduiyouClient:
 
     def document_delete(self, document_id: str) -> Any:
         return self.request_json(f"/api/drive/files/{parse.quote(document_id)}", method="DELETE")
+
+    def session_message(self, session_id: str, payload: dict[str, Any]) -> Any:
+        return self.request_json(f"/api/agent/sessions/{parse.quote(session_id)}/messages", method="POST", body=payload)
+
+    def upload_svg_asset(self, session_id: str, file_name: str, svg: str) -> str:
+        boundary = f"xdycodex{int(time.time() * 1000)}"
+        fields = {
+            "source": "agent_generated",
+            "session_id": session_id,
+            "require_remote_storage": "true",
+        }
+        parts: list[bytes] = []
+        for key, value in fields.items():
+            parts.extend([
+                f"--{boundary}\r\n".encode("utf-8"),
+                f'Content-Disposition: form-data; name="{key}"\r\n\r\n{value}\r\n'.encode("utf-8"),
+            ])
+        parts.extend([
+            f"--{boundary}\r\n".encode("utf-8"),
+            f'Content-Disposition: form-data; name="file"; filename="{file_name}"\r\n'.encode("utf-8"),
+            b"Content-Type: image/svg+xml\r\n\r\n",
+            svg.encode("utf-8"),
+            b"\r\n",
+            f"--{boundary}--\r\n".encode("utf-8"),
+        ])
+        req = request.Request(
+            f"{self.base_url}/api/assets",
+            method="POST",
+            data=b"".join(parts),
+            headers={
+                "authorization": f"Bearer {self.token}",
+                "content-type": f"multipart/form-data; boundary={boundary}",
+                "x-xdy-connector-version": RUNNER_VERSION,
+                "x-xdy-connector-provider": "codex",
+                "user-agent": "Xiaoduiyou-Codex-Runner/1.0",
+            },
+        )
+        with request.urlopen(req, timeout=45) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        url = str(payload.get("url") or payload.get("asset", {}).get("public_url") or "").strip()
+        if not url:
+            raise RuntimeError("asset url missing")
+        return url
 
 
 def turn_dict(payload: dict[str, Any]) -> dict[str, Any]:
@@ -308,6 +352,105 @@ def sanitize_growth_patch(patch: Any) -> dict[str, Any] | None:
     return clean or None
 
 
+def visual_card_planner_prompt(payload: dict[str, Any]) -> str:
+    return f"""你是小队友 Codex runner 的视觉卡片规划器。你只负责理解用户意图并输出 JSON；不要调用任何工具。
+
+输出必须是一个 JSON object，不能有 Markdown，格式：
+{{
+  "handled": true/false,
+  "reply": "给用户看的简短中文回复",
+  "visual_card": null 或 {{
+    "title": "卡片主标题",
+    "subtitle": "副标题",
+    "bullets": ["要点 1", "要点 2", "要点 3"],
+    "footer": "底部小字",
+    "theme": "fresh|warm|dark"
+  }}
+}}
+
+规则：
+- 只在用户明确要求视觉卡片、可视化卡片、图片卡片、海报卡片、分享卡、卡片图时 handled=true。
+- 如果用户要求内容包/文档/发布稿/成长日记，不要处理，handled=false。
+- 如果用户说“随便写点东西/测试一下”，也要生成一张可看的测试视觉卡片。
+- 不要创建内容包，不要要求桌面授权。
+- 文案要短，适合手机里一张竖版卡片阅读。
+
+Xiaoduiyou turn:
+{json.dumps(turn_dict(payload), ensure_ascii=False, indent=2)}
+"""
+
+
+def sanitize_visual_card(card: Any) -> dict[str, Any] | None:
+    if not isinstance(card, dict):
+        return None
+    title = str(card.get("title") or "").strip()
+    if not title:
+        raise ValueError("visual_card.title is required")
+    subtitle = str(card.get("subtitle") or "").strip()
+    bullets = sanitize_string_list(card.get("bullets"))[:5]
+    footer = str(card.get("footer") or "").strip()
+    theme = str(card.get("theme") or "fresh").strip()
+    if theme not in ("fresh", "warm", "dark"):
+        theme = "fresh"
+    return {"title": title, "subtitle": subtitle, "bullets": bullets, "footer": footer, "theme": theme}
+
+
+def wrap_text(text: str, limit: int) -> list[str]:
+    clean = " ".join(str(text).split())
+    if not clean:
+        return []
+    lines: list[str] = []
+    current = ""
+    for char in clean:
+        char_width = 2 if ord(char) > 127 else 1
+        current_width = sum(2 if ord(item) > 127 else 1 for item in current)
+        if current and current_width + char_width > limit:
+            lines.append(current)
+            current = char
+        else:
+            current += char
+    if current:
+        lines.append(current)
+    return lines
+
+
+def render_visual_card_svg(card: dict[str, Any]) -> str:
+    themes = {
+        "fresh": {"bg": "#e0f2fe", "panel": "#ffffff", "ink": "#0f172a", "muted": "#475569", "accent": "#0284c7"},
+        "warm": {"bg": "#fff7ed", "panel": "#ffffff", "ink": "#1f2937", "muted": "#7c2d12", "accent": "#ea580c"},
+        "dark": {"bg": "#111827", "panel": "#1f2937", "ink": "#f8fafc", "muted": "#cbd5e1", "accent": "#38bdf8"},
+    }
+    theme = themes[str(card.get("theme") or "fresh")]
+    title_lines = wrap_text(str(card["title"]), 18)[:3]
+    subtitle_lines = wrap_text(str(card.get("subtitle") or ""), 26)[:3]
+    bullet_lines = [wrap_text(str(item), 24)[:2] for item in card.get("bullets", [])]
+    y = 190
+    text_nodes: list[str] = []
+    for line in title_lines:
+        text_nodes.append(f'<text x="92" y="{y}" font-size="58" font-weight="800" fill="{theme["ink"]}">{html.escape(line)}</text>')
+        y += 72
+    y += 16
+    for line in subtitle_lines:
+        text_nodes.append(f'<text x="96" y="{y}" font-size="30" font-weight="500" fill="{theme["muted"]}">{html.escape(line)}</text>')
+        y += 44
+    y += 48
+    for index, lines in enumerate(bullet_lines):
+        text_nodes.append(f'<circle cx="112" cy="{y - 10}" r="10" fill="{theme["accent"]}"/>')
+        line_y = y
+        for line in lines:
+            text_nodes.append(f'<text x="144" y="{line_y}" font-size="32" font-weight="650" fill="{theme["ink"]}">{html.escape(line)}</text>')
+            line_y += 42
+        y = line_y + 22
+    footer = str(card.get("footer") or "小队友 x Codex").strip()
+    text_nodes.append(f'<text x="92" y="1080" font-size="24" font-weight="600" fill="{theme["muted"]}">{html.escape(footer)}</text>')
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200">
+  <rect width="900" height="1200" fill="{theme["bg"]}"/>
+  <rect x="48" y="52" width="804" height="1096" rx="44" fill="{theme["panel"]}" opacity="0.96"/>
+  <rect x="92" y="104" width="132" height="12" rx="6" fill="{theme["accent"]}"/>
+  {''.join(text_nodes)}
+</svg>'''
+
+
 def compact_document_context(client: XiaoduiyouClient, payload: dict[str, Any]) -> dict[str, Any]:
     turn = turn_dict(payload)
     session_id = str(turn.get("session_id") or "").strip()
@@ -381,7 +524,7 @@ def document_planner_prompt(payload: dict[str, Any], context: dict[str, Any]) ->
 
 规则：
 - 只在用户明确要求“生成/创建/写一个 内容包/文档/发布稿/小红书/朋友圈/旅行计划/素材包”等可保存内容产物，或明确要求删除当前内容包/文档时 handled=true。
-- 普通聊天、ping、成长日记、删除记录、喝奶拉臭等不是内容包任务，handled=false，document_create=null。
+- 普通聊天、ping、成长日记、删除记录、喝奶拉臭、视觉卡片、可视化卡片、图片卡片、海报卡片、分享卡等不是内容包任务，handled=false，document_create=null。
 - 你不能要求用户在桌面 Codex 授权、确认或继续处理。
 - 如果用户说“随便写点东西/测试一下”，也要直接生成一个可保存的测试内容包。
 - 如果用户说“把这个删了/删除这份/删掉当前内容包/删文档”，从 Document context 选择要删除的 document_id，优先用 current_document_id。
@@ -563,6 +706,32 @@ def handle_model_planned_growth_diary_turn(config: dict[str, Any], client: Xiaod
     return "已处理。"
 
 
+def handle_model_planned_visual_card_turn(config: dict[str, Any], client: XiaoduiyouClient, payload: dict[str, Any]) -> str | None:
+    raw = run_codex_prompt(config, visual_card_planner_prompt(payload), log_label="visual card planner")
+    plan = parse_json_object(raw)
+    if not plan.get("handled"):
+        return None
+    card = sanitize_visual_card(plan.get("visual_card"))
+    if not card:
+        return str(plan.get("reply") or "").strip() or "我理解你要做视觉卡片，但这次没有生成可用卡片内容。"
+    session_id = str(turn_dict(payload).get("session_id") or "").strip()
+    if not session_id:
+        return "我理解你要做视觉卡片，但当前消息没有会话 ID，无法把图片发回小队友。"
+    svg = render_visual_card_svg(card)
+    image_url = client.upload_svg_asset(session_id, "codex-visual-card.svg", svg)
+    reply = str(plan.get("reply") or "").strip() or f"已生成视觉卡片：{card['title']}。"
+    client.session_message(session_id, {
+        "text": reply,
+        "image_attachments": [{
+            "image_url": image_url,
+            "title": str(card["title"]),
+            "subtitle": str(card.get("subtitle") or ""),
+            "badge": "视觉卡片",
+        }],
+    })
+    return reply
+
+
 def handle_model_planned_document_turn(config: dict[str, Any], client: XiaoduiyouClient, payload: dict[str, Any]) -> str | None:
     context = compact_document_context(client, payload)
     raw = run_codex_prompt(config, document_planner_prompt(payload, context), log_label="document planner")
@@ -607,6 +776,8 @@ def handle_one(config: dict[str, Any], client: XiaoduiyouClient) -> bool:
     log(f"claimed turn {turn_id}")
     try:
         reply = handle_model_planned_growth_diary_turn(config, client, claimed)
+        if reply is None:
+            reply = handle_model_planned_visual_card_turn(config, client, claimed)
         if reply is None:
             reply = handle_model_planned_document_turn(config, client, claimed)
         if reply is None:
