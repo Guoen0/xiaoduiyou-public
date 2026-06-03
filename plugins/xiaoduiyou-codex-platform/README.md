@@ -40,6 +40,6 @@ stores them in `~/.codex/xiaoduiyou-connection.json`.
 
 Use the Xiaoduiyou app-provided connection values for the active connection. Do not modify the Xiaoduiyou app source when using this plugin to handle user turns or platform data.
 
-Codex does not run a hidden background receiver after a thread becomes idle. Keep a Xiaoduiyou
-Codex thread active by calling `xiaoduiyou_agent_turn_watch`, then complete each claimed turn before
-watching for the next one.
+Codex does not run a hidden background receiver after a thread becomes idle. Use the
+`xiaoduiyou-codex-runner` plugin and `scripts/install-codex-runner.sh` for Hermes-like background
+desktop connectivity. `xiaoduiyou_agent_turn_watch` is only for an active Codex thread.

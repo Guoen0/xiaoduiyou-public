@@ -1,0 +1,36 @@
+{
+  "name": "xiaoduiyou-codex-runner",
+  "version": "0.1.0",
+  "description": "Install and operate the local Xiaoduiyou Codex desktop runner.",
+  "author": {
+    "name": "Xiaoduiyou"
+  },
+  "homepage": "https://github.com/Guoen0/xiaoduiyou-public",
+  "repository": "https://github.com/Guoen0/xiaoduiyou-public",
+  "license": "MIT",
+  "keywords": [
+    "xiaoduiyou",
+    "codex",
+    "runner",
+    "desktop-agent"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Xiaoduiyou Codex Runner",
+    "shortDescription": "Run Codex as a Xiaoduiyou desktop Agent.",
+    "longDescription": "Installs and manages a local background runner that claims Xiaoduiyou Agent turns and delegates each turn to the local Codex CLI.",
+    "developerName": "Xiaoduiyou",
+    "category": "Productivity",
+    "capabilities": [
+      "Write",
+      "Interactive",
+      "Automation"
+    ],
+    "defaultPrompt": [
+      "Install the Xiaoduiyou Codex runner.",
+      "Start the Xiaoduiyou Codex runner.",
+      "Check Xiaoduiyou Codex runner status."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

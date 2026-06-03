@@ -4,7 +4,8 @@
   "repository": "https://github.com/Guoen0/xiaoduiyou-public.git",
   "packages": {
     "hermes_plugin": "plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform",
-    "codex_plugin": "plugins/xiaoduiyou-codex-platform",
+    "codex_platform_plugin": "plugins/xiaoduiyou-codex-platform",
+    "codex_runner_plugin": "plugins/xiaoduiyou-codex-runner",
     "openclaw_connector": "plugins/xiaoduiyou-openclaw-connector",
     "skills": {
       "xiaoduiyou_im": "skills/xiaoduiyou-im",

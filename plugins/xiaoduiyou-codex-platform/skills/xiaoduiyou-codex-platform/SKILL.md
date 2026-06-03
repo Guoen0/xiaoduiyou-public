@@ -27,7 +27,7 @@ Use the values supplied by the Xiaoduiyou settings page for the active connectio
 6. Complete with `xiaoduiyou_agent_turn_complete`, including `document_actions` only when the user explicitly asked for document creation, update, or deletion.
 7. Use `xiaoduiyou_agent_turn_fail` only when the turn cannot be completed.
 
-Codex does not run a hidden background receiver after the thread goes idle. To behave like a connected Agent, keep the thread active by watching for one turn, handling it, completing it, then watching again.
+Codex does not run a hidden background receiver after the thread goes idle. For Hermes-like background connectivity, install and start `xiaoduiyou-codex-runner`. Use `xiaoduiyou_agent_turn_watch` only for active-thread diagnosis or manual handling.
 
 ## Runtime Skill Routing
 
