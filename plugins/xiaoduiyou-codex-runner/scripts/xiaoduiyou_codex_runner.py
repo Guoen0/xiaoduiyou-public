@@ -170,8 +170,6 @@ def run_codex(config: dict[str, Any], turn_payload: dict[str, Any]) -> str:
         str(config.get("codex_bin") or "codex"),
         "exec",
         "--skip-git-repo-check",
-        "--ask-for-approval",
-        "never",
         "--sandbox",
         str(config.get("sandbox") or "workspace-write"),
         "-C",
