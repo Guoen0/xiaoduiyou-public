@@ -7,7 +7,6 @@ import argparse
 import datetime as dt
 import json
 import os
-import re
 import signal
 import shutil
 import subprocess
@@ -20,7 +19,7 @@ from typing import Any
 from urllib import error, parse, request
 
 
-RUNNER_VERSION = "2026.6.3.4-codex-runner"
+RUNNER_VERSION = "2026.6.3.5-codex-runner"
 DEFAULT_HOME = Path.home() / ".codex" / "xiaoduiyou-runner"
 DEFAULT_CONFIG = DEFAULT_HOME / "config.json"
 DEFAULT_LOG = DEFAULT_HOME / "runner.log"
@@ -177,108 +176,130 @@ def sender_name(payload: dict[str, Any]) -> str:
     return str(turn.get("sender_display_name") or turn.get("sender_name") or "").strip()
 
 
-def direct_growth_record_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
-    message = turn_message(payload)
-    compact = re.sub(r"\s+", "", message)
-    occurred_at = local_datetime_from_turn(payload)
-    occurred = occurred_at.strftime("%Y-%m-%d %H:%M:%S")
-    date_value = occurred_at.strftime("%Y-%m-%d")
-    recorder = sender_name(payload)
-
-    milk_match = re.search(r"(?:喝奶|奶)(\d+(?:\.\d+)?)ml|(\d+(?:\.\d+)?)ml(?:奶|喝奶)", compact, re.IGNORECASE)
-    if milk_match:
-        amount_text = milk_match.group(1) or milk_match.group(2)
-        amount = float(amount_text)
-        quantity: int | float = int(amount) if amount.is_integer() else amount
-        return {
-            "records": [{
-                "table_id": "tbl_growth_events",
-                "source": "agent",
-                "values": {
-                    "title": f"喝奶 {quantity}ml",
-                    "content": f"喝奶 {quantity}ml。",
-                    "event_type": "milk",
-                    "date": date_value,
-                    "occurred_at": occurred,
-                    "quantity": quantity,
-                    "unit": "ml",
-                    "risk": "normal",
-                    "tags": [],
-                    "recorder": recorder,
-                    "original_message": message,
-                    "advice": "",
-                },
-            }],
-        }
-
-    poop_match = re.search(r"(?:拉屎|拉臭|大便|便便)(\d+(?:\.\d+)?)?次?", compact)
-    if poop_match:
-        amount_text = poop_match.group(1) or "1"
-        amount = float(amount_text)
-        quantity = int(amount) if amount.is_integer() else amount
-        return {
-            "records": [{
-                "table_id": "tbl_growth_events",
-                "source": "agent",
-                "values": {
-                    "title": f"拉臭 {quantity} 次",
-                    "content": f"拉臭 {quantity} 次；具体性状未说明。",
-                    "event_type": "poop",
-                    "date": date_value,
-                    "occurred_at": occurred,
-                    "quantity": quantity,
-                    "unit": "times",
-                    "risk": "normal",
-                    "tags": [],
-                    "recorder": recorder,
-                    "original_message": message,
-                    "advice": "",
-                },
-            }],
-        }
-
-    return None
-
-
-def direct_delete_payload(client: XiaoduiyouClient, payload: dict[str, Any]) -> tuple[dict[str, Any], str] | None:
-    message = turn_message(payload)
-    compact = re.sub(r"\s+", "", message)
-    if not re.search(r"(删|删除)", compact):
-        return None
-    if not re.search(r"(这条|上一条|刚才|上条)", compact):
-        return None
-
-    date_value = local_datetime_from_turn(payload).strftime("%Y-%m-%d")
-    records_payload = client.growth_diary_get({"view": "records", "date": date_value, "record_limit": 50})
-    records = records_payload.get("records") if isinstance(records_payload, dict) else []
-    if not isinstance(records, list):
-        return None
-    agent_records = [record for record in records if isinstance(record, dict) and record.get("source") == "agent" and record.get("record_id")]
-    if not agent_records:
-        return {"deletions": []}, "没有找到今天由 Codex 记录的上一条成长日记。"
-    agent_records.sort(key=lambda record: str(record.get("occurred_at") or record.get("updated_at") or ""), reverse=True)
-    record = agent_records[0]
-    title = str(record.get("title") or "上一条记录")
+def compact_growth_context(client: XiaoduiyouClient, payload: dict[str, Any]) -> dict[str, Any]:
+    turn_time = local_datetime_from_turn(payload)
+    date_value = turn_time.strftime("%Y-%m-%d")
+    try:
+        records = client.growth_diary_get({"view": "records", "date": date_value, "record_limit": 50})
+    except Exception as exc:
+        records = {"error": str(exc)}
+    recent_records = records.get("records", []) if isinstance(records, dict) else []
+    if isinstance(recent_records, list):
+        recent_records = [record for record in recent_records if isinstance(record, dict)]
+        recent_records.sort(key=lambda record: str(record.get("occurred_at") or record.get("updated_at") or ""), reverse=True)
     return {
-        "deletions": [{"table_id": str(record.get("table_id") or "tbl_growth_events"), "record_id": str(record["record_id"])}],
-    }, f"已删除：{title}。"
+        "date": date_value,
+        "turn_local_time": turn_time.strftime("%Y-%m-%d %H:%M:%S"),
+        "table_id": "tbl_growth_events",
+        "event_types": ["milk", "food", "poop", "water", "medicine", "height", "weight", "sleep", "outing", "symptom", "summary", "note"],
+        "units": ["ml", "kg", "cm", "times", "grams_cn", "bowl", "drops", "bags", "pills", "hours", "minutes", "small_amount", "moderate_amount", "large_amount"],
+        "risks": ["normal", "need_watch", "action", "red_flag"],
+        "recent_records": recent_records[:50] if isinstance(recent_records, list) else [],
+    }
 
 
-def handle_direct_growth_diary_turn(client: XiaoduiyouClient, payload: dict[str, Any]) -> str | None:
-    delete_payload = direct_delete_payload(client, payload)
-    if delete_payload:
-        patch_payload, reply = delete_payload
-        if patch_payload.get("deletions"):
-            client.growth_diary_patch(patch_payload)
-        return reply
+def growth_planner_prompt(payload: dict[str, Any], context: dict[str, Any]) -> str:
+    return f"""你是小队友 Codex runner 的自然语言规划器。你只负责理解用户意图并输出 JSON；不要调用任何工具。
 
-    record_payload = direct_growth_record_payload(payload)
-    if not record_payload:
+输出必须是一个 JSON object，不能有 Markdown，格式：
+{{
+  "handled": true/false,
+  "reply": "给用户看的简短中文回复",
+  "growth_diary_patch": null 或 {{
+    "records": [...],
+    "updates": [...],
+    "deletions": [...]
+  }}
+}}
+
+规则：
+- 如果用户是在记录、修改、删除或查询宝宝成长日记，handled=true。
+- 如果只是普通聊天、ping、与成长日记无关，handled=false，growth_diary_patch=null，reply 可以为空字符串。
+- 你不能要求用户在桌面 Codex 授权、确认或继续处理。
+- 新增记录用 records[]，每条必须包含 table_id="tbl_growth_events"、source="agent"、values。
+- values 中只放字段值，不要放 type/value 包装。
+- values 只能使用这些字段名：title, content, event_type, date, occurred_at, quantity, unit, risk, tags, recorder, original_message, advice。
+- 不要使用 event_time、amount、note 这类别名；时间字段必须叫 occurred_at，数量字段必须叫 quantity，正文字段必须叫 content。
+- 常用 event_type：milk 奶，food 吃饭，poop 拉臭，water 饮水，medicine 用药/补剂，sleep 睡眠，outing 外出，symptom 症状，note 备注。
+- 常用 unit：ml、times、grams_cn、hours、minutes。
+- 用户给明确日期/时间就用用户给的；没有时间、说“刚才/现在/这条”时，用 context.turn_local_time。
+- 删除“这条/上一条/刚才那条”时，从 context.recent_records 选择最符合的一条，输出 deletions。
+- 如果信息足够写入或删除，就直接生成 patch；不要说需要授权。
+- 如果用户要求查询/总结但不需要写入，handled=true、growth_diary_patch=null、reply 给出基于 context.recent_records 的结果。
+
+Xiaoduiyou turn:
+{json.dumps(turn_dict(payload), ensure_ascii=False, indent=2)}
+
+Growth Diary context:
+{json.dumps(context, ensure_ascii=False, indent=2)}
+"""
+
+
+def parse_json_object(text: str) -> dict[str, Any]:
+    clean = text.strip()
+    if clean.startswith("```"):
+        clean = clean.strip("`")
+        if clean.startswith("json"):
+            clean = clean[4:].strip()
+    try:
+        value = json.loads(clean)
+    except json.JSONDecodeError:
+        start = clean.find("{")
+        if start < 0:
+            raise
+        value, _ = json.JSONDecoder().raw_decode(clean[start:])
+    if not isinstance(value, dict):
+        raise ValueError("model did not return a JSON object")
+    return value
+
+
+def sanitize_growth_patch(patch: Any) -> dict[str, Any] | None:
+    if not isinstance(patch, dict):
         return None
-    client.growth_diary_get({"view": "records", "date": record_payload["records"][0]["values"]["date"], "record_limit": 5})
-    client.growth_diary_patch(record_payload)
-    values = record_payload["records"][0]["values"]
-    return f"已记录：{values['title']}。"
+    clean: dict[str, Any] = {}
+    for key in ("records", "updates", "deletions"):
+        value = patch.get(key)
+        if isinstance(value, list) and value:
+            clean[key] = value
+    records = clean.get("records")
+    if isinstance(records, list):
+        for record in records:
+            if not isinstance(record, dict):
+                raise ValueError("invalid growth record")
+            record.setdefault("table_id", "tbl_growth_events")
+            record.setdefault("source", "agent")
+            if not isinstance(record.get("values"), dict):
+                raise ValueError("growth record values must be an object")
+            values = record["values"]
+            if "event_time" in values and "occurred_at" not in values:
+                values["occurred_at"] = values.pop("event_time")
+            if "amount" in values and "quantity" not in values:
+                values["quantity"] = values.pop("amount")
+            if "note" in values and "content" not in values:
+                values["content"] = values.pop("note")
+            if "title" not in values:
+                event_type = str(values.get("event_type") or "记录")
+                quantity = values.get("quantity")
+                unit = values.get("unit")
+                if event_type == "milk" and quantity is not None:
+                    values["title"] = f"喝奶 {quantity}{unit or 'ml'}"
+                elif event_type == "poop" and quantity is not None:
+                    values["title"] = f"拉臭 {quantity} 次"
+                else:
+                    values["title"] = "成长记录"
+            if "content" not in values:
+                values["content"] = str(values.get("title") or "成长记录")
+            values.setdefault("risk", "normal")
+            values.setdefault("tags", [])
+    for deletion in clean.get("deletions", []) if isinstance(clean.get("deletions"), list) else []:
+        if not isinstance(deletion, dict) or not deletion.get("record_id"):
+            raise ValueError("deletion record_id is required")
+        deletion.setdefault("table_id", "tbl_growth_events")
+    for update in clean.get("updates", []) if isinstance(clean.get("updates"), list) else []:
+        if not isinstance(update, dict) or not update.get("record_id") or not update.get("field_id"):
+            raise ValueError("update record_id and field_id are required")
+        update.setdefault("table_id", "tbl_growth_events")
+    return clean or None
 
 
 def prompt_for_turn(payload: dict[str, Any]) -> str:
@@ -305,7 +326,7 @@ def prompt_for_turn(payload: dict[str, Any]) -> str:
 """
 
 
-def run_codex(config: dict[str, Any], turn_payload: dict[str, Any]) -> str:
+def run_codex_prompt(config: dict[str, Any], prompt: str, *, log_label: str = "codex exec") -> str:
     workdir = str(config.get("codex_workdir") or Path.home())
     output_file = tempfile.NamedTemporaryFile(prefix="xdy-codex-output-", suffix=".txt", delete=False)
     output_path = output_file.name
@@ -327,9 +348,9 @@ def run_codex(config: dict[str, Any], turn_payload: dict[str, Any]) -> str:
     model = str(config.get("codex_model") or "").strip()
     if model:
         cmd.extend(["-m", model])
-    cmd.append(prompt_for_turn(turn_payload))
+    cmd.append(prompt)
 
-    log(f"codex exec start workdir={workdir}")
+    log(f"{log_label} start workdir={workdir}")
     env = os.environ.copy()
     codex_bin_parent = str(Path(str(config.get("codex_bin") or "")).expanduser().parent)
     path_parts = [
@@ -358,6 +379,34 @@ def run_codex(config: dict[str, Any], turn_payload: dict[str, Any]) -> str:
     return text or "我已收到，但没有生成可发送的回复。"
 
 
+def run_codex(config: dict[str, Any], turn_payload: dict[str, Any]) -> str:
+    return run_codex_prompt(config, prompt_for_turn(turn_payload), log_label="codex exec")
+
+
+def handle_model_planned_growth_diary_turn(config: dict[str, Any], client: XiaoduiyouClient, payload: dict[str, Any]) -> str | None:
+    context = compact_growth_context(client, payload)
+    raw = run_codex_prompt(config, growth_planner_prompt(payload, context), log_label="growth planner")
+    plan = parse_json_object(raw)
+    if not plan.get("handled"):
+        return None
+    patch = sanitize_growth_patch(plan.get("growth_diary_patch"))
+    if patch:
+        client.growth_diary_patch(patch)
+    reply = str(plan.get("reply") or "").strip()
+    if reply:
+        return reply
+    if patch and patch.get("deletions"):
+        return "已删除。"
+    if patch and patch.get("records"):
+        first = patch["records"][0]
+        values = first.get("values") if isinstance(first, dict) else {}
+        title = values.get("title") if isinstance(values, dict) else None
+        return f"已记录：{title}。" if title else "已记录。"
+    if patch and patch.get("updates"):
+        return "已更新。"
+    return "已处理。"
+
+
 def handle_one(config: dict[str, Any], client: XiaoduiyouClient) -> bool:
     claimed = client.claim()
     if not claimed:
@@ -369,7 +418,7 @@ def handle_one(config: dict[str, Any], client: XiaoduiyouClient) -> bool:
         return True
     log(f"claimed turn {turn_id}")
     try:
-        reply = handle_direct_growth_diary_turn(client, claimed)
+        reply = handle_model_planned_growth_diary_turn(config, client, claimed)
         if reply is None:
             reply = run_codex(config, claimed)
         client.complete(turn_id, reply)
