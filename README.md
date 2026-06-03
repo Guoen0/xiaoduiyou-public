@@ -61,6 +61,8 @@ else
   git clone "$XDY_PUBLIC_REPO" "$XDY_PUBLIC_DIR"
 fi
 
+XDY_BASE_URL="<由小队友设置页提供>" \
+XDY_CONNECTION_TOKEN="<由小队友设置页提供>" \
 "$XDY_PUBLIC_DIR/scripts/install-hermes.sh"
 ```
 
@@ -99,6 +101,8 @@ else
   git -C "$XDY_PUBLIC_DIR" clean -fd
 fi
 
+XDY_BASE_URL="<由小队友设置页提供>" \
+XDY_CONNECTION_TOKEN="<由小队友设置页提供>" \
 "$XDY_PUBLIC_DIR/scripts/install-openclaw.sh"
 ```
 
