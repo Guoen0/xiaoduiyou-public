@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "xiaoduiyou": {
+      "command": "python3",
+      "args": [
+        "./scripts/xiaoduiyou_mcp.py"
+      ],
+      "cwd": "."
+    }
+  }
+}

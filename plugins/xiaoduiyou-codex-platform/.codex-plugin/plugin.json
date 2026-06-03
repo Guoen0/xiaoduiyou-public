@@ -1,0 +1,38 @@
+{
+  "name": "xiaoduiyou-codex-platform",
+  "version": "0.1.0",
+  "description": "Connect Codex to the Xiaoduiyou platform through local MCP tools.",
+  "author": {
+    "name": "Xiaoduiyou"
+  },
+  "homepage": "https://github.com/Guoen0/xiaoduiyou-public",
+  "repository": "https://github.com/Guoen0/xiaoduiyou-public",
+  "license": "MIT",
+  "keywords": [
+    "xiaoduiyou",
+    "codex",
+    "mcp",
+    "agent",
+    "growth-diary"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Xiaoduiyou",
+    "shortDescription": "Connect Codex to Xiaoduiyou.",
+    "longDescription": "Xiaoduiyou exposes the platform's Agent turn lifecycle, session messaging, document tools, and Growth Diary APIs to Codex through a local MCP server.",
+    "developerName": "Xiaoduiyou",
+    "category": "Productivity",
+    "capabilities": [
+      "MCP Tools",
+      "Write",
+      "Interactive"
+    ],
+    "defaultPrompt": [
+      "Connect Codex to Xiaoduiyou.",
+      "Read my Xiaoduiyou Growth Diary.",
+      "Claim the next Xiaoduiyou turn."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

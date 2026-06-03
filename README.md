@@ -8,6 +8,7 @@ Source of truth: `https://github.com/Guoen0/xiaoduiyou-public.git`. Clone or pul
 
 - Hermes platform plugin: `plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform/`
 - OpenClaw connector: `plugins/xiaoduiyou-openclaw-connector/`
+- Codex plugin: `plugins/xiaoduiyou-codex-platform/`
 - IM skill: `skills/xiaoduiyou-im/`
 - Document/content-package skill: `skills/xiaoduiyou-doc-content-package/`
 - Growth Diary skill: `skills/xiaoduiyou-growth-diary/`
@@ -111,6 +112,48 @@ XDY_CONNECTION_TOKEN="<由小队友设置页提供>" \
 - `XDY_PUBLIC_DIR` 必须是专用安装缓存目录；不要指向 `~/.openclaw/workspace`，也不要在 `~/.openclaw/workspace` 里 clone / pull 这个仓库。
 - OpenClaw skill 只有进入当前 Agent 的 `agents.list[0].skills` allowlist 后才会进入模型上下文；仅安装到 `~/.openclaw/workspace/skills` 不够。
 - OpenClaw tool policy 必须允许插件工具组；脚本会把 `tools.alsoAllow` 合并补上 `group:plugins`。如果 Connected tools 里看不到 `xiaoduiyou_growth_diary_get` / `xiaoduiyou_growth_diary_patch`，先重新执行 `scripts/install-openclaw.sh` 并重启 Gateway。
+- 按 README 的 Runtime skill routing 和 Common Agent rules 执行。
+````
+
+## Agent setup prompt: Codex
+
+When a Xiaoduiyou user asks Codex to connect, copy this prompt. The Xiaoduiyou app provides the current `XDY_BASE_URL` and `XDY_CONNECTION_TOKEN`.
+
+````text
+你现在要连接到小队友，作为当前唯一启用的 Codex Agent。
+
+先读取并遵循 Xiaoduiyou public 仓库 README：
+https://github.com/Guoen0/xiaoduiyou-public/blob/main/README.md
+
+连接参数：
+- XDY_BASE_URL=<由小队友设置页提供>
+- XDY_CONNECTION_TOKEN=<由小队友设置页提供>
+
+执行安装与配置：
+
+```bash
+XDY_PUBLIC_REPO="https://github.com/Guoen0/xiaoduiyou-public.git"
+XDY_PUBLIC_DIR="$HOME/.codex/vendor/xiaoduiyou-public"
+mkdir -p "$(dirname "$XDY_PUBLIC_DIR")"
+if [ ! -d "$XDY_PUBLIC_DIR/.git" ]; then
+  rm -rf "$XDY_PUBLIC_DIR"
+  git clone "$XDY_PUBLIC_REPO" "$XDY_PUBLIC_DIR"
+else
+  git -C "$XDY_PUBLIC_DIR" fetch origin main
+  git -C "$XDY_PUBLIC_DIR" reset --hard origin/main
+  git -C "$XDY_PUBLIC_DIR" clean -fd
+fi
+
+export XDY_BASE_URL="<由小队友设置页提供>"
+export XDY_CONNECTION_TOKEN="<由小队友设置页提供>"
+```
+
+然后在 Codex 里启用 `xiaoduiyou-codex-platform` 插件，并使用 `xiaoduiyou-codex-platform` skill：
+
+- 先调用 `xiaoduiyou_connection_status` 检查连接。
+- 再调用 `xiaoduiyou_agent_turn_claim` 领取小队友任务。
+- 处理过程中用 `xiaoduiyou_agent_turn_progress` 回写进度。
+- 完成时用 `xiaoduiyou_agent_turn_complete` 回写结果。
 - 按 README 的 Runtime skill routing 和 Common Agent rules 执行。
 ````
 
