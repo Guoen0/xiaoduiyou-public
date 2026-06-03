@@ -222,7 +222,6 @@ def handle_one(config: dict[str, Any], client: XiaoduiyouClient) -> bool:
         return True
     log(f"claimed turn {turn_id}")
     try:
-        client.progress(turn_id, "Codex 桌面端已收到，正在处理。")
         reply = run_codex(config, claimed)
         client.complete(turn_id, reply)
         log(f"completed turn {turn_id}")
