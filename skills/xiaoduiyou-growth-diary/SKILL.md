@@ -32,10 +32,10 @@ Load this when the user asks to:
 | User says / situation | Open/use | Why |
 |---|---|---|
 | `记录到成长日记` / `宝宝今天...` | `references/growth-diary-agent.md` | Diary records use `/api/growth-diary`. |
-| `上传照片到成长日记` | `scripts/growth_diary_client.py upload` + `references/image-upload-contract.md` | Upload asset then write attachment field. |
-| Growth diary schema/enums/views | `references/growth-diary-agent.md` | Must read live schema before writing. |
+| `上传照片到成长日记` | First-class connector asset/tool support when available + `references/image-upload-contract.md` | Upload asset first, then write attachment field. Do not discover tokens manually. |
+| Growth diary schema/enums/views | `references/growth-diary-agent.md` | Must read live schema with `xiaoduiyou_growth_diary_get` before writing. |
 | Runtime auth/endpoints for diary calls | `references/runtime-api-reference.md` | Runtime conventions used by diary helper calls. |
-| Query/summarize existing diary records | `references/growth-diary-agent.md` + `scripts/growth_diary_client.py get` | Use live records, then summarize. |
+| Query/summarize existing diary records | `references/growth-diary-agent.md` + `xiaoduiyou_growth_diary_get` | Use live connector-owned records, then summarize. |
 
 ## Fast routing
 
@@ -45,14 +45,8 @@ Load this when the user asks to:
 | Runtime endpoints/auth conventions | `references/runtime-api-reference.md` |
 | Upload diary photos/assets | `references/image-upload-contract.md` |
 
-## Scripts
+## Tool use
 
-- `scripts/growth_diary_client.py`: small CLI helper for authenticated GET/PATCH calls against `/api/growth-diary` and optional asset upload verification.
-
-Quick use:
-
-```bash
-python ~/.hermes/skills/productivity/xiaoduiyou-growth-diary/scripts/growth_diary_client.py get
-python ~/.hermes/skills/productivity/xiaoduiyou-growth-diary/scripts/growth_diary_client.py patch --payload /tmp/diary_patch.json
-python ~/.hermes/skills/productivity/xiaoduiyou-growth-diary/scripts/growth_diary_client.py upload --session-id sess_0053 --file /tmp/photo.jpg
-```
+- Primary path: `xiaoduiyou_growth_diary_get` before every write, then `xiaoduiyou_growth_diary_patch` for mutations.
+- Use `date`, `start_date`/`end_date`, and/or `record_limit` on reads whenever the user gives a target date/range.
+- Do not use local scripts, browser cookies, config files, terminal history, or connection-token discovery for connected-agent diary I/O. If the connector tools are unavailable, stop and ask for reconnection/target scope.

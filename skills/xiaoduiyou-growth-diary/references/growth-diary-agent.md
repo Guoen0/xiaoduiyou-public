@@ -16,7 +16,13 @@ Do not use this for website/API implementation work. Product code changes must b
 
 ## API surface
 
-Use the Xiaoduiyou origin and auth context supplied by the connected runtime.
+Use first-class Xiaoduiyou connector tools whenever they are available:
+
+- Read current schema/records with `xiaoduiyou_growth_diary_get`.
+- Mutate records/options/views with `xiaoduiyou_growth_diary_patch`.
+- When the user gives a target date/range, pass `date`, `start_date`/`end_date`, and/or `record_limit` to the read tool so the Agent sees the live schema plus only relevant records.
+
+The HTTP shapes below document the public runtime contract behind those tools. They are not permission to discover tokens, read local config, or hand-roll authenticated requests in a connected-agent turn.
 
 ### Read current schema and records
 

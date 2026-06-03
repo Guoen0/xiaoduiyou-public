@@ -34,7 +34,7 @@ Load this when the user asks for:
 | `做成内容包` / `创建文档` / `文档产物` | `references/content-package-contract.md` | Document artifact / `ui_templates` / `publish_notes` contract. |
 | `小红书发布稿` / `朋友圈发布稿` / publish tabs | `references/social-publish-result-template.md` | Platform-specific publish tab shape. |
 | Process/evidence doc Markdown fidelity | `references/process-document-markdown.md` | Keep process material separate and well-formed. |
-| Validate a content-package JSON before callback/document update | `scripts/validate_content_package.py` | Catch local paths, mismatched templates, process/result mixing. |
+| Validate a content-package JSON before callback/document update | Prefer the first-class document tools' payload schema; optional local lint only if the script is present | Catch local paths, mismatched templates, process/result mixing. |
 | `更新这个文档` / `删掉文档` | Tool-use section below + `references/runtime-api-reference.md` | Explicit document mutation. |
 | Asset upload/image URL verification for document tabs | `references/image-upload-contract.md` | Publish tabs need durable browser-accessible image URLs. |
 
@@ -51,15 +51,11 @@ Load this when the user asks for:
 | Runtime/document/action endpoints | `references/runtime-api-reference.md` |
 | Upload and verify images/assets | `references/image-upload-contract.md` |
 
-## Script
+## Validation
 
-- `scripts/validate_content_package.py`: checks a content-package JSON/body for `ui_templates`, `publish_notes`, image URL shape, and common process/result mixing mistakes.
-
-Quick use:
-
-```bash
-python ~/.hermes/skills/productivity/xiaoduiyou-doc-content-package/scripts/validate_content_package.py /tmp/package.json
-```
+- Prefer the first-class document tools for create/update/delete: `xiaoduiyou_documents_create`, `xiaoduiyou_documents_update`, `xiaoduiyou_documents_delete`.
+- Before calling them, manually validate: `ui_templates` matches `fields.publish_notes`, visible publish tabs contain only final material, and all images are browser-accessible `http(s)` URLs.
+- A local validator script may exist in some Hermes installs as an optional lint aid, but public Xiaoduiyou usage skills must not depend on scripts being available.
 
 ## Tool use
 
