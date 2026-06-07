@@ -65,7 +65,7 @@ platform_toolsets:
 
 Do not configure `platform_toolsets.xiaoduiyou` as only `[xiaoduiyou]`: that exposes Xiaoduiyou document tools but removes normal Hermes local tools such as file, terminal, web search, browser, and code execution.
 
-Alternatively set `XIAODUIYOU_BASE_URL=https://YOUR_XIAODUIYOU_ORIGIN` in the gateway environment.
+Use `platforms.xiaoduiyou.extra.base_url` and `platforms.xiaoduiyou.extra.connection_token` as the source of truth. Avoid setting `XIAODUIYOU_BASE_URL` or `XIAODUIYOU_CONNECTION_TOKEN` in the gateway environment because those variables override `config.yaml` and can leave Hermes connected to an old Xiaoduiyou environment.
 
 Restart Hermes Gateway after installing or changing config:
 
