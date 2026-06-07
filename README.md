@@ -72,7 +72,8 @@ XDY_CONNECTION_TOKEN="<由小队友设置页提供>" \
 
 运行规则：
 - Hermes 只安装小队友 platform 插件；不要从这个仓库安装或覆盖 Hermes skills，skills 由 Hermes 自己整理和更新。
-- 安装脚本会把连接参数写入 `~/.hermes/config.yaml`，并禁用旧的 `~/.hermes/.env` 里 `XIAODUIYOU_BASE_URL` / `XIAODUIYOU_CONNECTION_TOKEN` 覆盖项，避免旧地址覆盖新配置。
+- 安装脚本会写入 `${HERMES_HOME:-~/.hermes}/config.yaml`；如果你在 Hermes profile 下运行，先确保 `HERMES_HOME` 指向该 profile 目录。
+- 安装脚本会禁用同一 `HERMES_HOME` 下 `.env` 里的旧 `XIAODUIYOU_BASE_URL` / `XIAODUIYOU_CONNECTION_TOKEN` 覆盖项，避免旧地址覆盖新配置。
 - 不要把 `platform_toolsets.xiaoduiyou` 只配置成 `["xiaoduiyou"]`；要保留本地文件、终端、搜索、浏览器等 Hermes 工具。
 - 按 README 的 Runtime skill routing 和 Common Agent rules 执行。
 ````

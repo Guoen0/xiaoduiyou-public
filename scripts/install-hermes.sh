@@ -2,6 +2,7 @@
 set -euo pipefail
 
 XDY_PUBLIC_REPO="${XDY_PUBLIC_REPO:-https://github.com/Guoen0/xiaoduiyou-public.git}"
+HERMES_HOME_DIR="${HERMES_HOME:-${HOME}/.hermes}"
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd -- "$script_dir/.." && pwd)"
@@ -29,7 +30,7 @@ require_cmd hermes
 require_cmd rsync
 
 clear_legacy_hermes_env_overrides() {
-  local env_file="${HOME}/.hermes/.env"
+  local env_file="${HERMES_HOME_DIR}/.env"
   if [ ! -f "$env_file" ]; then
     return
   fi
@@ -69,20 +70,20 @@ if git -C "$repo_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   fi
 fi
 
-mkdir -p "${HOME}/.hermes/plugins/xiaoduiyou_hermes_platform"
-rsync -a --delete "$repo_dir/plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform/" "${HOME}/.hermes/plugins/xiaoduiyou_hermes_platform/"
+mkdir -p "${HERMES_HOME_DIR}/plugins/xiaoduiyou_hermes_platform"
+rsync -a --delete "$repo_dir/plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform/" "${HERMES_HOME_DIR}/plugins/xiaoduiyou_hermes_platform/"
 
 clear_legacy_hermes_env_overrides
 
-hermes config set plugins.enabled '["xiaoduiyou-hermes-platform"]'
-hermes config set platforms.xiaoduiyou.enabled true
-hermes config set platforms.xiaoduiyou.extra.base_url "$XDY_BASE_URL"
-hermes config set platforms.xiaoduiyou.extra.connection_token "$XDY_CONNECTION_TOKEN"
-hermes config set platforms.xiaoduiyou.extra.poll_interval_seconds 1.0
-hermes config set platforms.xiaoduiyou.home_channel.platform xiaoduiyou
-hermes config set platforms.xiaoduiyou.home_channel.chat_id xiaoduiyou
-hermes config set platforms.xiaoduiyou.home_channel.name Xiaoduiyou
-hermes config set platform_toolsets.xiaoduiyou '["web","browser","terminal","file","code_execution","vision","image_gen","tts","skills","todo","memory","session_search","clarify","delegation","cronjob","messaging","xiaoduiyou"]'
-hermes gateway restart
+HERMES_HOME="$HERMES_HOME_DIR" hermes config set plugins.enabled '["xiaoduiyou-hermes-platform"]'
+HERMES_HOME="$HERMES_HOME_DIR" hermes config set platforms.xiaoduiyou.enabled true
+HERMES_HOME="$HERMES_HOME_DIR" hermes config set platforms.xiaoduiyou.extra.base_url "$XDY_BASE_URL"
+HERMES_HOME="$HERMES_HOME_DIR" hermes config set platforms.xiaoduiyou.extra.connection_token "$XDY_CONNECTION_TOKEN"
+HERMES_HOME="$HERMES_HOME_DIR" hermes config set platforms.xiaoduiyou.extra.poll_interval_seconds 1.0
+HERMES_HOME="$HERMES_HOME_DIR" hermes config set platforms.xiaoduiyou.home_channel.platform xiaoduiyou
+HERMES_HOME="$HERMES_HOME_DIR" hermes config set platforms.xiaoduiyou.home_channel.chat_id xiaoduiyou
+HERMES_HOME="$HERMES_HOME_DIR" hermes config set platforms.xiaoduiyou.home_channel.name Xiaoduiyou
+HERMES_HOME="$HERMES_HOME_DIR" hermes config set platform_toolsets.xiaoduiyou '["web","browser","terminal","file","code_execution","vision","image_gen","tts","skills","todo","memory","session_search","clarify","delegation","cronjob","messaging","xiaoduiyou"]'
+HERMES_HOME="$HERMES_HOME_DIR" hermes gateway restart
 
-echo "Xiaoduiyou Hermes plugin is installed."
+echo "Xiaoduiyou Hermes plugin is installed in ${HERMES_HOME_DIR}."

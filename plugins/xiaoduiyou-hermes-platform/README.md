@@ -16,7 +16,7 @@ This is the maintained Hermes Gateway platform plugin for Xiaoduiyou. Install it
 Recommended installation path:
 
 ```text
-~/.hermes/plugins/xiaoduiyou_hermes_platform/
+${HERMES_HOME:-~/.hermes}/plugins/xiaoduiyou_hermes_platform/
   plugin.yaml
   adapter.py
   __init__.py
@@ -24,7 +24,7 @@ Recommended installation path:
 
 ## Config
 
-Enable the plugin and platform in `~/.hermes/config.yaml`:
+Enable the plugin and platform in `${HERMES_HOME:-~/.hermes}/config.yaml`. If you run Hermes under a named profile, set `HERMES_HOME` to that profile directory before installing:
 
 ```yaml
 plugins:
