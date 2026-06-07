@@ -750,6 +750,80 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             token=self.connection_token,
         )
 
+    async def _post_interactive_request(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return await asyncio.to_thread(
+            _request_json,
+            f"{self.base_url}/api/hermes/interactive-requests",
+            method="POST",
+            payload=payload,
+            timeout=self.request_timeout_seconds,
+            token=self.connection_token,
+        )
+
+    async def _get_interactive_request(self, request_id: str) -> Dict[str, Any]:
+        return await asyncio.to_thread(
+            _request_json,
+            f"{self.base_url}/api/hermes/interactive-requests/{request_id}",
+            timeout=self.request_timeout_seconds,
+            token=self.connection_token,
+        )
+
+    def _watch_exec_approval(self, request_id: str, session_key: str, timeout_seconds: int = 300) -> None:
+        async def _run() -> None:
+            deadline = time.time() + timeout_seconds
+            while self._running and time.time() < deadline:
+                await asyncio.sleep(1)
+                try:
+                    result = await self._get_interactive_request(request_id)
+                    interactive_request = result.get("request") if isinstance(result, dict) else {}
+                    if not isinstance(interactive_request, dict):
+                        continue
+                    status = str(interactive_request.get("status") or "")
+                    if status == "resolved":
+                        choice = str(interactive_request.get("choice") or "")
+                        if choice:
+                            try:
+                                from tools.approval import resolve_gateway_approval
+                                resolve_gateway_approval(session_key, choice)
+                            except Exception as exc:
+                                logger.error("Xiaoduiyou exec approval resolve failed: %s", exc, exc_info=True)
+                        return
+                    if status == "expired":
+                        return
+                except Exception as exc:
+                    logger.debug("Xiaoduiyou exec approval poll failed for %s: %s", request_id, exc)
+
+        asyncio.create_task(_run())
+
+    def _watch_slash_confirm(self, request_id: str, session_key: str, confirm_id: str, chat_id: str, timeout_seconds: int = 300) -> None:
+        async def _run() -> None:
+            deadline = time.time() + timeout_seconds
+            while self._running and time.time() < deadline:
+                await asyncio.sleep(1)
+                try:
+                    result = await self._get_interactive_request(request_id)
+                    interactive_request = result.get("request") if isinstance(result, dict) else {}
+                    if not isinstance(interactive_request, dict):
+                        continue
+                    status = str(interactive_request.get("status") or "")
+                    if status == "resolved":
+                        choice = str(interactive_request.get("choice") or "")
+                        if choice:
+                            try:
+                                from tools import slash_confirm as _slash_confirm_mod
+                                followup = await _slash_confirm_mod.resolve(session_key, confirm_id, choice)
+                                if followup:
+                                    await self.send(chat_id, followup)
+                            except Exception as exc:
+                                logger.error("Xiaoduiyou slash confirm resolve failed: %s", exc, exc_info=True)
+                        return
+                    if status == "expired":
+                        return
+                except Exception as exc:
+                    logger.debug("Xiaoduiyou slash confirm poll failed for %s: %s", request_id, exc)
+
+        asyncio.create_task(_run())
+
     async def _resolve_turn_id(self, chat_id: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         chat_key = str(chat_id)
         turn_id = str((metadata or {}).get("turn_id") or self._turn_by_session.get(chat_key) or _TURN_BY_SESSION.get(chat_key) or "")
@@ -771,6 +845,73 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         except Exception as exc:
             logger.warning("Xiaoduiyou active turn lookup failed for %s: %s", chat_key, exc)
         return ""
+
+    async def send_exec_approval(
+        self,
+        chat_id: str,
+        command: str,
+        session_key: str,
+        description: str = "dangerous command",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> SendResult:
+        session_id = str(chat_id or "").strip()
+        turn_id = await self._resolve_turn_id(session_id, metadata)
+        payload = {
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "kind": "exec_approval",
+            "title": "需要授权执行命令",
+            "message": description or "Agent 请求执行一条需要确认的命令。",
+            "command": command or "",
+            "reason": description or "",
+            "session_key": session_key,
+            "actions": ["once", "session", "always", "deny"],
+            "timeout_seconds": 300,
+        }
+        try:
+            result = await self._post_interactive_request(payload)
+            interactive_request = result.get("request") if isinstance(result, dict) else {}
+            request_id = str(interactive_request.get("request_id") or "") if isinstance(interactive_request, dict) else ""
+            if request_id:
+                self._watch_exec_approval(request_id, session_key)
+            return SendResult(success=True, message_id=request_id or f"xiaoduiyou_approval_{int(time.time() * 1000)}", raw_response=result)
+        except Exception as exc:
+            logger.error("Xiaoduiyou exec approval request failed: %s", exc, exc_info=True)
+            return SendResult(success=False, error=str(exc))
+
+    async def send_slash_confirm(
+        self,
+        chat_id: str,
+        title: str,
+        message: str,
+        session_key: str,
+        confirm_id: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> SendResult:
+        session_id = str(chat_id or "").strip()
+        turn_id = await self._resolve_turn_id(session_id, metadata)
+        payload = {
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "kind": "slash_confirm",
+            "title": title or "需要确认 Agent 指令",
+            "message": message or "确认后 Agent 会继续执行。",
+            "command": title or "",
+            "confirm_id": confirm_id,
+            "session_key": session_key,
+            "actions": ["once", "always", "cancel"],
+            "timeout_seconds": 300,
+        }
+        try:
+            result = await self._post_interactive_request(payload)
+            interactive_request = result.get("request") if isinstance(result, dict) else {}
+            request_id = str(interactive_request.get("request_id") or "") if isinstance(interactive_request, dict) else ""
+            if request_id:
+                self._watch_slash_confirm(request_id, session_key, confirm_id, session_id)
+            return SendResult(success=True, message_id=request_id or f"xiaoduiyou_confirm_{int(time.time() * 1000)}", raw_response=result)
+        except Exception as exc:
+            logger.error("Xiaoduiyou slash confirm request failed: %s", exc, exc_info=True)
+            return SendResult(success=False, error=str(exc))
 
     async def send(self, chat_id: str, content: str, reply_to: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None) -> SendResult:
         chat_key = str(chat_id)
