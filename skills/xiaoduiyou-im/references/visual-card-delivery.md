@@ -29,8 +29,9 @@ The correct path is:
 Use the bundled script instead of hand-writing one-off POST/upload code:
 
 ```bash
-python ~/.hermes/skills/productivity/xiaoduiyou-im/scripts/send_visual_cards.py --list-sessions
-python ~/.hermes/skills/productivity/xiaoduiyou-im/scripts/send_visual_cards.py \
+HERMES_SKILL_HOME="${HERMES_HOME:-$HOME/.hermes}"
+python "$HERMES_SKILL_HOME/skills/productivity/xiaoduiyou-im/scripts/send_visual_cards.py" --list-sessions
+python "$HERMES_SKILL_HOME/skills/productivity/xiaoduiyou-im/scripts/send_visual_cards.py" \
   --session-id sess_0005 \
   --text '龙柳小红书视觉卡片，点图片可打开原帖。' \
   --cards-json /tmp/cards.json

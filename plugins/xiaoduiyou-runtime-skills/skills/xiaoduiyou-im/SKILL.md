@@ -55,8 +55,9 @@ Load this when:
 Quick use:
 
 ```bash
-python ~/.hermes/skills/productivity/xiaoduiyou-im/scripts/send_visual_cards.py --list-sessions
-python ~/.hermes/skills/productivity/xiaoduiyou-im/scripts/send_visual_cards.py \
+HERMES_SKILL_HOME="${HERMES_HOME:-$HOME/.hermes}"
+python "$HERMES_SKILL_HOME/skills/productivity/xiaoduiyou-im/scripts/send_visual_cards.py" --list-sessions
+python "$HERMES_SKILL_HOME/skills/productivity/xiaoduiyou-im/scripts/send_visual_cards.py" \
   --session-id sess_0053 \
   --text '点图片可以打开来源。' \
   --cards-json /tmp/cards.json

@@ -26,11 +26,12 @@ else
   git clone "$XDY_PUBLIC_REPO" "$XDY_PUBLIC_DIR"
 fi
 
-mkdir -p ~/.hermes/plugins/xiaoduiyou_hermes_platform
-rsync -a --delete "$XDY_PUBLIC_DIR/plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform/" ~/.hermes/plugins/xiaoduiyou_hermes_platform/
+HERMES_HOME_DIR="${HERMES_HOME:-$HOME/.hermes}"
+mkdir -p "$HERMES_HOME_DIR/plugins/xiaoduiyou_hermes_platform"
+rsync -a --delete "$XDY_PUBLIC_DIR/plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform/" "$HERMES_HOME_DIR/plugins/xiaoduiyou_hermes_platform/"
 ```
 
-Enable it in `~/.hermes/config.yaml` with a Xiaoduiyou-issued base URL and connection token. See the root `README.md` for the full Agent setup prompt.
+Enable it in `${HERMES_HOME:-~/.hermes}/config.yaml` with a Xiaoduiyou-issued base URL and connection token. See the root `README.md` for the full Agent setup prompt.
 
 Do not configure `platform_toolsets.xiaoduiyou` as only `["xiaoduiyou"]`: that exposes Xiaoduiyou document tools but removes normal Hermes local tools such as file, terminal, web search, browser, and code execution.
 

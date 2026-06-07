@@ -113,8 +113,9 @@ XDY_CONNECTION_TOKEN="<由小队友设置页提供>" \
 ```
 
 运行规则：
-- `XDY_PUBLIC_DIR` 必须是专用安装缓存目录；不要指向 `~/.openclaw/workspace`，也不要在 `~/.openclaw/workspace` 里 clone / pull 这个仓库。
-- OpenClaw skill 只有进入当前 Agent 的 `agents.list[0].skills` allowlist 后才会进入模型上下文；仅安装到 `~/.openclaw/workspace/skills` 不够。
+- `XDY_PUBLIC_DIR` 必须是专用安装缓存目录；不要指向 `${OPENCLAW_HOME:-~/.openclaw}/workspace`，也不要在 OpenClaw workspace 里 clone / pull 这个仓库。
+- 安装脚本会写入 `${OPENCLAW_HOME:-~/.openclaw}`；如果你在 OpenClaw profile 下运行，先确保 `OPENCLAW_HOME` 指向该 profile 目录。
+- OpenClaw skill 只有进入当前 Agent 的 `agents.list[0].skills` allowlist 后才会进入模型上下文；仅安装到 `${OPENCLAW_HOME:-~/.openclaw}/workspace/skills` 不够。
 - OpenClaw tool policy 必须允许插件工具组；脚本会把 `tools.alsoAllow` 合并补上 `group:plugins`。如果 Connected tools 里看不到 `xiaoduiyou_growth_diary_get` / `xiaoduiyou_growth_diary_patch`，先重新执行 `scripts/install-openclaw.sh` 并重启 Gateway。
 - 按 README 的 Runtime skill routing 和 Common Agent rules 执行。
 ````
@@ -165,4 +166,4 @@ export XDY_CONNECTION_TOKEN="<由小队友设置页提供>"
 
 Clone/update this repository in a dedicated install/cache directory, read the matching `skills/*/SKILL.md`, use Xiaoduiyou app-provided connection values, and follow the bundled skill references instead of guessing product behavior.
 
-Notes: OpenClaw must not clone/update this repository under `~/.openclaw/workspace`; generated `.zip` artifacts and maintainer-local paths/secrets are intentionally not tracked here.
+Notes: OpenClaw must not clone/update this repository under `${OPENCLAW_HOME:-~/.openclaw}/workspace`; generated `.zip` artifacts and maintainer-local paths/secrets are intentionally not tracked here.
