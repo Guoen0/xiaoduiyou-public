@@ -142,6 +142,14 @@ path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
 }
 
+install_hermes_runtime_skills() {
+  local skills_dir="${HERMES_HOME_DIR}/skills/productivity"
+  mkdir -p "$skills_dir"
+  for skill in xiaoduiyou-im xiaoduiyou-doc-content-package xiaoduiyou-growth-diary; do
+    rsync -a --delete "$repo_dir/skills/$skill/" "$skills_dir/$skill/"
+  done
+}
+
 if git -C "$repo_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   if [ "${XDY_SKIP_REPO_UPDATE:-0}" != "1" ]; then
     git -C "$repo_dir" fetch origin main
@@ -152,6 +160,7 @@ fi
 
 mkdir -p "${HERMES_HOME_DIR}/plugins/xiaoduiyou_hermes_platform"
 rsync -a --delete "$repo_dir/plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform/" "${HERMES_HOME_DIR}/plugins/xiaoduiyou_hermes_platform/"
+install_hermes_runtime_skills
 
 clear_legacy_hermes_env_overrides
 
@@ -166,4 +175,4 @@ HERMES_HOME="$HERMES_HOME_DIR" hermes config set platforms.xiaoduiyou.home_chann
 HERMES_HOME="$HERMES_HOME_DIR" hermes config set platform_toolsets.xiaoduiyou '["web","browser","terminal","file","code_execution","vision","image_gen","tts","skills","todo","memory","session_search","clarify","delegation","cronjob","messaging","xiaoduiyou"]'
 HERMES_HOME="$HERMES_HOME_DIR" hermes gateway restart
 
-echo "Xiaoduiyou Hermes plugin is installed in ${HERMES_HOME_DIR}."
+echo "Xiaoduiyou Hermes plugin and runtime skills are installed in ${HERMES_HOME_DIR}."
