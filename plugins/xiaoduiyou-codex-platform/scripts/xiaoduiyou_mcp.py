@@ -13,8 +13,8 @@ from typing import Any
 from urllib import error, parse, request
 
 
-VERSION = "0.1.2"
-CONNECTOR_VERSION = "2026.6.8.3-codex.1"
+VERSION = "0.1.3"
+CONNECTOR_VERSION = "2026.6.8.3-codex.2"
 DEFAULT_CONFIG_PATH = Path.home() / ".codex" / "xiaoduiyou-connection.json"
 
 
@@ -267,6 +267,41 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             payload["turn_id"] = turn_id
         return text_result(request_json("/api/agent/im/send", method="POST", body=payload))
 
+    if name == "xiaoduiyou_interactive_request_create":
+        session_id = required(args, "session_id")
+        kind = required(args, "kind")
+        if kind not in ("exec_approval", "slash_confirm"):
+            raise ValueError("kind must be exec_approval or slash_confirm")
+        payload: dict[str, Any] = {"session_id": session_id, "kind": kind}
+        for key in ["turn_id", "title", "message", "command", "reason", "confirm_id", "session_key"]:
+            value = str(args.get(key) or "").strip()
+            if value:
+                payload[key] = value
+        if isinstance(args.get("actions"), list):
+            payload["actions"] = args["actions"]
+        if args.get("timeout_seconds") is not None:
+            payload["timeout_seconds"] = args["timeout_seconds"]
+        return text_result(request_json("/api/agent/interactive-requests", method="POST", body=payload))
+
+    if name == "xiaoduiyou_interactive_request_get":
+        request_id = required(args, "request_id")
+        return text_result(request_json(f"/api/agent/interactive-requests/{parse.quote(request_id)}"))
+
+    if name == "xiaoduiyou_interactive_request_wait":
+        request_id = required(args, "request_id")
+        timeout_seconds = max(1.0, min(float(args.get("timeout_seconds") or 300), 600.0))
+        interval_seconds = max(0.5, min(float(args.get("interval_seconds") or 1), 10.0))
+        deadline = time.time() + timeout_seconds
+        attempts = 0
+        while time.time() <= deadline:
+            attempts += 1
+            result = request_json(f"/api/agent/interactive-requests/{parse.quote(request_id)}")
+            request_payload = result.get("request") if isinstance(result, dict) else None
+            if isinstance(request_payload, dict) and request_payload.get("status") in ("resolved", "expired"):
+                return text_result({"status": "DECISION_RECEIVED", "attempts": attempts, "request": request_payload})
+            time.sleep(interval_seconds)
+        return text_result({"status": "NO_DECISION", "attempts": attempts, "request_id": request_id})
+
     if name == "xiaoduiyou_growth_diary_get":
         allowed = ["view", "date", "start_date", "end_date", "event_type", "query", "quantity", "unit", "record_limit"]
         return text_result(request_json(f"/api/growth-diary{compact_query({key: args.get(key) for key in allowed})}"))
@@ -415,6 +450,40 @@ TOOLS = [
                 },
             },
         }, ["session_id", "content"]),
+    },
+    {
+        "name": "xiaoduiyou_interactive_request_create",
+        "description": "Create a Xiaoduiyou human authorization/confirmation card for the current chat. Use this when Codex needs user approval to execute a command or continue a slash/control action; do not ask for approval only in plain text.",
+        "inputSchema": schema({
+            "session_id": {"type": "string"},
+            "turn_id": {"type": "string"},
+            "kind": {"type": "string", "enum": ["exec_approval", "slash_confirm"]},
+            "title": {"type": "string"},
+            "message": {"type": "string"},
+            "command": {"type": "string", "description": "Required context for exec_approval cards: the command or operation needing approval."},
+            "reason": {"type": "string"},
+            "confirm_id": {"type": "string"},
+            "session_key": {"type": "string"},
+            "actions": {
+                "type": "array",
+                "items": {"type": "string", "enum": ["once", "session", "always", "deny", "cancel"]},
+            },
+            "timeout_seconds": {"type": "number", "minimum": 15, "maximum": 3600},
+        }, ["session_id", "kind"]),
+    },
+    {
+        "name": "xiaoduiyou_interactive_request_get",
+        "description": "Read the latest state of a Xiaoduiyou authorization/confirmation card. Returns pending, resolved, or expired plus the user's choice.",
+        "inputSchema": schema({"request_id": {"type": "string"}}, ["request_id"]),
+    },
+    {
+        "name": "xiaoduiyou_interactive_request_wait",
+        "description": "Wait for a Xiaoduiyou authorization/confirmation card to be resolved. Use after create when the next Agent step depends on the user's approval choice.",
+        "inputSchema": schema({
+            "request_id": {"type": "string"},
+            "timeout_seconds": {"type": "number", "minimum": 1, "maximum": 600},
+            "interval_seconds": {"type": "number", "minimum": 0.5, "maximum": 10},
+        }, ["request_id"]),
     },
     {
         "name": "xiaoduiyou_growth_diary_get",

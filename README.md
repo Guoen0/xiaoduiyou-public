@@ -158,7 +158,7 @@ export XDY_CONNECTION_TOKEN="<由小队友设置页提供>"
 
 - 安装脚本会安装/更新三个 Codex 插件：`xiaoduiyou-runtime-skills`、`xiaoduiyou-codex-platform`、`xiaoduiyou-codex-runner`。
 - `xiaoduiyou-runtime-skills` 会把 `xiaoduiyou-im`、`xiaoduiyou-doc-content-package`、`xiaoduiyou-growth-diary` 装进 Codex；这些 runtime skills 是 IM、内容包、成长日记行为的来源。
-- 安装脚本会写入本地连接配置，启动后台 runner，并验证平台连接；Codex 平台工具包括 `xiaoduiyou_im_send`，用于发送 Xiaoduiyou 聊天图片卡片。
+- 安装脚本会写入本地连接配置，启动后台 runner，并验证平台连接；Codex 平台工具包括 `xiaoduiyou_im_send` 和 `xiaoduiyou_interactive_request_create` / `xiaoduiyou_interactive_request_wait`，用于发送 Xiaoduiyou 聊天图片卡片和人类授权审批卡片。
 - 安装后使用 `xiaoduiyou-codex-runner` skill 检查 runner 状态；使用 `xiaoduiyou-codex-platform` skill 处理需要平台 MCP 工具的任务；按 `xiaoduiyou-im` / `xiaoduiyou-doc-content-package` / `xiaoduiyou-growth-diary` 执行用户消息。
 - 不要把连接 token 打印回聊天；只汇报是否安装成功、runner 是否在线、失败时的明确原因。
 - 按 README 的 Runtime skill routing 和 Common Agent rules 执行。

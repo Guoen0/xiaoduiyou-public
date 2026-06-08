@@ -72,9 +72,12 @@ def main() -> None:
     require_text(
         ROOT / "plugins" / "xiaoduiyou-codex-platform" / "scripts" / "xiaoduiyou_mcp.py",
         [
-            "CONNECTOR_VERSION = \"2026.6.8.3-codex.1\"",
+            "CONNECTOR_VERSION = \"2026.6.8.3-codex.2\"",
             "\"name\": \"xiaoduiyou_im_send\"",
+            "\"name\": \"xiaoduiyou_interactive_request_create\"",
+            "\"name\": \"xiaoduiyou_interactive_request_wait\"",
             "\"/api/agent/im/send\"",
+            "\"/api/agent/interactive-requests\"",
             "OpenAI Responses-style content parts",
         ],
     )
@@ -96,6 +99,8 @@ def main() -> None:
             "xiaoduiyou-doc-content-package",
             "xiaoduiyou-growth-diary",
             "xiaoduiyou_im_send",
+            "xiaoduiyou_interactive_request_create",
+            "xiaoduiyou_interactive_request_wait",
         ],
     )
 
