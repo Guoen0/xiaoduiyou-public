@@ -83,6 +83,9 @@ def main() -> None:
         [
             "xiaoduiyou_im_send",
             "openclaw plugins install",
+            "OPENCLAW_HOME_ROOT",
+            ".openclaw/.openclaw/workspace/skills",
+            "could not update agents.list",
         ],
     )
     require_text(
