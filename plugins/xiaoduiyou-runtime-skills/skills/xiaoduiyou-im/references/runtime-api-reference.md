@@ -58,6 +58,41 @@ The progress payload may include richer UI fields:
 
 Use this when a connected Agent needs to send a message to an existing Xiaoduiyou session outside an active pending turn, for example a scheduled/initiated message or a platform `send_message` call.
 
+Preferred high-level endpoint/tool for image cards:
+
+`POST /api/agent/im/send` or tool `xiaoduiyou_im_send`
+
+Body uses OpenAI Responses-style content parts:
+
+```json
+{
+  "session_id": "sess_0005",
+  "turn_id": "turn_optional",
+  "content": [
+    { "type": "input_text", "text": "点图片可以打开来源。" },
+    {
+      "type": "input_image",
+      "image_url": "data:image/png;base64,iVBORw0KGgo...",
+      "detail": "auto",
+      "display": {
+        "title": "商品候选",
+        "subtitle": "淘宝 · 关键参数",
+        "badge": "候选",
+        "link_url": "https://item.taobao.com/item.htm?id=123456"
+      }
+    }
+  ]
+}
+```
+
+Backend behavior:
+
+- accepts `https://` images and `data:image/png|jpeg|webp|gif;base64,...`;
+- rejects local paths, `file:`, `blob:`, `localhost`, private-network URLs, non-image content-types, and images over 10 MB;
+- uploads images through Xiaoduiyou assets/TOS, then emits existing `image_attachments`.
+
+Legacy low-level endpoint:
+
 `POST /api/agent/sessions/{session_id}/messages`
 
 Headers are the same Agent auth headers as turn polling/callbacks. Minimal body:

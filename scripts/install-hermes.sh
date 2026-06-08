@@ -197,11 +197,14 @@ PY
 }
 
 install_hermes_runtime_skills() {
-  local skills_dir="${HERMES_HOME_DIR}/skills/productivity"
+  local skills_dir="${HERMES_HOME_DIR}/skills/xiaoduiyou"
+  local legacy_skills_dir="${HERMES_HOME_DIR}/skills/productivity"
   mkdir -p "$skills_dir"
   for skill in xiaoduiyou-im xiaoduiyou-doc-content-package xiaoduiyou-growth-diary; do
     rsync -a --delete "$repo_dir/skills/$skill/" "$skills_dir/$skill/"
+    rm -rf "$legacy_skills_dir/$skill"
   done
+  rmdir "$legacy_skills_dir" >/dev/null 2>&1 || true
 }
 
 if git -C "$repo_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then

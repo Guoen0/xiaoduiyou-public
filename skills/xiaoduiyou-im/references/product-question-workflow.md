@@ -77,9 +77,9 @@ Do **not** send visual cards to Xiaoduiyou as Markdown images or local `MEDIA:/.
 
 ```bash
 HERMES_SKILL_HOME="${HERMES_HOME:-$HOME/.hermes}"
-python "$HERMES_SKILL_HOME/skills/productivity/xiaoduiyou-im/scripts/send_visual_cards.py" \
+python "$HERMES_SKILL_HOME/skills/xiaoduiyou/xiaoduiyou-im/scripts/send_visual_cards.py" \
   --list-sessions
-python "$HERMES_SKILL_HOME/skills/productivity/xiaoduiyou-im/scripts/send_visual_cards.py" \
+python "$HERMES_SKILL_HOME/skills/xiaoduiyou/xiaoduiyou-im/scripts/send_visual_cards.py" \
   --session-id sess_0005 \
   --text '龙柳小红书参考卡片' \
   --card '{"image_path":"/tmp/card.png","title":"龙柳参考","link_url":"https://www.xiaohongshu.com/explore/...","badge":"参考帖"}'

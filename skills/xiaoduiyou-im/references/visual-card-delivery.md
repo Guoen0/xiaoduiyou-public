@@ -49,8 +49,8 @@ Use the bundled script only for old Hermes/OpenClaw installs where `xiaoduiyou_i
 
 ```bash
 HERMES_SKILL_HOME="${HERMES_HOME:-$HOME/.hermes}"
-python "$HERMES_SKILL_HOME/skills/productivity/xiaoduiyou-im/scripts/send_visual_cards.py" --list-sessions
-python "$HERMES_SKILL_HOME/skills/productivity/xiaoduiyou-im/scripts/send_visual_cards.py" \
+python "$HERMES_SKILL_HOME/skills/xiaoduiyou/xiaoduiyou-im/scripts/send_visual_cards.py" --list-sessions
+python "$HERMES_SKILL_HOME/skills/xiaoduiyou/xiaoduiyou-im/scripts/send_visual_cards.py" \
   --session-id sess_0005 \
   --text '龙柳小红书视觉卡片，点图片可打开原帖。' \
   --cards-json /tmp/cards.json

@@ -72,7 +72,7 @@ XDY_CONNECTION_TOKEN="<由小队友设置页提供>" \
 
 运行规则：
 - Hermes 安装脚本会安装/更新小队友 platform 插件，以及 `xiaoduiyou-im`、`xiaoduiyou-doc-content-package`、`xiaoduiyou-growth-diary` 三个 runtime skills。
-- 安装脚本会写入 `${HERMES_HOME:-~/.hermes}/config.yaml`，并把三个 runtime skills 安装到同一目录下的 `skills/productivity/`；如果你在 Hermes profile 下运行，先确保 `HERMES_HOME` 指向该 profile 目录。
+- 安装脚本会写入 `${HERMES_HOME:-~/.hermes}/config.yaml`，并把三个 runtime skills 安装到同一目录下的 `skills/xiaoduiyou/`；如果你在 Hermes profile 下运行，先确保 `HERMES_HOME` 指向该 profile 目录。
 - Hermes default 和 profile 是相互隔离的连接实例：生产 default 使用生产设置页提供的 `XDY_BASE_URL` / `XDY_CONNECTION_TOKEN`，review/test profile 使用 review/test 设置页提供的 `XDY_BASE_URL` / `XDY_CONNECTION_TOKEN`。不要从 default 复制 token 到 profile，也不要跨环境复用 token。
 - 如果 Hermes 升级或 profile 迁移后连接异常，重新执行安装脚本；脚本会把旧的字符串 JSON 配置规整为 Hermes 可读取的 YAML list。
 - 安装脚本会禁用同一 `HERMES_HOME` 下 `.env` 里的旧 `XIAODUIYOU_BASE_URL` / `XIAODUIYOU_CONNECTION_TOKEN` 覆盖项，避免旧地址覆盖新配置。
