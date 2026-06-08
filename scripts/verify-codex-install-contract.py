@@ -70,12 +70,29 @@ def main() -> None:
         ],
     )
     require_text(
+        ROOT / "plugins" / "xiaoduiyou-codex-platform" / "scripts" / "xiaoduiyou_mcp.py",
+        [
+            "CONNECTOR_VERSION = \"2026.6.8.3-codex.1\"",
+            "\"name\": \"xiaoduiyou_im_send\"",
+            "\"/api/agent/im/send\"",
+            "OpenAI Responses-style content parts",
+        ],
+    )
+    require_text(
+        ROOT / "scripts" / "install-openclaw.sh",
+        [
+            "xiaoduiyou_im_send",
+            "openclaw plugins install",
+        ],
+    )
+    require_text(
         ROOT / "README.md",
         [
             "xiaoduiyou-runtime-skills",
             "xiaoduiyou-im",
             "xiaoduiyou-doc-content-package",
             "xiaoduiyou-growth-diary",
+            "xiaoduiyou_im_send",
         ],
     )
 

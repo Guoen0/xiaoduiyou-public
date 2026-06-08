@@ -118,7 +118,7 @@ XDY_CONNECTION_TOKEN="<由小队友设置页提供>" \
 - `XDY_PUBLIC_DIR` 必须是专用安装缓存目录；不要指向 `${OPENCLAW_HOME:-~/.openclaw}/workspace`，也不要在 OpenClaw workspace 里 clone / pull 这个仓库。
 - 安装脚本会写入 `${OPENCLAW_HOME:-~/.openclaw}`；如果你在 OpenClaw profile 下运行，先确保 `OPENCLAW_HOME` 指向该 profile 目录。
 - OpenClaw skill 只有进入当前 Agent 的 `agents.list[0].skills` allowlist 后才会进入模型上下文；仅安装到 `${OPENCLAW_HOME:-~/.openclaw}/workspace/skills` 不够。
-- OpenClaw tool policy 必须允许插件工具组；脚本会把 `tools.alsoAllow` 合并补上 `group:plugins`。如果 Connected tools 里看不到 `xiaoduiyou_growth_diary_get` / `xiaoduiyou_growth_diary_patch`，先重新执行 `scripts/install-openclaw.sh` 并重启 Gateway。
+- OpenClaw tool policy 必须允许插件工具组；脚本会把 `tools.alsoAllow` 合并补上 `group:plugins`。如果 Connected tools 里看不到 `xiaoduiyou_im_send` / `xiaoduiyou_growth_diary_get` / `xiaoduiyou_growth_diary_patch`，先重新执行 `scripts/install-openclaw.sh` 并重启 Gateway。
 - 按 README 的 Runtime skill routing 和 Common Agent rules 执行。
 ````
 
@@ -158,7 +158,7 @@ export XDY_CONNECTION_TOKEN="<由小队友设置页提供>"
 
 - 安装脚本会安装/更新三个 Codex 插件：`xiaoduiyou-runtime-skills`、`xiaoduiyou-codex-platform`、`xiaoduiyou-codex-runner`。
 - `xiaoduiyou-runtime-skills` 会把 `xiaoduiyou-im`、`xiaoduiyou-doc-content-package`、`xiaoduiyou-growth-diary` 装进 Codex；这些 runtime skills 是 IM、内容包、成长日记行为的来源。
-- 安装脚本会写入本地连接配置，启动后台 runner，并验证平台连接。
+- 安装脚本会写入本地连接配置，启动后台 runner，并验证平台连接；Codex 平台工具包括 `xiaoduiyou_im_send`，用于发送 Xiaoduiyou 聊天图片卡片。
 - 安装后使用 `xiaoduiyou-codex-runner` skill 检查 runner 状态；使用 `xiaoduiyou-codex-platform` skill 处理需要平台 MCP 工具的任务；按 `xiaoduiyou-im` / `xiaoduiyou-doc-content-package` / `xiaoduiyou-growth-diary` 执行用户消息。
 - 不要把连接 token 打印回聊天；只汇报是否安装成功、runner 是否在线、失败时的明确原因。
 - 按 README 的 Runtime skill routing 和 Common Agent rules 执行。

@@ -77,5 +77,7 @@ OPENCLAW_HOME="$OPENCLAW_HOME_DIR" openclaw skills info xiaoduiyou-doc-content-p
 OPENCLAW_HOME="$OPENCLAW_HOME_DIR" openclaw skills info xiaoduiyou-growth-diary >/dev/null
 OPENCLAW_HOME="$OPENCLAW_HOME_DIR" openclaw plugins list | grep -i xiaoduiyou >/dev/null
 OPENCLAW_HOME="$OPENCLAW_HOME_DIR" openclaw config get tools.alsoAllow | grep -F 'group:plugins' >/dev/null
+grep -F 'xiaoduiyou_im_send' "$repo_dir/plugins/xiaoduiyou-openclaw-connector/openclaw.plugin.json" >/dev/null
+grep -F 'xiaoduiyou_im_send' "$repo_dir/plugins/xiaoduiyou-openclaw-connector/src/tools.js" >/dev/null
 
 echo "Xiaoduiyou OpenClaw connector and skills are installed in ${OPENCLAW_HOME_DIR}."

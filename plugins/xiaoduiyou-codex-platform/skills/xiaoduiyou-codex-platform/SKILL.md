@@ -33,7 +33,7 @@ Codex does not run a hidden background receiver after the thread goes idle. For 
 
 These runtime skills are installed by the `xiaoduiyou-runtime-skills` Codex plugin. If they are missing from the Codex skill list, rerun `scripts/install-codex-runner.sh` before guessing platform behavior.
 
-- Chat-only tasks, cards, runtime messages: follow `xiaoduiyou-im`.
+- Chat-only tasks, cards, runtime messages: follow `xiaoduiyou-im`; use `xiaoduiyou_im_send` for clickable image cards.
 - Documents, content packages, process docs, publish notes: follow `xiaoduiyou-doc-content-package`.
 - Growth Diary records, schema, views, and diary photos: follow `xiaoduiyou-growth-diary`.
 
@@ -57,3 +57,29 @@ For new records, `records[]` must use:
 ```
 
 Use `updates` for existing cells and `deletions` for deletes. Never send `values: null`.
+
+## IM Cards
+
+For Xiaoduiyou chat visual cards, call `xiaoduiyou_im_send` instead of uploading images yourself. The tool accepts OpenAI Responses-style `content[]` parts:
+
+```json
+{
+  "session_id": "sess_0001",
+  "content": [
+    { "type": "input_text", "text": "点图片可以打开来源。" },
+    {
+      "type": "input_image",
+      "image_url": "data:image/png;base64,...",
+      "detail": "auto",
+      "display": {
+        "title": "卡片标题",
+        "subtitle": "来源或说明",
+        "badge": "参考",
+        "link_url": "https://example.com/source"
+      }
+    }
+  ]
+}
+```
+
+Never pass local paths, `file:`, `blob:`, `localhost`, or private-network URLs.

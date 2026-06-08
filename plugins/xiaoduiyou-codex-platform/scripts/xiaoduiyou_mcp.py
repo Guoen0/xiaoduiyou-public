@@ -13,8 +13,8 @@ from typing import Any
 from urllib import error, parse, request
 
 
-VERSION = "0.1.1"
-CONNECTOR_VERSION = "2026.6.3.4-codex.1"
+VERSION = "0.1.2"
+CONNECTOR_VERSION = "2026.6.8.3-codex.1"
 DEFAULT_CONFIG_PATH = Path.home() / ".codex" / "xiaoduiyou-connection.json"
 
 
@@ -256,6 +256,17 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             body = {"text": str(args.get("text") or "")}
         return text_result(request_json(f"/api/agent/sessions/{parse.quote(session_id)}/messages", method="POST", body=body))
 
+    if name == "xiaoduiyou_im_send":
+        session_id = required(args, "session_id")
+        content = args.get("content")
+        if not isinstance(content, list) or not content:
+            raise ValueError("content[] with input_text/input_image parts is required")
+        payload: dict[str, Any] = {"session_id": session_id, "content": content}
+        turn_id = str(args.get("turn_id") or "").strip()
+        if turn_id:
+            payload["turn_id"] = turn_id
+        return text_result(request_json("/api/agent/im/send", method="POST", body=payload))
+
     if name == "xiaoduiyou_growth_diary_get":
         allowed = ["view", "date", "start_date", "end_date", "event_type", "query", "quantity", "unit", "record_limit"]
         return text_result(request_json(f"/api/growth-diary{compact_query({key: args.get(key) for key in allowed})}"))
@@ -371,6 +382,39 @@ TOOLS = [
         "name": "xiaoduiyou_agent_session_message",
         "description": "Send an Agent message into a Xiaoduiyou session.",
         "inputSchema": schema({"session_id": {"type": "string"}, "text": {"type": "string"}, "payload": {"type": "object", "additionalProperties": True}}, ["session_id"]),
+    },
+    {
+        "name": "xiaoduiyou_im_send",
+        "description": "Send Xiaoduiyou chat image cards using OpenAI Responses-style content parts. Use input_text and input_image; pass HTTPS or data:image/... base64 in image_url. Xiaoduiyou backend uploads images/assets. Never pass local paths, file:, blob:, localhost, or private-network URLs.",
+        "inputSchema": schema({
+            "session_id": {"type": "string"},
+            "turn_id": {"type": "string"},
+            "content": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": True,
+                    "properties": {
+                        "type": {"type": "string", "enum": ["input_text", "input_image"]},
+                        "text": {"type": "string"},
+                        "image_url": {"type": "string", "description": "HTTPS URL or data:image/png|jpeg|webp|gif;base64,..."},
+                        "detail": {"type": "string", "enum": ["auto", "low", "high"]},
+                        "display": {
+                            "type": "object",
+                            "additionalProperties": True,
+                            "properties": {
+                                "title": {"type": "string"},
+                                "subtitle": {"type": "string"},
+                                "badge": {"type": "string"},
+                                "link_url": {"type": "string"},
+                            },
+                        },
+                    },
+                },
+            },
+        }, ["session_id", "content"]),
     },
     {
         "name": "xiaoduiyou_growth_diary_get",
