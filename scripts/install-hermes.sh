@@ -67,6 +67,7 @@ write_hermes_config() {
   local config_file="${HERMES_HOME_DIR}/config.yaml"
   mkdir -p "$(dirname "$config_file")"
   touch "$config_file"
+  cp "$config_file" "${config_file}.bak-xiaoduiyou-$(date +%Y%m%d%H%M%S)"
   python3 - "$config_file" "$XDY_BASE_URL" "$XDY_CONNECTION_TOKEN" <<'PY'
 from pathlib import Path
 import json
