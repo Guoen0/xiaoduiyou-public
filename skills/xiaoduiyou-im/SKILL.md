@@ -19,18 +19,19 @@ Load this when:
 
 ## Non-negotiables
 
-1. Visual cards in Xiaoduiyou are `image_attachments[]`, not `MEDIA:/...`, Markdown images, browser screenshots, or link-only text.
-2. Local/server-static paths are invalid in final chat cards. Upload images to `/api/assets` first.
-3. Verify delivery: response event type, attachment count, and at least one image URL HTTP 200 image content-type.
-4. For product questions: Xiaohongshu provides lived-experience/reference evidence; Taobao/Tmall provides buyable candidates/parameters.
-5. For document/content-package artifacts, travel plans, publish tabs, or process docs, load `xiaoduiyou-doc-content-package`; do not keep that workflow inside IM.
-6. For Growth Diary records, load `xiaoduiyou-growth-diary`; do not send diary-only data as generic chat cards unless the user asks for a chat preview.
+1. Prefer the `xiaoduiyou_im_send` tool for visual cards. It accepts OpenAI Responses-style `content[]` parts and the Xiaoduiyou backend uploads images/assets.
+2. Visual cards in Xiaoduiyou render as `image_attachments[]`, not `MEDIA:/...`, Markdown images, browser screenshots, or link-only text.
+3. Local/server-static paths are invalid in final chat cards. Pass HTTPS images or `data:image/...;base64,...` to `xiaoduiyou_im_send`; never pass `/tmp`, `/Users`, `file:`, `blob:`, `localhost`, or private-network URLs.
+4. Verify delivery: response event type, attachment count, and at least one image URL HTTP 200 image content-type.
+5. For product questions: Xiaohongshu provides lived-experience/reference evidence; Taobao/Tmall provides buyable candidates/parameters.
+6. For document/content-package artifacts, travel plans, publish tabs, or process docs, load `xiaoduiyou-doc-content-package`; do not keep that workflow inside IM.
+7. For Growth Diary records, load `xiaoduiyou-growth-diary`; do not send diary-only data as generic chat cards unless the user asks for a chat preview.
 
 ## Case map owned by IM
 
 | User says / situation | Open/use | Why |
 |---|---|---|
-| `给我视觉卡片` / `卡片` / `点图片打开` | `references/visual-card-delivery.md` + `scripts/send_visual_cards.py` | Chat visual cards are `image_attachments`; the script sends them. |
+| `给我视觉卡片` / `卡片` / `点图片打开` | `xiaoduiyou_im_send` + `references/visual-card-delivery.md` | Backend assetizes images and sends clickable `image_attachments`. |
 | `淘宝上找一下...给我` / `淘宝上找一下...给我卡片` | `references/product-question-workflow.md` then `references/visual-card-delivery.md` | Product research plus clickable candidate cards. |
 | `小红书找参考帖` / source examples | `references/product-question-workflow.md` and `references/visual-card-delivery.md` | Source/reference cards and links. |
 | Runtime send/message/card payload details | `references/runtime-api-reference.md` | Chat message endpoint and `image_attachments` payloads. |
@@ -48,9 +49,34 @@ Load this when:
 | Document/content-package artifacts, travel plans, publish tabs, process docs | load `xiaoduiyou-doc-content-package` |
 | 成长日记 / diary records / diary photos | load `xiaoduiyou-growth-diary` |
 
-## Scripts
+## Preferred Tool
 
-- `scripts/send_visual_cards.py`: upload local/remote images to Xiaoduiyou assets and send structured `image_attachments` to a session.
+Call `xiaoduiyou_im_send` with OpenAI Responses-style content parts:
+
+```json
+{
+  "content": [
+    { "type": "input_text", "text": "点图片可以打开来源。" },
+    {
+      "type": "input_image",
+      "image_url": "https://example.com/card.webp",
+      "detail": "auto",
+      "display": {
+        "title": "龙柳鲜枝水培款",
+        "subtitle": "淘宝 · 插瓶水培 · 1.2-1.5m 优先",
+        "badge": "商品候选",
+        "link_url": "https://s.taobao.com/search?q=..."
+      }
+    }
+  ]
+}
+```
+
+Use `data:image/png;base64,...` for generated images when you do not already have an HTTPS URL.
+
+## Legacy Script
+
+- `scripts/send_visual_cards.py`: fallback for old connectors without `xiaoduiyou_im_send`; uploads local/remote images to Xiaoduiyou assets and sends structured `image_attachments` to a session.
 
 Quick use:
 

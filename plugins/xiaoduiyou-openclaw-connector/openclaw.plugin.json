@@ -11,7 +11,8 @@
       "xiaoduiyou_documents_get",
       "xiaoduiyou_documents_create",
       "xiaoduiyou_documents_update",
-      "xiaoduiyou_documents_delete"
+      "xiaoduiyou_documents_delete",
+      "xiaoduiyou_im_send"
     ]
   },
   "configSchema": {

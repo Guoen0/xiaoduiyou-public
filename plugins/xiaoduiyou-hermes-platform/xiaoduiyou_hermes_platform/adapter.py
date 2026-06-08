@@ -24,7 +24,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.8.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.8.2"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -1175,6 +1175,35 @@ def _tool_get_document(args: Dict[str, Any], **_: Any) -> str:
     return json.dumps({"ok": True, "context": _safe_tool_context(context), "document": result}, ensure_ascii=False)
 
 
+def _tool_im_send(args: Dict[str, Any], **_: Any) -> str:
+    context = _active_tool_context()
+    session_id = str(args.get("session_id") or context.get("session_id") or "").strip()
+    turn_id = str(args.get("turn_id") or context.get("turn_id") or "").strip()
+    content = args.get("content")
+    if not isinstance(content, list) or not content:
+        raise RuntimeError("xiaoduiyou_im_send requires content[] with input_text/input_image parts")
+    result = _request_json(
+        f"{context['base_url']}/api/agent/im/send",
+        method="POST",
+        payload={
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "content": content,
+        },
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+        token=context["token"],
+    )
+    attachments = result.get("image_attachments")
+    return json.dumps({
+        "ok": True,
+        "context": _safe_tool_context(context),
+        "status": result.get("status"),
+        "mode": result.get("mode"),
+        "message_id": result.get("message_id"),
+        "attachment_count": len(attachments) if isinstance(attachments, list) else 0,
+    }, ensure_ascii=False)
+
+
 def _active_tool_context() -> Dict[str, Any]:
     context = _ACTIVE_XIAODUIYOU_TOOL_CONTEXT.get() or {}
     base_url = str(context.get("base_url") or _base_url_from_config() or "").rstrip("/")
@@ -1663,5 +1692,47 @@ def register(ctx) -> None:
             },
         },
         handler=_tool_delete_document,
+        check_fn=check_requirements,
+    )
+    ctx.register_tool(
+        name="xiaoduiyou_im_send",
+        toolset=TOOLSET,
+        description="Send Xiaoduiyou chat image cards using OpenAI Responses-style content parts. Use input_text and input_image; backend uploads images and creates image_attachments.",
+        emoji="🖼️",
+        schema={
+            "name": "xiaoduiyou_im_send",
+            "description": "Send Xiaoduiyou IM visual cards. Use OpenAI Responses-style content parts: input_text for text, input_image for image cards. image_url must be HTTPS or data:image/png|jpeg|webp|gif;base64,... . Never pass local file paths, file:, blob:, localhost, or private-network URLs.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "Optional Xiaoduiyou session id. Omit inside an active Xiaoduiyou turn."},
+                    "turn_id": {"type": "string", "description": "Optional Xiaoduiyou turn id. Omit inside an active Xiaoduiyou turn."},
+                    "content": {
+                        "type": "array",
+                        "description": "OpenAI Responses-style content parts.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string", "enum": ["input_text", "input_image"]},
+                                "text": {"type": "string", "description": "Text for input_text parts."},
+                                "image_url": {"type": "string", "description": "HTTPS image URL or data:image/...;base64,... for input_image parts."},
+                                "detail": {"type": "string", "enum": ["auto", "low", "high"], "description": "Responses-style image detail hint."},
+                                "display": {
+                                    "type": "object",
+                                    "properties": {
+                                        "title": {"type": "string"},
+                                        "subtitle": {"type": "string"},
+                                        "badge": {"type": "string"},
+                                        "link_url": {"type": "string"},
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                "required": ["content"],
+            },
+        },
+        handler=_tool_im_send,
         check_fn=check_requirements,
     )

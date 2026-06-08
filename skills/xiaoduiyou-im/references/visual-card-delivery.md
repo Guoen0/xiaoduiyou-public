@@ -12,21 +12,40 @@ Do not send Xiaoduiyou visual cards as `MEDIA:/...`, Markdown images, or raw tex
 
 If the user says “视觉卡片” while the current screen is a Xiaoduiyou Agent conversation, treat it as a request for Xiaoduiyou structured visual cards, not a standalone screenshot. If the user then says “你发啊”, stop explaining and send the cards immediately.
 
-The correct path is:
+The correct path is `xiaoduiyou_im_send`:
 
-1. Resolve the real backend `session_id` with the Agent token (`scripts/send_visual_cards.py --list-sessions`). If the runtime prompt/current screen already gives a concrete session such as `sess_0053`, still list sessions once when practical and confirm it exists; do not rely on a visible title unless it matches a listed `session_id`.
-2. Prepare one image per card. For quick product-answer cards, generated/PIL/HTML-rendered source images are fine, but avoid emoji glyphs unless verified — Chinese/system fonts may render emoji as tofu squares. Prefer text badges or simple Chinese characters for deterministic legibility.
-3. Upload every local/generated/remote source image to Xiaoduiyou `/api/assets` with `session_id`.
-4. Send a session message to `/api/agent/sessions/{session_id}/messages` with:
-   - `text` / `detail`
-   - `image_urls`
-   - `image_attachments[]` containing `image_url`, `link_url`, `title`, `subtitle`, `badge`
-5. Verify the response event is `agent.progress` and its payload contains the expected `image_attachments` count.
-6. Verify at least one returned asset URL is browser-accessible (HTTP 200, image content-type) before claiming the card is delivered.
+1. Prepare one image per card. For generated images, use `data:image/png;base64,...`; for existing web images, use durable `https://` URLs. Do not pass local paths.
+2. Call `xiaoduiyou_im_send` with `content[]` parts:
+   - `input_text` for the card intro text.
+   - `input_image` with `image_url`, `detail`, and Xiaoduiyou `display` metadata (`title`, `subtitle`, `badge`, `link_url`).
+3. Let Xiaoduiyou backend upload/assetize images and emit the final `image_attachments[]`.
+4. Verify the tool result has the expected attachment count.
+5. Verify at least one returned asset URL is browser-accessible (HTTP 200, image content-type) when the URL is returned/visible before claiming the card is delivered.
 
-## Script
+Example tool payload:
 
-Use the bundled script instead of hand-writing one-off POST/upload code:
+```json
+{
+  "content": [
+    { "type": "input_text", "text": "龙柳小红书视觉卡片，点图片可打开原帖。" },
+    {
+      "type": "input_image",
+      "image_url": "https://example.com/cover.webp",
+      "detail": "auto",
+      "display": {
+        "title": "龙柳参考帖",
+        "subtitle": "小红书 · 真实经验",
+        "link_url": "https://www.xiaohongshu.com/explore/xxxx",
+        "badge": "参考帖"
+      }
+    }
+  ]
+}
+```
+
+## Legacy Script
+
+Use the bundled script only for old Hermes/OpenClaw installs where `xiaoduiyou_im_send` is unavailable:
 
 ```bash
 HERMES_SKILL_HOME="${HERMES_HOME:-$HOME/.hermes}"

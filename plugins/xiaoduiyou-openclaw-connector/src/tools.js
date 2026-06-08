@@ -1,5 +1,5 @@
 import { resolveXiaoduiyouAccount } from "./accounts.js";
-import { getXiaoduiyouDocument, getXiaoduiyouGrowthDiary, patchXiaoduiyouGrowthDiary } from "./client.js";
+import { getXiaoduiyouDocument, getXiaoduiyouGrowthDiary, patchXiaoduiyouGrowthDiary, sendXiaoduiyouImMessage } from "./client.js";
 import { summarizeGrowthDiaryPatchResult } from "./growth-diary-summary.js";
 import { activeXiaoduiyouToolContext, queueXiaoduiyouDocumentAction } from "./tool-context.js";
 
@@ -107,6 +107,58 @@ const DocumentDeleteSchema = {
   properties: {
     document_id: { type: "string", description: "Optional document id. If omitted, Xiaoduiyou deletes the current screen document/content package, then falls back to the current session document." },
   },
+};
+
+const ImContentPartSchema = {
+  anyOf: [
+    {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        type: { type: "string", enum: ["input_text"] },
+        text: { type: "string", description: "Text shown before or with the image cards." },
+      },
+      required: ["type", "text"],
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        type: { type: "string", enum: ["input_image"] },
+        image_url: { type: "string", description: "HTTPS image URL or data:image/png|jpeg|webp|gif;base64,... . Never pass local paths, file:, blob:, localhost, or private-network URLs." },
+        detail: { type: "string", enum: ["auto", "low", "high"], description: "OpenAI Responses-style image detail hint. Xiaoduiyou stores it for compatibility; rendering is controlled by display metadata." },
+        display: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            title: { type: "string", description: "Card title." },
+            subtitle: { type: "string", description: "Card subtitle, source, price, or short note." },
+            badge: { type: "string", description: "Small card badge, such as 商品候选 or 参考." },
+            link_url: { type: "string", description: "Optional HTTP/HTTPS click-through URL for the image card." },
+          },
+        },
+      },
+      required: ["type", "image_url"],
+    },
+  ],
+};
+
+const ImSendSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    session_id: { type: "string", description: "Optional Xiaoduiyou session id. Omit inside an active Xiaoduiyou turn." },
+    turn_id: { type: "string", description: "Optional Xiaoduiyou turn id. Omit inside an active Xiaoduiyou turn." },
+    content: {
+      type: "array",
+      description: "OpenAI Responses-style content parts. Use input_text for text and input_image for images. Backend uploads images and sends Xiaoduiyou image_attachments.",
+      items: ImContentPartSchema,
+      minItems: 1,
+      maxItems: 20,
+    },
+    account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the current connector account." },
+  },
+  required: ["content"],
 };
 
 function textBlock(text, type = "paragraph", props = undefined) {
@@ -326,6 +378,32 @@ function createDocumentDeleteTool() {
   };
 }
 
+function createImSendTool(config) {
+  return {
+    name: "xiaoduiyou_im_send",
+    label: "Xiaoduiyou IM Send",
+    description: "Send Xiaoduiyou chat image cards using OpenAI Responses-style content parts. Use input_text and input_image; pass HTTPS or data:image/... base64 in image_url. Do not upload assets yourself and never pass local file paths.",
+    parameters: ImSendSchema,
+    execute: async (_toolCallId, rawParams = {}) => {
+      const context = activeXiaoduiyouToolContext();
+      const account = resolveToolAccount(config, { ...rawParams, account_id: rawParams.account_id || context.accountId });
+      const payload = {
+        session_id: rawParams.session_id || context.sessionId,
+        turn_id: rawParams.turn_id || context.turnId,
+        content: rawParams.content,
+      };
+      const result = await sendXiaoduiyouImMessage(account, payload);
+      return jsonResult({
+        ok: true,
+        status: result.status,
+        mode: result.mode,
+        message_id: result.message_id,
+        attachment_count: Array.isArray(result.image_attachments) ? result.image_attachments.length : 0,
+      });
+    },
+  };
+}
+
 export function registerXiaoduiyouTools(api) {
   api.registerTool(createGrowthDiaryGetTool(api.config), { name: "xiaoduiyou_growth_diary_get" });
   api.registerTool(createGrowthDiaryPatchTool(api.config), { name: "xiaoduiyou_growth_diary_patch" });
@@ -333,4 +411,5 @@ export function registerXiaoduiyouTools(api) {
   api.registerTool(createDocumentCreateTool(), { name: "xiaoduiyou_documents_create" });
   api.registerTool(createDocumentUpdateTool(), { name: "xiaoduiyou_documents_update" });
   api.registerTool(createDocumentDeleteTool(), { name: "xiaoduiyou_documents_delete" });
+  api.registerTool(createImSendTool(api.config), { name: "xiaoduiyou_im_send" });
 }

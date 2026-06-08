@@ -1,4 +1,4 @@
-export const XIAODUIYOU_CONNECTOR_VERSION = "2026.6.8.1";
+export const XIAODUIYOU_CONNECTOR_VERSION = "2026.6.8.2";
 
 async function readJsonResponse(response, path) {
   const rawText = await response.text();
@@ -152,5 +152,12 @@ export async function sendXiaoduiyouSessionMessage(account, sessionId, text) {
   return await requestJson(account, `/api/agent/sessions/${encodeURIComponent(sessionId)}/messages`, {
     method: "POST",
     body: sessionMessagePayloadFromText(text),
+  });
+}
+
+export async function sendXiaoduiyouImMessage(account, payload) {
+  return await requestJson(account, "/api/agent/im/send", {
+    method: "POST",
+    body: payload,
   });
 }

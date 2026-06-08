@@ -17,6 +17,10 @@ Official replay/reference/product images must not be stored in the app server re
 
 ## Upload flow
 
+For chat-only visual cards, prefer `xiaoduiyou_im_send` and pass `https://` or `data:image/...;base64,...`; Xiaoduiyou backend uploads the image and emits `image_attachments`.
+
+For document artifacts or legacy connectors without `xiaoduiyou_im_send`:
+
 1. Generate or obtain the final image file.
 2. Upload it to Xiaoduiyou:
    - endpoint: `POST /api/assets`
