@@ -2,7 +2,16 @@ import {
   runPreparedInboundReplyTurn,
 } from "openclaw/plugin-sdk/inbound-reply-dispatch";
 import { createChannelReplyPipeline } from "openclaw/plugin-sdk/channel-reply-pipeline";
+import { callGatewayTool } from "openclaw/plugin-sdk/agent-harness-runtime";
 import {
+  buildXiaoduiyouExecApprovalRequest,
+  normalizeOpenClawExecApprovalPayload,
+  openClawDecisionFromXiaoduiyouChoice,
+  waitForXiaoduiyouInteractiveDecision,
+} from "./approval.js";
+import {
+  createXiaoduiyouInteractiveRequest,
+  getXiaoduiyouInteractiveRequest,
   completeXiaoduiyouTurn,
   failXiaoduiyouTurn,
   postXiaoduiyouProgress,
@@ -135,6 +144,33 @@ async function deliverXiaoduiyouDispatchPayload(account, turnId, payload, info, 
   // remain stuck with only progress/tool bubbles when no explicit final arrives.
   appendFinalFallbackText(dispatchState, text, info?.kind);
   await postXiaoduiyouProgress(account, turnId, text);
+}
+
+async function maybeHandleOpenClawExecApproval(account, turn, sessionId, sessionKey, payload, signal) {
+  const approval = normalizeOpenClawExecApprovalPayload(payload);
+  if (!approval) return false;
+  const created = await createXiaoduiyouInteractiveRequest(account, buildXiaoduiyouExecApprovalRequest({
+    approval,
+    sessionId,
+    turnId: turn.turn_id,
+    sessionKey,
+  }));
+  const requestId = created?.request?.request_id ?? created?.request_id;
+  if (!requestId) return false;
+  const choice = await waitForXiaoduiyouInteractiveDecision({
+    account,
+    requestId,
+    getRequest: getXiaoduiyouInteractiveRequest,
+    signal,
+  });
+  const decision = openClawDecisionFromXiaoduiyouChoice(choice);
+  if (!decision) return true;
+  await callGatewayTool("exec.approval.resolve", {}, {
+    id: approval.approvalId,
+    decision,
+    resolvedBy: `xiaoduiyou:${turn.sender_id ?? turn.session_id ?? "user"}`,
+  });
+  return true;
 }
 
 function withXiaoduiyouVerboseConfig(config) {
@@ -286,7 +322,13 @@ export async function handleXiaoduiyouTurn({ account, config, turn, runtime }) {
             },
             onError: (error) => { throw error; },
           },
-          replyOptions: { onModelSelected, sourceReplyDeliveryMode: "automatic" },
+          replyOptions: {
+            onModelSelected,
+            onToolResult: async (payload) => {
+              await maybeHandleOpenClawExecApproval(account, turn, sessionId, route.sessionKey, payload, undefined);
+            },
+            sourceReplyDeliveryMode: "automatic",
+          },
         }),
       });
     });

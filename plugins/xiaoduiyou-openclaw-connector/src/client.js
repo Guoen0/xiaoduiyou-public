@@ -1,4 +1,4 @@
-export const XIAODUIYOU_CONNECTOR_VERSION = "2026.6.3.4";
+export const XIAODUIYOU_CONNECTOR_VERSION = "2026.6.8.1";
 
 async function readJsonResponse(response, path) {
   const rawText = await response.text();
@@ -107,6 +107,17 @@ export async function failXiaoduiyouTurn(account, turnId, error) {
     method: "POST",
     body: { error: error instanceof Error ? error.message : String(error) },
   });
+}
+
+export async function createXiaoduiyouInteractiveRequest(account, payload) {
+  return await requestJson(account, "/api/agent/interactive-requests", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function getXiaoduiyouInteractiveRequest(account, requestId) {
+  return await requestJson(account, `/api/agent/interactive-requests/${encodeURIComponent(requestId)}`);
 }
 
 function looksLikeToolProgress(content) {
