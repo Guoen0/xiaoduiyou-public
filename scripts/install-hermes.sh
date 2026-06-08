@@ -91,7 +91,19 @@ def block_end(start: int) -> int:
     index = start + 1
     while index < len(lines):
         stripped = lines[index].strip()
-        if stripped and not stripped.startswith("#") and indent_of(lines[index]) <= parent_indent:
+        if not stripped or stripped.startswith("#"):
+            index += 1
+            continue
+        current_indent = indent_of(lines[index])
+        # YAML permits sequence items at the same indent as the key when the
+        # key has no inline value, e.g.:
+        #   enabled:
+        #   - plugin-name
+        # Treat those as part of the child block; otherwise replacement leaves
+        # stale list items behind and can corrupt config.yaml.
+        if current_indent < parent_indent:
+            break
+        if current_indent == parent_indent and not stripped.startswith("-"):
             break
         index += 1
     return index
