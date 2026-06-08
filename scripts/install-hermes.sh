@@ -63,18 +63,19 @@ PY
   fi
 }
 
-write_hermes_connection_token() {
+write_hermes_config() {
   local config_file="${HERMES_HOME_DIR}/config.yaml"
   mkdir -p "$(dirname "$config_file")"
   touch "$config_file"
-  python3 - "$config_file" "$XDY_CONNECTION_TOKEN" <<'PY'
+  python3 - "$config_file" "$XDY_BASE_URL" "$XDY_CONNECTION_TOKEN" <<'PY'
 from pathlib import Path
 import json
 import re
 import sys
 
 path = Path(sys.argv[1])
-token = sys.argv[2]
+base_url = sys.argv[2]
+token = sys.argv[3]
 lines = path.read_text(encoding="utf-8").splitlines()
 
 def indent_of(line: str) -> int:
@@ -105,7 +106,8 @@ def find_child(start: int, end: int, key: str) -> int:
     return -1
 
 def find_top_key(key: str) -> int:
-    for index, line in enumerate(lines):
+    for index in range(len(lines) - 1, -1, -1):
+        line = lines[index]
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
@@ -113,30 +115,69 @@ def find_top_key(key: str) -> int:
             return index
     return -1
 
-quoted_token = json.dumps(token, ensure_ascii=False)
-
-platforms_index = find_top_key("platforms")
-if platforms_index < 0:
+def ensure_top_key(key: str) -> int:
+    index = find_top_key(key)
+    if index >= 0:
+        return index
     if lines and lines[-1].strip():
         lines.append("")
-    lines.extend(["platforms:", "  xiaoduiyou:", "    extra:", f"      connection_token: {quoted_token}"])
-else:
-    platforms_end = block_end(platforms_index)
-    xiaoduiyou_index = find_child(platforms_index, platforms_end, "xiaoduiyou")
-    if xiaoduiyou_index < 0:
-        lines[platforms_end:platforms_end] = ["  xiaoduiyou:", "    extra:", f"      connection_token: {quoted_token}"]
-    else:
-        xiaoduiyou_end = block_end(xiaoduiyou_index)
-        extra_index = find_child(xiaoduiyou_index, xiaoduiyou_end, "extra")
-        if extra_index < 0:
-            lines[xiaoduiyou_end:xiaoduiyou_end] = ["    extra:", f"      connection_token: {quoted_token}"]
-        else:
-            extra_end = block_end(extra_index)
-            token_index = find_child(extra_index, extra_end, "connection_token")
-            if token_index < 0:
-                lines[extra_end:extra_end] = [f"      connection_token: {quoted_token}"]
-            else:
-                lines[token_index] = f"{' ' * indent_of(lines[token_index])}connection_token: {quoted_token}"
+    lines.append(f"{key}:")
+    return len(lines) - 1
+
+def replace_direct_child(parent_index: int, key: str, child_lines: list[str]) -> int:
+    parent_end = block_end(parent_index)
+    child_index = find_child(parent_index, parent_end, key)
+    if child_index < 0:
+        lines[parent_end:parent_end] = child_lines
+        return parent_end
+    child_end = block_end(child_index)
+    lines[child_index:child_end] = child_lines
+    return child_index
+
+def yaml_list_block(key: str, values: list[str], indent: int) -> list[str]:
+    prefix = " " * indent
+    item_prefix = " " * (indent + 2)
+    return [f"{prefix}{key}:"] + [f"{item_prefix}- {value}" for value in values]
+
+toolsets = [
+    "web",
+    "browser",
+    "terminal",
+    "file",
+    "code_execution",
+    "vision",
+    "image_gen",
+    "tts",
+    "skills",
+    "todo",
+    "memory",
+    "session_search",
+    "clarify",
+    "delegation",
+    "cronjob",
+    "messaging",
+    "xiaoduiyou",
+]
+
+plugins_index = ensure_top_key("plugins")
+replace_direct_child(plugins_index, "enabled", yaml_list_block("enabled", ["xiaoduiyou-hermes-platform"], 2))
+
+platforms_index = ensure_top_key("platforms")
+replace_direct_child(platforms_index, "xiaoduiyou", [
+    "  xiaoduiyou:",
+    "    enabled: true",
+    "    extra:",
+    f"      base_url: {json.dumps(base_url, ensure_ascii=False)}",
+    f"      connection_token: {json.dumps(token, ensure_ascii=False)}",
+    "      poll_interval_seconds: 1.0",
+    "    home_channel:",
+    "      platform: xiaoduiyou",
+    "      chat_id: xiaoduiyou",
+    "      name: Xiaoduiyou",
+])
+
+toolsets_index = ensure_top_key("platform_toolsets")
+replace_direct_child(toolsets_index, "xiaoduiyou", yaml_list_block("xiaoduiyou", toolsets, 2))
 
 path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
@@ -164,15 +205,7 @@ install_hermes_runtime_skills
 
 clear_legacy_hermes_env_overrides
 
-HERMES_HOME="$HERMES_HOME_DIR" hermes config set plugins.enabled '["xiaoduiyou-hermes-platform"]'
-HERMES_HOME="$HERMES_HOME_DIR" hermes config set platforms.xiaoduiyou.enabled true
-HERMES_HOME="$HERMES_HOME_DIR" hermes config set platforms.xiaoduiyou.extra.base_url "$XDY_BASE_URL"
-write_hermes_connection_token
-HERMES_HOME="$HERMES_HOME_DIR" hermes config set platforms.xiaoduiyou.extra.poll_interval_seconds 1.0
-HERMES_HOME="$HERMES_HOME_DIR" hermes config set platforms.xiaoduiyou.home_channel.platform xiaoduiyou
-HERMES_HOME="$HERMES_HOME_DIR" hermes config set platforms.xiaoduiyou.home_channel.chat_id xiaoduiyou
-HERMES_HOME="$HERMES_HOME_DIR" hermes config set platforms.xiaoduiyou.home_channel.name Xiaoduiyou
-HERMES_HOME="$HERMES_HOME_DIR" hermes config set platform_toolsets.xiaoduiyou '["web","browser","terminal","file","code_execution","vision","image_gen","tts","skills","todo","memory","session_search","clarify","delegation","cronjob","messaging","xiaoduiyou"]'
+write_hermes_config
 HERMES_HOME="$HERMES_HOME_DIR" hermes gateway restart
 
 echo "Xiaoduiyou Hermes plugin and runtime skills are installed in ${HERMES_HOME_DIR}."
