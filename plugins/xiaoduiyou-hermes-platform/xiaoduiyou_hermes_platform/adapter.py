@@ -718,7 +718,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             "thread_id": None,
         }]
         seen_ids = {"default"}
-        hidden_purposes = {"growth_diary", "content_package", "feedback"}
+        hidden_purposes = {"growth_diary", "content_package", "feedback", "floating_agent"}
         try:
             sessions = await asyncio.to_thread(self._list_agent_sessions)
         except Exception as exc:
@@ -732,8 +732,6 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             if str(session.get("session_purpose") or "") in hidden_purposes:
                 continue
             title = str(session.get("title") or session_id).strip() or session_id
-            if str(session.get("session_purpose") or "") == "floating_agent":
-                title = "主对话"
             channels.append({
                 "id": session_id,
                 "name": title,
