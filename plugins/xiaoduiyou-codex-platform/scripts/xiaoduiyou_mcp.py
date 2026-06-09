@@ -257,11 +257,16 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         return text_result(request_json(f"/api/agent/sessions/{parse.quote(session_id)}/messages", method="POST", body=body))
 
     if name == "xiaoduiyou_im_send":
-        session_id = required(args, "session_id")
+        session_id = str(args.get("session_id") or "").strip()
+        channel = str(args.get("channel") or "default").strip()
         content = args.get("content")
         if not isinstance(content, list) or not content:
             raise ValueError("content[] with input_text/input_image parts is required")
-        payload: dict[str, Any] = {"session_id": session_id, "content": content}
+        payload: dict[str, Any] = {"content": content}
+        if session_id:
+            payload["session_id"] = session_id
+        else:
+            payload["channel"] = channel or "default"
         turn_id = str(args.get("turn_id") or "").strip()
         if turn_id:
             payload["turn_id"] = turn_id
@@ -420,8 +425,9 @@ TOOLS = [
     },
     {
         "name": "xiaoduiyou_im_send",
-        "description": "Send Xiaoduiyou chat image cards using OpenAI Responses-style content parts. Use input_text and input_image; pass HTTPS or data:image/... base64 in image_url. Xiaoduiyou backend uploads images/assets. Never pass local paths, file:, blob:, localhost, or private-network URLs.",
+        "description": "Send Xiaoduiyou chat image cards to the Home default channel (主对话) or a specific session using OpenAI Responses-style content parts. Omit session_id for background/default delivery. Use input_text and input_image; pass HTTPS or data:image/... base64 in image_url. Xiaoduiyou backend uploads images/assets. Never pass local paths, file:, blob:, localhost, or private-network URLs.",
         "inputSchema": schema({
+            "channel": {"type": "string", "description": "Stable Xiaoduiyou Home channel key. Defaults to default/主对话 when session_id is omitted."},
             "session_id": {"type": "string"},
             "turn_id": {"type": "string"},
             "content": {
@@ -449,7 +455,7 @@ TOOLS = [
                     },
                 },
             },
-        }, ["session_id", "content"]),
+        }, ["content"]),
     },
     {
         "name": "xiaoduiyou_interactive_request_create",

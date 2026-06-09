@@ -35,12 +35,12 @@ Use the Xiaoduiyou origin and auth context supplied by the active connection pro
      - `artifact` for generated/revised content packages, or
      - `document_actions` for document/process-draft-only operations.
 
-For platform-originated outbound messages without an active pending turn, send a chat message to the session:
+For platform-originated outbound messages without an active pending turn, send a chat message to the stable Home channel (`default`, shown to users as `主对话`):
 
-- `POST /api/agent/sessions/{session_id}/messages`
-- plain text body: `{ "text": "正文，可包含 https://www.xiaohongshu.com/explore/... 或 https://item.taobao.com/item.htm?id=..." }`
-- visual-card body: `{ "text": "点图片可以打开来源。", "image_attachments": [{ "image_url": "https://durable-asset/card.webp", "link_url": "https://www.xiaohongshu.com/explore/...", "title": "参考帖标题", "subtitle": "小红书 · 经验参考", "badge": "参考帖" }] }`
-- If the platform send tool only accepts a string, send that visual-card object as a JSON string; the Xiaoduiyou Hermes/OpenClaw plugin parses it before calling the session-message endpoint.
+- `POST /api/agent/im/send`
+- default/Home body: `{ "channel": "default", "text": "正文，可包含 https://www.xiaohongshu.com/explore/... 或 https://item.taobao.com/item.htm?id=..." }`
+- visual-card body: `{ "channel": "default", "content": [{ "type": "input_text", "text": "点图片可以打开来源。" }, { "type": "input_image", "image_url": "https://durable-asset/card.webp", "display": { "link_url": "https://www.xiaohongshu.com/explore/...", "title": "参考帖标题", "subtitle": "小红书 · 经验参考", "badge": "参考帖" } }] }`
+- Use `session_id` only when intentionally targeting one existing Xiaoduiyou session.
 - Links in `text` render clickable. `image_attachments[].link_url` makes the card image/title clickable. Use this for official-case-style Xiaohongshu/Taobao visual cards. For artifacts and document mutations, keep using active-turn `events`/`callback` plus document tools.
 
 Before final callback, validate that publish tabs contain only user-facing deliverables, sources remain in `过程材料`, and every image URL is browser-accessible.

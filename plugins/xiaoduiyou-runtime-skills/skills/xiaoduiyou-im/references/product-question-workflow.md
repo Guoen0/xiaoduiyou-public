@@ -73,19 +73,19 @@ For product questions, the Xiaoduiyou chat answer should include image attachmen
 
 If the user asks “用视觉卡片 / 换成卡片 / 点图能跳转” after a text-only source list, treat that as a formatting correction and send cards immediately; do not repeat the text list or explain the format first. Use 2–6 high-signal cards, with image + title + short subtitle + clean `link_url`.
 
-Do **not** send visual cards to Xiaoduiyou as Markdown images or local `MEDIA:/...` attachments. Xiaoduiyou chat does not render generic Hermes `MEDIA:` attachments. Use the bundled script so every card is uploaded to Xiaoduiyou assets and delivered as structured `image_attachments`:
+Do **not** send visual cards to Xiaoduiyou as Markdown images or local `MEDIA:/...` attachments. Xiaoduiyou chat does not render generic Hermes `MEDIA:` attachments. Prefer `xiaoduiyou_im_send`; for old connectors without that tool, use the bundled script so every card is delivered through `/api/agent/im/send`:
 
 ```bash
 HERMES_SKILL_HOME="${HERMES_HOME:-$HOME/.hermes}"
 python "$HERMES_SKILL_HOME/skills/xiaoduiyou/xiaoduiyou-im/scripts/send_visual_cards.py" \
   --list-sessions
 python "$HERMES_SKILL_HOME/skills/xiaoduiyou/xiaoduiyou-im/scripts/send_visual_cards.py" \
-  --session-id sess_0005 \
+  --channel default \
   --text '龙柳小红书参考卡片' \
-  --card '{"image_path":"/tmp/card.png","title":"龙柳参考","link_url":"https://www.xiaohongshu.com/explore/...","badge":"参考帖"}'
+  --cards-json '[{"image_path":"/tmp/card.png","title":"龙柳参考","link_url":"https://www.xiaohongshu.com/explore/...","badge":"参考帖"}]'
 ```
 
-Use this payload shape on `POST /api/hermes/turns/{turn_id}/events`, final callback progress-equivalent payload, or `POST /api/agent/sessions/{session_id}/messages` when sending outside an active turn:
+Use this payload shape on `POST /api/hermes/turns/{turn_id}/events`, final callback progress-equivalent payload, or `POST /api/agent/im/send` with `channel: "default"` when sending outside an active turn:
 
 ```json
 {

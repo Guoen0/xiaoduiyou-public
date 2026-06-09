@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Send Xiaoduiyou visual cards via assets + structured image_attachments.
+"""Send Xiaoduiyou visual cards via /api/agent/im/send.
 
 Use this instead of MEDIA:/... or Markdown images when a Xiaoduiyou user asks for
-视觉卡片. It uploads local/remote images to /api/assets, then posts a structured
-message to /api/agent/sessions/{session_id}/messages.
+视觉卡片. It sends OpenAI Responses-style content parts to the Home default
+channel (shown to users as 主对话) unless --session-id targets a specific active session.
 """
 from __future__ import annotations
 
-import argparse, json, mimetypes, os, re, tempfile, time, urllib.error, urllib.request
+import argparse, base64, json, mimetypes, os, re, tempfile, urllib.error, urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -73,18 +73,6 @@ def list_sessions(base: str, tok: str) -> list[dict[str, Any]]:
     return [s for s in sessions if isinstance(s, dict)] if isinstance(sessions, list) else []
 
 
-def resolve_session(base: str, tok: str, explicit: str | None) -> str:
-    if explicit:
-        return explicit
-    env = os.getenv("XIAODUIYOU_SESSION_ID") or os.getenv("XDY_SESSION_ID")
-    if env:
-        return env
-    sessions = list_sessions(base, tok)
-    if len(sessions) == 1 and sessions[0].get("session_id"):
-        return str(sessions[0]["session_id"])
-    raise SystemExit("Pass --session-id (or run --list-sessions).")
-
-
 def download_image(url: str) -> Path:
     req = urllib.request.Request(url, headers={"User-Agent": "Xiaoduiyou-VisualCards/1.0", "Referer": "https://www.xiaohongshu.com/"})
     with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
@@ -96,27 +84,6 @@ def download_image(url: str) -> Path:
         with os.fdopen(fd, "wb") as f:
             f.write(resp.read())
         return Path(name)
-
-
-def upload_asset(base: str, tok: str, session_id: str, file_path: Path, *, require_remote: bool) -> str:
-    boundary = f"----XDYVisualCard{int(time.time() * 1000)}"
-    filename = file_path.name
-    mime = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-    fields = {"source": "agent_generated", "session_id": session_id, "require_remote_storage": "true" if require_remote else "false"}
-    chunks: list[bytes] = []
-    for k, v in fields.items():
-        chunks += [f"--{boundary}\r\n".encode(), f'Content-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()]
-    chunks += [f"--{boundary}\r\n".encode(), f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode(), f"Content-Type: {mime}\r\n\r\n".encode(), file_path.read_bytes(), f"\r\n--{boundary}--\r\n".encode()]
-    req = urllib.request.Request(f"{base}/api/assets", data=b"".join(chunks), method="POST", headers={"Authorization": f"Bearer {tok}", "Content-Type": f"multipart/form-data; boundary={boundary}", "Accept": "application/json", "X-XDY-Connector-Provider": "hermes", "X-XDY-Connector-Version": VERSION})
-    try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"asset upload HTTP {exc.code}: {exc.read().decode('utf-8', 'replace')}") from exc
-    url = str(data.get("url") or ((data.get("asset") or {}).get("public_url")) or "")
-    if not url.startswith(("http://", "https://")):
-        raise RuntimeError(f"asset upload returned no public URL: {data}")
-    return url
 
 
 def load_cards(value: str) -> list[dict[str, Any]]:
@@ -131,20 +98,21 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--base-url")
     p.add_argument("--token")
+    p.add_argument("--channel", default="default", help="Stable Xiaoduiyou Home channel key. Defaults to default/主对话. Ignored when --session-id is set.")
     p.add_argument("--session-id")
     p.add_argument("--text", default="视觉卡片")
     p.add_argument("--cards-json", help="JSON array or path. Each card needs image_path or image_url plus title/link_url/subtitle/badge.")
     p.add_argument("--list-sessions", action="store_true")
-    p.add_argument("--allow-local-storage", action="store_true", help="Use only for local/review when TOS is not configured.")
+    p.add_argument("--allow-local-storage", action="store_true", help="Deprecated compatibility flag; /api/agent/im/send owns final asset storage.")
     args = p.parse_args()
     base, tok = base_url(args.base_url), token(args.token)
     if args.list_sessions:
         print(json.dumps({"base_url": base, "sessions": list_sessions(base, tok)}, ensure_ascii=False, indent=2))
         return 0
-    sid = resolve_session(base, tok, args.session_id)
     if not args.cards_json:
         raise SystemExit("Pass --cards-json")
-    attachments, temps = [], []
+    content: list[dict[str, Any]] = [{"type": "input_text", "text": args.text}]
+    temps = []
     try:
         for card in load_cards(args.cards_json):
             item = dict(card)
@@ -156,13 +124,25 @@ def main() -> int:
                 path = download_image(image_url); temps.append(path)
             else:
                 raise SystemExit("each card needs image_path or image_url")
-            item["image_url"] = upload_asset(base, tok, sid, path, require_remote=not args.allow_local_storage)
-            item.setdefault("badge", "参考")
-            attachments.append(item)
-        payload = {"text": args.text, "detail": args.text, "image_urls": [a["image_url"] for a in attachments], "image_attachments": attachments}
-        result = request_json(f"{base}/api/agent/sessions/{sid}/messages", method="POST", tok=tok, payload=payload)
+            mime = mimetypes.guess_type(path.name)[0] or "image/png"
+            if not mime.startswith("image/"):
+                raise SystemExit(f"not an image file: {path}")
+            display = {k: item[k] for k in ("title", "subtitle", "badge", "link_url") if item.get(k)}
+            content.append({
+                "type": "input_image",
+                "image_url": f"data:{mime};base64,{base64.b64encode(path.read_bytes()).decode('ascii')}",
+                "detail": "auto",
+                "display": display,
+            })
+        payload = {"content": content}
+        if args.session_id:
+            payload["session_id"] = args.session_id
+        else:
+            payload["channel"] = args.channel or "default"
+        result = request_json(f"{base}/api/agent/im/send", method="POST", tok=tok, payload=payload)
         event = result.get("event") or {}; ep = event.get("payload") or {}
-        print(json.dumps({"status": result.get("status"), "message_id": result.get("message_id"), "session_id": event.get("session_id"), "event_type": event.get("type"), "attachment_count": len(ep.get("image_attachments") or [])}, ensure_ascii=False, indent=2))
+        target = result.get("target") or {}
+        print(json.dumps({"status": result.get("status"), "message_id": result.get("message_id"), "target": target, "session_id": event.get("session_id"), "event_type": event.get("type"), "attachment_count": len(ep.get("image_attachments") or [])}, ensure_ascii=False, indent=2))
         return 0
     finally:
         for t in temps:

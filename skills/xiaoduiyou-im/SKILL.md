@@ -51,10 +51,11 @@ Load this when:
 
 ## Preferred Tool
 
-Call `xiaoduiyou_im_send` with OpenAI Responses-style content parts:
+Call `xiaoduiyou_im_send` with OpenAI Responses-style content parts. Omit `session_id` for background/default delivery; Xiaoduiyou will route it to the stable Home `default` channel, shown to users as `主对话`. Pass `session_id` only when replying to a specific active session.
 
 ```json
 {
+  "channel": "default",
   "content": [
     { "type": "input_text", "text": "点图片可以打开来源。" },
     {
@@ -76,7 +77,7 @@ Use `data:image/png;base64,...` for generated images when you do not already hav
 
 ## Legacy Script
 
-- `scripts/send_visual_cards.py`: fallback for old connectors without `xiaoduiyou_im_send`; uploads local/remote images to Xiaoduiyou assets and sends structured `image_attachments` to a session.
+- `scripts/send_visual_cards.py`: fallback for old connectors without `xiaoduiyou_im_send`; sends structured content parts through `/api/agent/im/send`, defaulting to the Home `default` channel (`主对话`).
 
 Quick use:
 
@@ -84,7 +85,7 @@ Quick use:
 HERMES_SKILL_HOME="${HERMES_HOME:-$HOME/.hermes}"
 python "$HERMES_SKILL_HOME/skills/xiaoduiyou/xiaoduiyou-im/scripts/send_visual_cards.py" --list-sessions
 python "$HERMES_SKILL_HOME/skills/xiaoduiyou/xiaoduiyou-im/scripts/send_visual_cards.py" \
-  --session-id sess_0053 \
+  --channel default \
   --text '点图片可以打开来源。' \
   --cards-json /tmp/cards.json
 ```

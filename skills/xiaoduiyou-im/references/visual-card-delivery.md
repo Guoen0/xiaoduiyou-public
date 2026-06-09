@@ -15,7 +15,7 @@ If the user says “视觉卡片” while the current screen is a Xiaoduiyou Age
 The correct path is `xiaoduiyou_im_send`:
 
 1. Prepare one image per card. For generated images, use `data:image/png;base64,...`; for existing web images, use durable `https://` URLs. Do not pass local paths.
-2. Call `xiaoduiyou_im_send` with `content[]` parts:
+2. Call `xiaoduiyou_im_send` with `content[]` parts. Omit `session_id` for background/default delivery; Xiaoduiyou routes to the Home `default` channel, shown to users as `主对话`. Pass `session_id` only when targeting a specific active session.
    - `input_text` for the card intro text.
    - `input_image` with `image_url`, `detail`, and Xiaoduiyou `display` metadata (`title`, `subtitle`, `badge`, `link_url`).
 3. Let Xiaoduiyou backend upload/assetize images and emit the final `image_attachments[]`.
@@ -26,6 +26,7 @@ Example tool payload:
 
 ```json
 {
+  "channel": "default",
   "content": [
     { "type": "input_text", "text": "龙柳小红书视觉卡片，点图片可打开原帖。" },
     {
@@ -51,7 +52,7 @@ Use the bundled script only for old Hermes/OpenClaw installs where `xiaoduiyou_i
 HERMES_SKILL_HOME="${HERMES_HOME:-$HOME/.hermes}"
 python "$HERMES_SKILL_HOME/skills/xiaoduiyou/xiaoduiyou-im/scripts/send_visual_cards.py" --list-sessions
 python "$HERMES_SKILL_HOME/skills/xiaoduiyou/xiaoduiyou-im/scripts/send_visual_cards.py" \
-  --session-id sess_0005 \
+  --channel default \
   --text '龙柳小红书视觉卡片，点图片可打开原帖。' \
   --cards-json /tmp/cards.json
 ```
