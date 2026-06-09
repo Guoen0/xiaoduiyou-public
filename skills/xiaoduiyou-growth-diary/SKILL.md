@@ -25,7 +25,7 @@ Load this when the user asks to:
 5. Upload photos/assets via connector-supported `/api/assets` tooling before saving attachment fields.
 6. Preserve enum option IDs/names from live schema; do not invent options unless the user explicitly asks to add them.
 7. Deduplicate repeated real-world care events: same time + same event = one record with additional source/notes.
-8. For event time, use the user's message time as the fallback source of truth. If the user states an explicit date/time, use that. If the user says "now", "刚才", or gives no time, derive `occurred_at` and `date` from the active Xiaoduiyou turn/user-message `created_at` timestamp. Do not invent clock times, round to arbitrary times, or use the Agent's local/system time unless that time is the Xiaoduiyou-provided turn timestamp.
+8. For event time, use the user's message time as the fallback source of truth. If the user states an explicit date/time, use that. If the user says "now", "刚才", or gives no time, derive `occurred_at` and `date` from the active Xiaoduiyou turn/user-message `created_at` timestamp. Agent writes must send `date` as `YYYY-MM-DD` and `occurred_at` as `YYYY-MM-DD HH:mm:ss` with matching dates; short times like `19:20` are invalid and will be rejected. Do not invent clock times, round to arbitrary times, or use the Agent's local/system time unless that time is the Xiaoduiyou-provided turn timestamp.
 9. Keep family-care records in Feishu when the user is talking about the Feishu family log; use Xiaoduiyou Growth Diary only when the task is clearly Xiaoduiyou/Discord-side diary.
 
 ## Case map owned by Growth Diary

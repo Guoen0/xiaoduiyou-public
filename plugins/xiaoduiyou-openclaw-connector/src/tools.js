@@ -254,7 +254,7 @@ function createGrowthDiaryPatchTool(config) {
   return {
     name: "xiaoduiyou_growth_diary_patch",
     label: "Xiaoduiyou Growth Diary Patch",
-    description: "Create/update/delete Xiaoduiyou Growth Diary records/options/views for the current connected Xiaoduiyou account. Use skill xiaoduiyou-growth-diary, then call xiaoduiyou_growth_diary_get first. For new records, records items must look like { table_id, source, values }; put title/event_type/quantity/unit/date/occurred_at/risk inside values, not at the record root. Use updates for existing cells, deletions for deletes, and never send values:null. The result is a concise verification summary, not the full base.",
+    description: "Create/update/delete Xiaoduiyou Growth Diary records/options/views for the current connected Xiaoduiyou account. Use skill xiaoduiyou-growth-diary, then call xiaoduiyou_growth_diary_get first. For new records, records items must look like { table_id, source, values }; put title/event_type/quantity/unit/date/occurred_at/risk inside values, not at the record root. For records with source='agent', values.date is required as YYYY-MM-DD and values.occurred_at is required as YYYY-MM-DD HH:mm:ss; short times like 19:20 are rejected, and occurred_at must use the same date as date. Use updates for existing cells, deletions for deletes, and never send values:null. The result is a concise verification summary, not the full base.",
     parameters: GrowthDiaryPatchSchema,
     execute: async (_toolCallId, rawParams = {}) => {
       const account = resolveToolAccount(config, rawParams);

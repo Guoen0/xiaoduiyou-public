@@ -89,8 +89,8 @@ Important fields:
 
 | field_id | Type | Notes |
 |---|---|---|
-| `date` | date | `YYYY-MM-DD`; auto-filled from `occurred_at` for new records if omitted. |
-| `occurred_at` | datetime | Prefer `YYYY-MM-DD HH:mm:ss`. |
+| `date` | date | Required for Agent-created records as `YYYY-MM-DD`. Must match the date portion of `occurred_at`. |
+| `occurred_at` | datetime | Required for Agent-created records as `YYYY-MM-DD HH:mm:ss`. Time-only values like `19:20` are rejected. |
 | `event_type` | single_select | Store option id when known; labels also normalize through aliases. |
 | `title` | text | Required in UI; for Agent writes may be derived from `content` if omitted. |
 | `content` | long_text | Structured short description. |
@@ -212,7 +212,7 @@ Minimal Agent-created record:
 Notes:
 
 - Set `source: "agent"` for Agent-created rows.
-- If `date` is omitted, runtime derives it from `occurred_at`.
+- Do not omit `date` for Agent-created rows. The API rejects Agent records unless `date` is `YYYY-MM-DD` and `occurred_at` is `YYYY-MM-DD HH:mm:ss` with the same date.
 - Choose `occurred_at` from the user's wording first. If the user gives no specific time, use the current Xiaoduiyou turn/user-message `created_at` timestamp; do not substitute the Agent runtime clock or fabricate an approximate time.
 - If `title` is omitted, runtime derives it from `content`.
 - Prefer option ids from the live schema. Labels are accepted for common aliases, but ids are safer.

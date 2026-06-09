@@ -616,6 +616,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             "For Growth Diary tasks, use skill xiaoduiyou-growth-diary, call xiaoduiyou_growth_diary_get first, then xiaoduiyou_growth_diary_patch for writes; "
             "do not search local files/env/config for connection_token and do not call /api/growth-diary manually from terminal. "
             "For Growth Diary event time, use explicit user wording first; if absent, use this Xiaoduiyou turn's created_at, never the Agent runtime clock or an invented time. "
+            "Agent-created records must include date as YYYY-MM-DD and occurred_at as YYYY-MM-DD HH:mm:ss with matching dates; short times like 19:20 are invalid and will be rejected. "
             "For ordinary chat, answer normally and do not call document tools. "
             "When the user explicitly asks to create, update, append to, or delete a document, "
             "call the appropriate xiaoduiyou document tool exactly once before your final reply. "
@@ -1574,11 +1575,11 @@ def register(ctx) -> None:
         emoji="🍼",
         schema={
             "name": "xiaoduiyou_growth_diary_patch",
-            "description": "Create/update/delete Growth Diary records/options/views for the current Xiaoduiyou home. The connector supplies auth; the model must pass only the PATCH payload. Use skill xiaoduiyou-growth-diary first. For new records, records items must look like { table_id, source, values }; put title/event_type/quantity/unit/date/occurred_at/risk inside values, not at the record root. Use updates for existing cells, deletions for deletes, and never send values:null. The result is a concise verification summary, not the full base.",
+            "description": "Create/update/delete Growth Diary records/options/views for the current Xiaoduiyou home. The connector supplies auth; the model must pass only the PATCH payload. Use skill xiaoduiyou-growth-diary first. For new records, records items must look like { table_id, source, values }; put title/event_type/quantity/unit/date/occurred_at/risk inside values, not at the record root. For records with source='agent', values.date is required as YYYY-MM-DD and values.occurred_at is required as YYYY-MM-DD HH:mm:ss; short times like 19:20 are rejected, and occurred_at must use the same date as date. Use updates for existing cells, deletions for deletes, and never send values:null. The result is a concise verification summary, not the full base.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "payload": {"type": "object", "description": "Exact JSON payload for PATCH /api/growth-diary after reading the live schema and using skill xiaoduiyou-growth-diary. Use records only to add records; each record must have table_id/source at the record root and field values under values, e.g. { records: [{ table_id: 'tbl_growth_events', source: 'agent', values: { occurred_at, event_type, title, content, quantity, unit, risk } }] }. Use updates for existing cells, deletions for deletes, and never send values:null."},
+                    "payload": {"type": "object", "description": "Exact JSON payload for PATCH /api/growth-diary after reading the live schema and using skill xiaoduiyou-growth-diary. Use records only to add records; each record must have table_id/source at the record root and field values under values, e.g. { records: [{ table_id: 'tbl_growth_events', source: 'agent', values: { date: '2026-06-09', occurred_at: '2026-06-09 19:20:00', event_type, title, content, quantity, unit, risk } }] }. Agent-created records must set values.date='YYYY-MM-DD' and values.occurred_at='YYYY-MM-DD HH:mm:ss' with matching dates; do not send time-only values. Use updates for existing cells, deletions for deletes, and never send values:null."},
                 },
                 "required": ["payload"],
             },

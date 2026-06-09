@@ -42,6 +42,8 @@ These runtime skills are installed by the `xiaoduiyou-runtime-skills` Codex plug
 
 Always call `xiaoduiyou_growth_diary_get` before `xiaoduiyou_growth_diary_patch`.
 
+For Agent-created records, `date` is required as `YYYY-MM-DD` and `occurred_at` is required as `YYYY-MM-DD HH:mm:ss` with the same date. Time-only values like `19:20` are invalid and will be rejected by the API.
+
 For new records, `records[]` must use:
 
 ```json

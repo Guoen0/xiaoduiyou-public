@@ -213,6 +213,7 @@ export async function handleXiaoduiyouTurn({ account, config, turn, runtime }) {
     "Xiaoduiyou connector tools are available.",
     "For Growth Diary tasks, use skill xiaoduiyou-growth-diary, call xiaoduiyou_growth_diary_get first, then xiaoduiyou_growth_diary_patch for writes; do not search local files/env/config for connection_token and do not call /api/growth-diary manually from terminal.",
     "For Growth Diary event time, use explicit user wording first; if absent, use this Xiaoduiyou turn's Timestamp/created_at, never the Agent runtime clock or an invented time.",
+    "Agent-created records must include date as YYYY-MM-DD and occurred_at as YYYY-MM-DD HH:mm:ss with matching dates; short times like 19:20 are invalid and will be rejected.",
     "For ordinary chat, answer normally and do not call document tools.",
     "When the user explicitly asks to create, update, append to, or delete a document, call the appropriate xiaoduiyou document tool exactly once before your final reply.",
     "For content packages, choose UI templates with ui_templates (currently xiaohongshu and/or moments) and fill matching fields.publish_notes.<template> with final result data; process block_json/source_markdown should stay process-only.",

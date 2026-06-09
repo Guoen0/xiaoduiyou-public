@@ -492,7 +492,7 @@ TOOLS = [
     },
     {
         "name": "xiaoduiyou_growth_diary_patch",
-        "description": "Patch Xiaoduiyou Growth Diary data. Call get first. New records must have records[].table_id/source at root and values under records[].values.",
+        "description": "Patch Xiaoduiyou Growth Diary data. Call get first. New records must have records[].table_id/source at root and values under records[].values. For records with source='agent', values.date is required as YYYY-MM-DD and values.occurred_at is required as YYYY-MM-DD HH:mm:ss; short times like 19:20 are rejected, and occurred_at must use the same date as date.",
         "inputSchema": schema({"payload": {"type": "object", "additionalProperties": True}}, ["payload"]),
     },
     {
