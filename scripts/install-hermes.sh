@@ -192,7 +192,7 @@ replace_direct_child(platforms_index, "xiaoduiyou", [
     "    home_channel:",
     "      platform: xiaoduiyou",
     "      chat_id: xiaoduiyou",
-    "      name: Xiaoduiyou",
+    "      name: 主对话",
 ])
 
 toolsets_index = ensure_top_key("platform_toolsets")

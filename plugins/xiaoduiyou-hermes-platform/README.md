@@ -40,7 +40,7 @@ platforms:
     home_channel:
       platform: xiaoduiyou
       chat_id: xiaoduiyou
-      name: Xiaoduiyou
+      name: 主对话
 
 platform_toolsets:
   xiaoduiyou:

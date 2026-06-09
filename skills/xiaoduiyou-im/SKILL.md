@@ -37,6 +37,7 @@ Load this when:
 | Runtime send/message/card payload details | `references/runtime-api-reference.md` | Chat message endpoint and `image_attachments` payloads. |
 | Asset upload/image URL verification for chat cards | `references/image-upload-contract.md` | Upload local/generated images before final UI use. |
 | Runtime turn lifecycle / message stream state | `references/runtime-turn-lifecycle.md` | Debug or reason about Agent 对话页 runtime turns. |
+| Scheduled Xiaoduiyou message / reminder / cron delivery | `cronjob(action="create")` with `deliver` | Cron runs without `send_message`; delivery target must be encoded in `deliver`. |
 
 ## First-pass routing
 
@@ -46,6 +47,7 @@ Load this when:
 | Product questions: XHS + Taobao/Tmall + cards | handle here; open `references/product-question-workflow.md` |
 | Runtime endpoints and message payloads | handle here; open `references/runtime-api-reference.md` |
 | Upload/verify images | handle here; open `references/image-upload-contract.md` |
+| Scheduled message/reminder to a Xiaoduiyou channel | use `cronjob(action="create")` with `deliver`; do not schedule a future `send_message` call |
 | Document/content-package artifacts, travel plans, publish tabs, process docs | load `xiaoduiyou-doc-content-package` |
 | 成长日记 / diary records / diary photos | load `xiaoduiyou-growth-diary` |
 
@@ -74,6 +76,25 @@ Call `xiaoduiyou_im_send` with OpenAI Responses-style content parts. Omit `sessi
 ```
 
 Use `data:image/png;base64,...` for generated images when you do not already have an HTTPS URL.
+
+## Scheduled Messages
+
+When the user asks to send a Xiaoduiyou message later, create a cron job whose delivery target is in `deliver`. Do not write a future prompt that calls `send_message`, because cron runs do not expose the messaging toolset.
+
+- Current/default Home channel: `deliver: "xiaoduiyou:default"` or `deliver: "xiaoduiyou:主对话"`.
+- Named sidebar channel: `deliver: "xiaoduiyou:<visible channel title>"`, for example `xiaoduiyou:达拉崩吧`.
+- Keep the cron prompt to the exact user-facing content, for example `请只回复：测试 cron：1 分钟到了。`.
+
+Example:
+
+```json
+{
+  "action": "create",
+  "when": "in 1 minute",
+  "prompt": "请只回复：测试 cron：1 分钟到了。",
+  "deliver": "xiaoduiyou:达拉崩吧"
+}
+```
 
 ## Legacy Script
 

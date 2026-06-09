@@ -71,6 +71,10 @@ def _sender_id_from_turn(turn: Dict[str, Any]) -> str:
     return "xiaoduiyou-user"
 
 
+def _chat_type_for_session(session: Dict[str, Any]) -> str:
+    return "group" if str(session.get("session_scope") or "") == "family" else "dm"
+
+
 def _extract_xiaoduiyou_audio_attachments_from_turn(turn: Dict[str, Any]) -> List[Dict[str, Any]]:
     attachments: List[Dict[str, Any]] = []
     seen: set[str] = set()
@@ -590,7 +594,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
                 platform=Platform("xiaoduiyou"),
                 chat_id=session_id,
                 chat_name=str(session.get("title") or "Xiaoduiyou"),
-                chat_type="dm",
+                chat_type=_chat_type_for_session(session),
                 user_id=sender_id,
                 user_name=sender_name,
                 message_id=turn_id,
@@ -639,7 +643,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             platform=Platform("xiaoduiyou"),
             chat_id=session_id,
             chat_name=str(session.get("title") or "Xiaoduiyou"),
-            chat_type="dm",
+            chat_type=_chat_type_for_session(session),
             user_id=sender_id,
             user_name=sender_name,
             message_id=turn_id,
@@ -723,7 +727,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             if str(session.get("title") or "").strip() == chat_key:
                 return str(session.get("session_id") or chat_key)
 
-        alias_targets = {"", "xiaoduiyou", "home", "default", "悬浮窗", "floating_agent"}
+        alias_targets = {"", "xiaoduiyou", "home", "default", "主对话", "悬浮窗", "floating_agent"}
         if chat_key in alias_targets:
             for session in sessions:
                 if str(session.get("session_purpose") or "") == "floating_agent":
@@ -731,7 +735,28 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             return str(sessions[0].get("session_id") or chat_key)
         return chat_key
 
+    def _is_home_channel_alias(self, chat_id: str) -> bool:
+        return str(chat_id or "").strip() in {"", "xiaoduiyou", "home", "default", "主对话", "悬浮窗", "floating_agent"}
+
     async def _post_session_message(self, chat_id: str, content: str) -> Dict[str, Any]:
+        content = _clean_xiaoduiyou_delivery_content(content)
+        if self._is_home_channel_alias(chat_id):
+            payload = self._session_message_payload_from_content(content)
+            im_payload: Dict[str, Any] = {"channel": "default"}
+            if str(payload.get("message_type") or "") == "tool_progress" or payload.get("tool_progress"):
+                im_payload["message_type"] = "tool_progress"
+                im_payload["tool_progress"] = str(payload.get("tool_progress") or payload.get("text") or payload.get("content") or payload.get("detail") or "")
+            else:
+                im_payload["text"] = str(payload.get("text") or payload.get("content") or payload.get("detail") or content or "")
+            return await asyncio.to_thread(
+                _request_json,
+                f"{self.base_url}/api/agent/im/send",
+                method="POST",
+                payload=im_payload,
+                timeout=self.request_timeout_seconds,
+                token=self.connection_token,
+            )
+
         session_id = await asyncio.to_thread(self._resolve_session_id_for_outbound, chat_id)
         payload = self._session_message_payload_from_content(content)
         payload = await asyncio.to_thread(
@@ -916,6 +941,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
 
     async def send(self, chat_id: str, content: str, reply_to: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None) -> SendResult:
         chat_key = str(chat_id)
+        content = _clean_xiaoduiyou_delivery_content(content)
         turn_id = await self._resolve_turn_id(chat_key, metadata)
         if not turn_id:
             if "▉" in (content or ""):
@@ -1053,7 +1079,27 @@ def _looks_like_status_progress(content: str) -> bool:
     return stripped.startswith((
         "⏳ Still working...",
         "⚠️ No activity for ",
+        "ℹ Codex ",
     ))
+
+
+def _clean_xiaoduiyou_delivery_content(content: str) -> str:
+    text = str(content or "")
+    stripped = text.strip()
+    if not stripped.startswith("Cronjob Response:"):
+        return text
+
+    body_lines: List[str] = []
+    for index, line in enumerate(stripped.splitlines()):
+        if index == 0:
+            continue
+        if index == 1 and line.strip().startswith("(job_id:"):
+            continue
+        if line.strip().startswith("To stop or manage this job"):
+            break
+        body_lines.append(line)
+    body = "\n".join(body_lines).strip()
+    return body or stripped
 
 
 def _looks_like_tool_progress(content: str) -> bool:
@@ -1524,6 +1570,23 @@ def _safe_tool_context(context: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+async def _standalone_send(
+    pconfig,
+    chat_id: str,
+    message: str,
+    *,
+    thread_id=None,
+    media_files=None,
+    force_document: bool = False,
+) -> Dict[str, Any]:
+    del thread_id, media_files, force_document
+    adapter = XiaoduiyouAdapter(pconfig)
+    result = await adapter.send(chat_id=chat_id, content=message)
+    if result.success:
+        return {"success": True, "message_id": result.message_id, "raw_response": result.raw_response}
+    return {"error": result.error or "Xiaoduiyou delivery failed"}
+
+
 def register(ctx) -> None:
     ctx.register_platform(
         name="xiaoduiyou",
@@ -1540,6 +1603,8 @@ def register(ctx) -> None:
             "Content packages may select ui_templates (xiaohongshu, moments) and fill fields.publish_notes for those templates."
         ),
         max_message_length=XiaoduiyouAdapter.MAX_MESSAGE_LENGTH,
+        cron_deliver_env_var="XIAODUIYOU_HOME_CHANNEL",
+        standalone_sender_fn=_standalone_send,
     )
 
     ctx.register_tool(
