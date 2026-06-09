@@ -710,6 +710,39 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         sessions = result.get("sessions")
         return [session for session in sessions if isinstance(session, dict)] if isinstance(sessions, list) else []
 
+    async def list_channels(self) -> List[Dict[str, Any]]:
+        channels: List[Dict[str, Any]] = [{
+            "id": "default",
+            "name": "主对话",
+            "type": "dm",
+            "thread_id": None,
+        }]
+        seen_ids = {"default"}
+        hidden_purposes = {"growth_diary", "content_package", "feedback"}
+        try:
+            sessions = await asyncio.to_thread(self._list_agent_sessions)
+        except Exception as exc:
+            logger.warning("Xiaoduiyou session list lookup failed for channel directory: %s", exc)
+            return channels
+
+        for session in sessions:
+            session_id = str(session.get("session_id") or "").strip()
+            if not session_id or session_id in seen_ids:
+                continue
+            if str(session.get("session_purpose") or "") in hidden_purposes:
+                continue
+            title = str(session.get("title") or session_id).strip() or session_id
+            if str(session.get("session_purpose") or "") == "floating_agent":
+                title = "主对话"
+            channels.append({
+                "id": session_id,
+                "name": title,
+                "type": _chat_type_for_session(session),
+                "thread_id": None,
+            })
+            seen_ids.add(session_id)
+        return channels
+
     def _resolve_session_id_for_outbound(self, chat_id: str) -> str:
         chat_key = str(chat_id or "").strip()
         try:
