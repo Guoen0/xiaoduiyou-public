@@ -78,50 +78,60 @@ The progress payload may include richer UI fields:
 
 ### Send a normal outbound chat message
 
-Use this when a connected Agent needs to send a message to an existing Xiaoduiyou session outside an active pending turn, for example a scheduled/initiated message or a platform `send_message` call.
+Use this when a connected Agent needs to send a message outside an active pending turn, for example a scheduled/initiated message or a platform `send_message` call. For background/default delivery, target the stable Home channel (`default`, shown to users as `主对话`) instead of looking up a floating session id.
 
-`POST /api/agent/sessions/{session_id}/messages`
+Preferred high-level endpoint/tool for image cards:
 
-Headers are the same Agent auth headers as turn polling/callbacks. Minimal body:
+`POST /api/agent/im/send` or tool `xiaoduiyou_im_send`
 
-```json
-{
-  "text": "这是要发到小队友会话里的正文。\n小红书：https://www.xiaohongshu.com/explore/xxxx\n淘宝：https://item.taobao.com/item.htm?id=123456"
-}
-```
-
-Compatibility notes:
-
-- Plain `http://` / `https://` URLs in `text` auto-render as clickable links in the chat bubble.
-- Xiaohongshu URLs are sanitized client-side for `xsec_*` query parameters when rendered.
-- Taobao/Tmall links work as normal clickable URLs; prefer canonical `https://item.taobao.com/item.htm?id=...` or `https://detail.tmall.com/item.htm?id=...`.
-- The endpoint also accepts official-case-style visual cards through `image_attachments`. Use durable uploaded image URLs only:
+Body uses OpenAI Responses-style content parts:
 
 ```json
 {
-  "text": "我把小红书参考和淘宝候选放在下面，点图片可以打开来源。",
-  "image_attachments": [
+  "channel": "default",
+  "turn_id": "turn_optional",
+  "content": [
+    { "type": "input_text", "text": "点图片可以打开来源。" },
     {
-      "image_url": "https://xiaoduiyou-assets.example.com/xhs-cover.webp",
-      "link_url": "https://www.xiaohongshu.com/explore/xxxx",
-      "title": "真实使用参考",
-      "subtitle": "小红书 · 同场景经验",
-      "badge": "参考帖"
-    },
-    {
-      "image_url": "https://xiaoduiyou-assets.example.com/taobao-item.webp",
-      "link_url": "https://item.taobao.com/item.htm?id=123456",
-      "title": "商品名 / 关键型号",
-      "subtitle": "淘宝 · 可买候选",
-      "badge": "商品候选"
+      "type": "input_image",
+      "image_url": "data:image/png;base64,iVBORw0KGgo...",
+      "detail": "auto",
+      "display": {
+        "title": "商品候选",
+        "subtitle": "淘宝 · 关键参数",
+        "badge": "候选",
+        "link_url": "https://item.taobao.com/item.htm?id=123456"
+      }
     }
   ]
 }
 ```
 
+Backend behavior:
+
+- `channel` is optional and defaults to `default` (`主对话`) when `session_id` is omitted;
+- use `session_id` only for a specific active Xiaoduiyou session;
+- accepts `https://` images and `data:image/png|jpeg|webp|gif;base64,...`;
+- rejects local paths, `file:`, `blob:`, `localhost`, private-network URLs, non-image content-types, and images over 10 MB;
+- uploads images through Xiaoduiyou assets/TOS, then emits existing `image_attachments`.
+
+Legacy low-level endpoint:
+
+`POST /api/agent/sessions/{session_id}/messages`
+
+Use this only when you intentionally target one existing session. Do not use it for cron/background/Home delivery.
+
+Headers are the same Agent auth headers as turn polling/callbacks. Minimal body:
+
+```json
+{
+  "text": "这是要发到小队友频道里的正文。\n小红书：https://www.xiaohongshu.com/explore/xxxx\n淘宝：https://item.taobao.com/item.htm?id=123456"
+}
+```
+
 - Hermes/OpenClaw platform `send_message` / outbound text tools may only expose a text field. In that case send the same object as a JSON string; the Xiaoduiyou plugin/connector will parse it and POST the structured payload. This is the fastest path when the user asks to convert an existing answer into visual cards in the current chat.
 - If direct `POST /api/assets` returns `UNAUTHENTICATED` because the agent is outside an active Xiaoduiyou runtime/auth context, do not stall. Prefer the platform `send_message` JSON-string path for chat-only visual cards, clearly using already obtained image URLs. Only claim durable Xiaoduiyou asset upload when `/api/assets` returned and the URL was verified.
-- This session-message endpoint is for chat bubbles and visual cards. It still does **not** mutate `artifact` or run `document_actions`; use active-turn `events` / `callback` plus document tools for artifacts and document mutations.
+- These outbound chat endpoints are for chat bubbles and visual cards. They still do **not** mutate `artifact` or run `document_actions`; use active-turn `events` / `callback` plus document tools for artifacts and document mutations.
 
 ### Complete turn
 

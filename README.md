@@ -74,6 +74,7 @@ XDY_CONNECTION_TOKEN="<由小队友设置页提供>" \
 - Hermes 安装脚本会安装/更新小队友 platform 插件，以及 `xiaoduiyou-im`、`xiaoduiyou-doc-content-package`、`xiaoduiyou-growth-diary` 三个 runtime skills。
 - 安装脚本会写入 `${HERMES_HOME:-~/.hermes}/config.yaml`，并把三个 runtime skills 安装到同一目录下的 `skills/xiaoduiyou/`；如果你在 Hermes profile 下运行，先确保 `HERMES_HOME` 指向该 profile 目录。
 - Hermes default 和 profile 是相互隔离的连接实例：生产 default 使用生产设置页提供的 `XDY_BASE_URL` / `XDY_CONNECTION_TOKEN`，review/test profile 使用 review/test 设置页提供的 `XDY_BASE_URL` / `XDY_CONNECTION_TOKEN`。不要从 default 复制 token 到 profile，也不要跨环境复用 token。
+- 稳定版频道交互依赖 Hermes channel directory 支持插件 adapter 的 `list_channels()`：`send_message(action="list")` 必须能看到 `xiaoduiyou:主对话`、`xiaoduiyou:<频道名>`，家庭群频道类型应为 `group`。如果列表里只有旧 `sess_...` 或旧 `悬浮会话`，先升级 Hermes 稳定版或重新执行安装/更新提示词。
 - 如果 Hermes 升级或 profile 迁移后连接异常，重新执行安装脚本；脚本会把旧的字符串 JSON 配置规整为 Hermes 可读取的 YAML list。
 - 已安装过且 token 不变时，更新插件/skills 可以只传 `XDY_BASE_URL`，不要为了更新去读取、打印或检查 token；安装脚本会保留当前 `${HERMES_HOME:-~/.hermes}/config.yaml` 里的 `connection_token`。
 - 安装脚本会禁用同一 `HERMES_HOME` 下 `.env` 里的旧 `XIAODUIYOU_BASE_URL` / `XIAODUIYOU_CONNECTION_TOKEN` 覆盖项，避免旧地址覆盖新配置。
@@ -182,6 +183,7 @@ For an already-connected Hermes Agent where the token is unchanged, use this sho
 https://github.com/Guoen0/xiaoduiyou-public/blob/main/README.md
 
 不要读取、打印或检查连接 token。token 不变，安装脚本会保留当前 HERMES_HOME/config.yaml 里的 connection_token。
+更新后确认 `send_message(action="list")` 能看到 `xiaoduiyou:主对话` 和当前小队友频道名；如果只看到旧 `sess_...`，需要先升级 Hermes 到支持 plugin `list_channels()` 的稳定版。
 
 ```bash
 XDY_PUBLIC_REPO="https://github.com/Guoen0/xiaoduiyou-public.git"

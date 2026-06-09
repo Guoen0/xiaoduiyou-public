@@ -39,5 +39,7 @@ Do not configure `platform_toolsets.xiaoduiyou` as only `["xiaoduiyou"]`: that e
 
 - Text replies are supported.
 - Agent-facing messages include real sender identity and compact current-screen context when Xiaoduiyou provides `screen_context`, so vague replies like “这个” can be resolved without polluting the visible user bubble.
+- Xiaoduiyou interaction targets are channels. The stable Home target is `xiaoduiyou:主对话` / `xiaoduiyou:default`; named sidebar channels should appear by their visible title, and family channels should be marked as `group`.
+- Scheduled Xiaoduiyou messages must use cron `deliver` targets such as `xiaoduiyou:主对话` or `xiaoduiyou:<频道名>`. Do not schedule a future prompt that calls `send_message`.
 - Document tools are available for explicit document create/update/delete requests.
 - `pending turn`, `callback`, and `event_log` are implementation details; the UI should feel like direct chat with Hermes.

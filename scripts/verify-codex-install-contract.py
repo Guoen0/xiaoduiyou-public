@@ -101,8 +101,30 @@ def main() -> None:
             "xiaoduiyou_im_send",
             "xiaoduiyou_interactive_request_create",
             "xiaoduiyou_interactive_request_wait",
+            "list_channels()",
+            "xiaoduiyou:主对话",
         ],
     )
+    require_text(
+        ROOT / "plugins" / "xiaoduiyou-hermes-platform" / "xiaoduiyou_hermes_platform" / "adapter.py",
+        [
+            "async def list_channels",
+            "\"id\": \"default\"",
+            "\"name\": \"主对话\"",
+            "\"floating_agent\"",
+        ],
+    )
+    for skill in RUNTIME_SKILLS:
+        require_text(
+            ROOT / "skills" / skill / "references" / "runtime-api-reference.md",
+            [
+                "POST /api/agent/im/send",
+                "xiaoduiyou_im_send",
+                "default",
+                "主对话",
+                "Do not use it for cron/background/Home delivery.",
+            ],
+        )
 
     print("Codex install contract verification passed")
 

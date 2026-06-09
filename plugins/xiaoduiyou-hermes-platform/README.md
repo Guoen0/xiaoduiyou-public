@@ -9,6 +9,8 @@ This is the maintained Hermes Gateway platform plugin for Xiaoduiyou. Install it
 - Progress/tool-progress delivery to Xiaoduiyou events
 - Final callback delivery to Xiaoduiyou
 - Agent-facing sender identity and current-screen context headers for vague messages such as “把这个改短一点”
+- Channel-directory discovery through `list_channels()`: Hermes should list `xiaoduiyou:主对话` and current sidebar channel names, with family channels marked as `group`
+- Cron delivery support through `deliver="xiaoduiyou:<channel name>"`; cron jobs must not schedule a future `send_message` call
 - Xiaoduiyou document tools registered in toolset `xiaoduiyou`
 
 ## Hermes install layout
@@ -73,6 +75,14 @@ Restart Hermes Gateway after installing or changing config:
 hermes gateway restart
 ```
 
+After restart, verify channel discovery from Hermes:
+
+```text
+send_message(action="list")
+```
+
+The list should include `xiaoduiyou:主对话` and named Xiaoduiyou channels such as `xiaoduiyou:达拉崩吧`. If it only shows stale `sess_...` entries, upgrade Hermes to a stable version whose channel directory calls plugin adapter `list_channels()`, then rerun the install/update prompt.
+
 ## Important boundary
 
-The plugin owns the Xiaoduiyou connection protocol. The Agent should load `xiaoduiyou-usage-workflow` for content-package rules, but it should not write its own Xiaoduiyou connector or manually poll/callback unless it is debugging the maintained plugin.
+The plugin owns the Xiaoduiyou connection protocol. The Agent should load `xiaoduiyou-im`, `xiaoduiyou-doc-content-package`, or `xiaoduiyou-growth-diary` for runtime behavior; it should not write its own Xiaoduiyou connector or manually poll/callback unless it is debugging the maintained plugin.
