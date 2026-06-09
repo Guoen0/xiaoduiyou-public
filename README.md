@@ -75,6 +75,7 @@ XDY_CONNECTION_TOKEN="<由小队友设置页提供>" \
 - 安装脚本会写入 `${HERMES_HOME:-~/.hermes}/config.yaml`，并把三个 runtime skills 安装到同一目录下的 `skills/xiaoduiyou/`；如果你在 Hermes profile 下运行，先确保 `HERMES_HOME` 指向该 profile 目录。
 - Hermes default 和 profile 是相互隔离的连接实例：生产 default 使用生产设置页提供的 `XDY_BASE_URL` / `XDY_CONNECTION_TOKEN`，review/test profile 使用 review/test 设置页提供的 `XDY_BASE_URL` / `XDY_CONNECTION_TOKEN`。不要从 default 复制 token 到 profile，也不要跨环境复用 token。
 - 如果 Hermes 升级或 profile 迁移后连接异常，重新执行安装脚本；脚本会把旧的字符串 JSON 配置规整为 Hermes 可读取的 YAML list。
+- 已安装过且 token 不变时，更新插件/skills 可以只传 `XDY_BASE_URL`，不要为了更新去读取、打印或检查 token；安装脚本会保留当前 `${HERMES_HOME:-~/.hermes}/config.yaml` 里的 `connection_token`。
 - 安装脚本会禁用同一 `HERMES_HOME` 下 `.env` 里的旧 `XIAODUIYOU_BASE_URL` / `XIAODUIYOU_CONNECTION_TOKEN` 覆盖项，避免旧地址覆盖新配置。
 - 不要把 `platform_toolsets.xiaoduiyou` 只配置成 `["xiaoduiyou"]`；要保留本地文件、终端、搜索、浏览器等 Hermes 工具。
 - 按 README 的 Runtime skill routing 和 Common Agent rules 执行。
@@ -169,3 +170,34 @@ export XDY_CONNECTION_TOKEN="<由小队友设置页提供>"
 Clone/update this repository in a dedicated install/cache directory, read the matching `skills/*/SKILL.md`, use Xiaoduiyou app-provided connection values, and follow the bundled skill references instead of guessing product behavior.
 
 Notes: OpenClaw must not clone/update this repository under `${OPENCLAW_HOME:-~/.openclaw}/workspace`; generated `.zip` artifacts and maintainer-local paths/secrets are intentionally not tracked here.
+
+## Installed Hermes update prompt
+
+For an already-connected Hermes Agent where the token is unchanged, use this short prompt. Set `HERMES_HOME` first if updating a Hermes profile.
+
+````text
+更新小队友 Hermes 插件和 runtime skills。
+
+先读取并遵循 Xiaoduiyou public README：
+https://github.com/Guoen0/xiaoduiyou-public/blob/main/README.md
+
+不要读取、打印或检查连接 token。token 不变，安装脚本会保留当前 HERMES_HOME/config.yaml 里的 connection_token。
+
+```bash
+XDY_PUBLIC_REPO="https://github.com/Guoen0/xiaoduiyou-public.git"
+XDY_PUBLIC_DIR="$HOME/.xiaoduiyou/xiaoduiyou-public"
+mkdir -p "$HOME/.xiaoduiyou"
+if [ -d "$XDY_PUBLIC_DIR/.git" ]; then
+  git -C "$XDY_PUBLIC_DIR" fetch origin main
+  git -C "$XDY_PUBLIC_DIR" reset --hard origin/main
+  git -C "$XDY_PUBLIC_DIR" clean -fd
+else
+  git clone "$XDY_PUBLIC_REPO" "$XDY_PUBLIC_DIR"
+fi
+
+XDY_BASE_URL="<当前环境的小队友地址>" \
+"$XDY_PUBLIC_DIR/scripts/install-hermes.sh"
+```
+
+只汇报是否安装成功、是否在线、失败原因。
+````

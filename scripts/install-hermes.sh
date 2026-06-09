@@ -24,7 +24,6 @@ require_cmd() {
 }
 
 require_env XDY_BASE_URL
-require_env XDY_CONNECTION_TOKEN
 require_cmd git
 require_cmd hermes
 require_cmd python3
@@ -68,7 +67,7 @@ write_hermes_config() {
   mkdir -p "$(dirname "$config_file")"
   touch "$config_file"
   cp "$config_file" "${config_file}.bak-xiaoduiyou-$(date +%Y%m%d%H%M%S)"
-  python3 - "$config_file" "$XDY_BASE_URL" "$XDY_CONNECTION_TOKEN" <<'PY'
+  python3 - "$config_file" "$XDY_BASE_URL" "${XDY_CONNECTION_TOKEN:-}" <<'PY'
 from pathlib import Path
 import json
 import re
@@ -78,6 +77,13 @@ path = Path(sys.argv[1])
 base_url = sys.argv[2]
 token = sys.argv[3]
 lines = path.read_text(encoding="utf-8").splitlines()
+
+if not token.strip():
+    match = re.search(r'(?m)^\s*connection_token:\s*["\']?([^"\'\n]+)', "\n".join(lines))
+    token = match.group(1).strip() if match else ""
+if not token:
+    print("Missing XDY_CONNECTION_TOKEN and no existing platforms.xiaoduiyou.extra.connection_token found in config.yaml", file=sys.stderr)
+    sys.exit(2)
 
 def indent_of(line: str) -> int:
     return len(line) - len(line.lstrip(" "))
