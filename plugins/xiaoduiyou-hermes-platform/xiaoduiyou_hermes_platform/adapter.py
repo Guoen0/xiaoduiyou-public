@@ -1063,7 +1063,7 @@ def _looks_like_tool_progress(content: str) -> bool:
     return any(marker in stripped for marker in (': "', '...', '(', '×')) and any(
         stripped.startswith(prefix) for prefix in (
             '🔍', '🔎', '📖', '📚', '🛠', '⚙', '✅', '💻', '🌐', '📝', '📁', '🔧',
-            '📋', '🐍', '🎨', '👁', '🧠',
+            '📋', '🐍', '🎨', '👁', '🧠', '⏰', '🍼', '📄', '✏️', '🗑️', '🖼️',
         )
     )
 
