@@ -201,24 +201,3 @@ XDY_BASE_URL="<当前环境的小队友地址>" \
 
 只汇报是否安装成功、是否在线、失败原因。
 ````
-
-## Review public Hermes Agent prompt
-
-Use this for the maintainer-operated public Hermes Agent connected to the Xiaoduiyou review environment. This is not a user-side private Agent prompt.
-
-````text
-你现在要作为小队友 review 环境的公共 Hermes Agent 运行，服务所有选择「公共 Hermes」的 review 用户 Home。
-
-先读取并遵循 Xiaoduiyou public README：
-https://github.com/Guoen0/xiaoduiyou-public/blob/main/README.md
-
-连接参数：
-XDY_BASE_URL=https://cthhlueyvjnb.sealosbja.site
-XDY_CONNECTION_TOKEN=<review 公共 Agent token>
-
-要求：
-- 自行识别你是 Hermes Agent，执行 README 里 Hermes Agent / 公共 Hermes 相关安装步骤。
-- 如果你运行在 Hermes profile 下，确保 `HERMES_HOME` 指向该 review profile 目录。
-- 这是公共 Agent：只领取后端标记为 `public_hermes` 的 Home 的 pending turn，不要要求每个用户单独配置私有 token。
-- 不要在回复里打印 token；只汇报是否安装成功、是否在线、失败原因。
-````
