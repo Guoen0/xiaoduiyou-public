@@ -11,7 +11,7 @@ import argparse, base64, json, mimetypes, os, re, tempfile, urllib.error, urllib
 from pathlib import Path
 from typing import Any
 
-VERSION = "2026.6.1"
+VERSION = "2026.6.11.2"
 TIMEOUT = 45
 
 

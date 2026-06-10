@@ -1,6 +1,6 @@
 {
   "name": "xiaoduiyou-codex-platform",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Connect Codex to the Xiaoduiyou platform through local MCP tools.",
   "author": {
     "name": "Xiaoduiyou"
@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "Xiaoduiyou",
     "shortDescription": "Connect Codex to Xiaoduiyou.",
-    "longDescription": "Xiaoduiyou exposes the platform's Agent turn lifecycle, session messaging, document tools, and Growth Diary APIs to Codex through a local MCP server. Use xiaoduiyou-codex-runner for background desktop connectivity.",
+    "longDescription": "Xiaoduiyou exposes the platform's Agent turn lifecycle, channel messaging, document tools, and Growth Diary APIs to Codex through a local MCP server. Use xiaoduiyou-codex-runner for background desktop connectivity.",
     "developerName": "Xiaoduiyou",
     "category": "Productivity",
     "capabilities": [

@@ -14,7 +14,7 @@ from urllib import error, parse, request
 
 
 VERSION = "0.1.3"
-CONNECTOR_VERSION = "2026.6.8.3-codex.2"
+CONNECTOR_VERSION = "2026.6.11.2-codex.1"
 DEFAULT_CONFIG_PATH = Path.home() / ".codex" / "xiaoduiyou-connection.json"
 
 
