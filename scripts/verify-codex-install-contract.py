@@ -101,7 +101,7 @@ def main() -> None:
             "xiaoduiyou_im_send",
             "xiaoduiyou_interactive_request_create",
             "xiaoduiyou_interactive_request_wait",
-            "list_channels()",
+            "channel directory",
             "xiaoduiyou:主对话",
         ],
     )
@@ -112,6 +112,7 @@ def main() -> None:
             "\"id\": \"default\"",
             "\"name\": \"主对话\"",
             "\"floating_agent\"",
+            "_write_xiaoduiyou_channel_directory",
         ],
     )
     for skill in RUNTIME_SKILLS:

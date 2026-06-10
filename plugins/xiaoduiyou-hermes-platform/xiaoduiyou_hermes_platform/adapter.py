@@ -14,6 +14,8 @@ import os
 import tempfile
 import time
 from contextvars import ContextVar
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib import error, parse, request
 
@@ -73,6 +75,83 @@ def _sender_id_from_turn(turn: Dict[str, Any]) -> str:
 
 def _chat_type_for_session(session: Dict[str, Any]) -> str:
     return "group" if str(session.get("session_scope") or "") == "family" else "dm"
+
+
+def _channels_for_agent_sessions(sessions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    channels: List[Dict[str, Any]] = [{
+        "id": "default",
+        "name": "主对话",
+        "type": "dm",
+    }]
+    seen_ids = {"default"}
+    hidden_purposes = {"growth_diary", "content_package", "feedback", "floating_agent"}
+    for session in sessions:
+        session_id = str(session.get("session_id") or "").strip()
+        if not session_id or session_id in seen_ids:
+            continue
+        if str(session.get("session_purpose") or "") in hidden_purposes:
+            continue
+        title = str(session.get("title") or session_id).strip() or session_id
+        channels.append({
+            "id": session_id,
+            "name": title,
+            "type": _chat_type_for_session(session),
+        })
+        seen_ids.add(session_id)
+    return channels
+
+
+def _hermes_channel_directory_path() -> Path:
+    try:
+        from hermes_cli.config import get_hermes_home
+        return get_hermes_home() / "channel_directory.json"
+    except Exception:
+        return Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes") / "channel_directory.json"
+
+
+def _atomic_write_json(path: Path, data: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        os.replace(tmp_name, path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
+def _write_xiaoduiyou_channel_directory(channels: List[Dict[str, Any]], path: Optional[Path] = None) -> None:
+    directory_path = path or _hermes_channel_directory_path()
+    directory: Dict[str, Any] = {"updated_at": None, "platforms": {}}
+    if directory_path.exists():
+        try:
+            loaded = json.loads(directory_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                directory = loaded
+        except Exception:
+            directory = {"updated_at": None, "platforms": {}}
+
+    platforms = directory.get("platforms")
+    if not isinstance(platforms, dict):
+        platforms = {}
+    platforms["xiaoduiyou"] = [
+        {
+            "id": str(channel.get("id") or ""),
+            "name": str(channel.get("name") or channel.get("id") or ""),
+            "type": str(channel.get("type") or "dm"),
+            **({"thread_id": str(channel.get("thread_id"))} if channel.get("thread_id") else {}),
+        }
+        for channel in channels
+        if str(channel.get("id") or "").strip() and str(channel.get("name") or channel.get("id") or "").strip()
+    ]
+    directory["platforms"] = platforms
+    directory["updated_at"] = datetime.now().isoformat()
+    _atomic_write_json(directory_path, directory)
 
 
 def _extract_xiaoduiyou_audio_attachments_from_turn(turn: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -513,6 +592,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         self._poll_task: asyncio.Task | None = None
         self._turn_by_session: Dict[str, str] = {}
         self._last_claim_at = 0.0
+        self._last_channel_directory_refresh_at = 0.0
 
     @property
     def name(self) -> str:
@@ -546,6 +626,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
     async def _poll_loop(self) -> None:
         while self._running:
             try:
+                await self._refresh_channel_directory_if_due()
                 claimed = await asyncio.to_thread(self._claim_pending_turn)
                 if claimed:
                     await self._handle_claimed_turn(claimed)
@@ -711,35 +792,23 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         return [session for session in sessions if isinstance(session, dict)] if isinstance(sessions, list) else []
 
     async def list_channels(self) -> List[Dict[str, Any]]:
-        channels: List[Dict[str, Any]] = [{
-            "id": "default",
-            "name": "主对话",
-            "type": "dm",
-            "thread_id": None,
-        }]
-        seen_ids = {"default"}
-        hidden_purposes = {"growth_diary", "content_package", "feedback", "floating_agent"}
         try:
             sessions = await asyncio.to_thread(self._list_agent_sessions)
         except Exception as exc:
             logger.warning("Xiaoduiyou session list lookup failed for channel directory: %s", exc)
-            return channels
+            return _channels_for_agent_sessions([])
+        return _channels_for_agent_sessions(sessions)
 
-        for session in sessions:
-            session_id = str(session.get("session_id") or "").strip()
-            if not session_id or session_id in seen_ids:
-                continue
-            if str(session.get("session_purpose") or "") in hidden_purposes:
-                continue
-            title = str(session.get("title") or session_id).strip() or session_id
-            channels.append({
-                "id": session_id,
-                "name": title,
-                "type": _chat_type_for_session(session),
-                "thread_id": None,
-            })
-            seen_ids.add(session_id)
-        return channels
+    async def _refresh_channel_directory_if_due(self) -> None:
+        now = time.time()
+        if now - self._last_channel_directory_refresh_at < 30.0:
+            return
+        self._last_channel_directory_refresh_at = now
+        try:
+            channels = await self.list_channels()
+            await asyncio.to_thread(_write_xiaoduiyou_channel_directory, channels)
+        except Exception as exc:
+            logger.debug("Xiaoduiyou channel directory compatibility refresh failed: %s", exc)
 
     def _resolve_session_id_for_outbound(self, chat_id: str) -> str:
         chat_key = str(chat_id or "").strip()
