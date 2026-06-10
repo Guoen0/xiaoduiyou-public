@@ -26,7 +26,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.11.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.11.2"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -78,6 +78,11 @@ def _chat_type_for_session(session: Dict[str, Any]) -> str:
     return "group" if str(session.get("session_scope") or "") == "family" else "dm"
 
 
+def _is_stale_session_title(title: str) -> bool:
+    stripped = title.strip()
+    return stripped == "悬浮会话" or stripped.startswith("sess_")
+
+
 def _channels_for_agent_sessions(sessions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     channels: List[Dict[str, Any]] = [{
         "id": "default",
@@ -93,6 +98,8 @@ def _channels_for_agent_sessions(sessions: List[Dict[str, Any]]) -> List[Dict[st
         if str(session.get("session_purpose") or "") in hidden_purposes:
             continue
         title = str(session.get("title") or session_id).strip() or session_id
+        if _is_stale_session_title(title):
+            continue
         channels.append({
             "id": session_id,
             "name": title,
