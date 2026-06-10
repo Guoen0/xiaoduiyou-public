@@ -147,8 +147,12 @@ const ImSendSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
+    channel: { type: "string", description: "Stable Xiaoduiyou Home channel key. Defaults to default/主对话 when session_id is omitted." },
     session_id: { type: "string", description: "Optional Xiaoduiyou session id. Omit inside an active Xiaoduiyou turn." },
     turn_id: { type: "string", description: "Optional Xiaoduiyou turn id. Omit inside an active Xiaoduiyou turn." },
+    text: { type: "string", description: "Plain chat text. Use this for text-only delivery." },
+    message_type: { type: "string", enum: ["text", "tool_progress"], description: "Use tool_progress for tool-call/status bubbles." },
+    tool_progress: { type: "string", description: "Tool-call/status text to render in a Tool bubble." },
     content: {
       type: "array",
       description: "OpenAI Responses-style content parts. Use input_text for text and input_image for images. Backend uploads images and sends Xiaoduiyou image_attachments.",
@@ -158,7 +162,6 @@ const ImSendSchema = {
     },
     account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the current connector account." },
   },
-  required: ["content"],
 };
 
 function textBlock(text, type = "paragraph", props = undefined) {
@@ -382,15 +385,18 @@ function createImSendTool(config) {
   return {
     name: "xiaoduiyou_im_send",
     label: "Xiaoduiyou IM Send",
-    description: "Send Xiaoduiyou chat image cards using OpenAI Responses-style content parts. Use input_text and input_image; pass HTTPS or data:image/... base64 in image_url. Do not upload assets yourself and never pass local file paths.",
+    description: "Send Xiaoduiyou chat text/tool-progress/image cards to the Home default channel (主对话) or a specific session. Use input_text/input_image for cards; pass HTTPS or data:image/... base64 in image_url. Do not upload assets yourself and never pass local file paths.",
     parameters: ImSendSchema,
     execute: async (_toolCallId, rawParams = {}) => {
       const context = activeXiaoduiyouToolContext();
       const account = resolveToolAccount(config, { ...rawParams, account_id: rawParams.account_id || context.accountId });
       const payload = {
-        session_id: rawParams.session_id || context.sessionId,
-        turn_id: rawParams.turn_id || context.turnId,
-        content: rawParams.content,
+        ...(rawParams.session_id || context.sessionId ? { session_id: rawParams.session_id || context.sessionId } : { channel: rawParams.channel || "default" }),
+        ...(rawParams.turn_id || context.turnId ? { turn_id: rawParams.turn_id || context.turnId } : {}),
+        ...(rawParams.content ? { content: rawParams.content } : {}),
+        ...(rawParams.text ? { text: rawParams.text } : {}),
+        ...(rawParams.message_type ? { message_type: rawParams.message_type } : {}),
+        ...(rawParams.tool_progress ? { tool_progress: rawParams.tool_progress } : {}),
       };
       const result = await sendXiaoduiyouImMessage(account, payload);
       return jsonResult({

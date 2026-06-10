@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { sessionMessagePayloadFromText } from "./client.js";
 import { summarizeGrowthDiaryPatchResult } from "./growth-diary-summary.js";
+
+test("send_message tool output is sent as tool progress", () => {
+  assert.deepEqual(sessionMessagePayloadFromText('📨 send_message: "to xiaoduiyou:达拉崩吧"'), {
+    message_type: "tool_progress",
+    tool_progress: '📨 send_message: "to xiaoduiyou:达拉崩吧"',
+  });
+});
 
 test("growth diary patch result is summarized without the full base", () => {
   const payload = {

@@ -260,9 +260,20 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         session_id = str(args.get("session_id") or "").strip()
         channel = str(args.get("channel") or "default").strip()
         content = args.get("content")
-        if not isinstance(content, list) or not content:
-            raise ValueError("content[] with input_text/input_image parts is required")
-        payload: dict[str, Any] = {"content": content}
+        text = str(args.get("text") or "").strip()
+        tool_progress = str(args.get("tool_progress") or "").strip()
+        message_type = str(args.get("message_type") or "").strip()
+        if (not isinstance(content, list) or not content) and not text and not tool_progress:
+            raise ValueError("content[], text, or tool_progress is required")
+        payload: dict[str, Any] = {}
+        if isinstance(content, list) and content:
+            payload["content"] = content
+        if text:
+            payload["text"] = text
+        if tool_progress:
+            payload["tool_progress"] = tool_progress
+        if message_type in {"text", "tool_progress"}:
+            payload["message_type"] = message_type
         if session_id:
             payload["session_id"] = session_id
         else:
@@ -425,11 +436,14 @@ TOOLS = [
     },
     {
         "name": "xiaoduiyou_im_send",
-        "description": "Send Xiaoduiyou chat image cards to the Home default channel (主对话) or a specific session using OpenAI Responses-style content parts. Omit session_id for background/default delivery. Use input_text and input_image; pass HTTPS or data:image/... base64 in image_url. Xiaoduiyou backend uploads images/assets. Never pass local paths, file:, blob:, localhost, or private-network URLs.",
+        "description": "Send Xiaoduiyou chat text, tool-progress, or image cards to the Home default channel (主对话) or a specific session. Omit session_id for background/default delivery. Use input_text and input_image for cards; pass HTTPS or data:image/... base64 in image_url. Xiaoduiyou backend uploads images/assets. Never pass local paths, file:, blob:, localhost, or private-network URLs.",
         "inputSchema": schema({
             "channel": {"type": "string", "description": "Stable Xiaoduiyou Home channel key. Defaults to default/主对话 when session_id is omitted."},
             "session_id": {"type": "string"},
             "turn_id": {"type": "string"},
+            "text": {"type": "string"},
+            "message_type": {"type": "string", "enum": ["text", "tool_progress"]},
+            "tool_progress": {"type": "string"},
             "content": {
                 "type": "array",
                 "minItems": 1,

@@ -1,4 +1,4 @@
-export const XIAODUIYOU_CONNECTOR_VERSION = "2026.6.8.3";
+export const XIAODUIYOU_CONNECTOR_VERSION = "2026.6.11.2";
 
 async function readJsonResponse(response, path) {
   const rawText = await response.text();
@@ -123,11 +123,12 @@ export async function getXiaoduiyouInteractiveRequest(account, requestId) {
 function looksLikeToolProgress(content) {
   const stripped = String(content ?? "").trim();
   if (!stripped) return false;
+  if (["📨 send_message", "send_message(", "send_message:", "Tool\n", "Tool\r\n"].some((marker) => stripped.includes(marker))) return true;
   const hasToolShape = [': "', "...", "(", "×"].some((marker) => stripped.includes(marker));
   if (!hasToolShape) return false;
   return [
     "🔍", "🔎", "📖", "📚", "🛠", "⚙", "✅", "💻", "🌐", "📝", "📁", "🔧",
-    "📋", "🐍", "🎨", "👁", "🧠",
+    "📋", "🐍", "🎨", "👁", "🧠", "📨",
   ].some((prefix) => stripped.startsWith(prefix));
 }
 

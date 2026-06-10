@@ -67,7 +67,7 @@ For Xiaoduiyou chat visual cards, call `xiaoduiyou_im_send` instead of uploading
 
 ```json
 {
-  "session_id": "sess_0001",
+  "channel": "default",
   "content": [
     { "type": "input_text", "text": "点图片可以打开来源。" },
     {
@@ -93,8 +93,8 @@ For human approval inside Xiaoduiyou, use the interactive request tools instead 
 
 ```json
 {
-  "session_id": "sess_0001",
-  "turn_id": "turn_0001",
+  "session_id": "<active session_id from the claimed turn>",
+  "turn_id": "<active turn_id from the claimed turn>",
   "kind": "exec_approval",
   "title": "需要授权执行命令",
   "message": "Codex 请求执行命令，需要授权后继续。",

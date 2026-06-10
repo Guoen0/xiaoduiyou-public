@@ -78,7 +78,9 @@ def main() -> None:
             "\"name\": \"xiaoduiyou_interactive_request_wait\"",
             "\"/api/agent/im/send\"",
             "\"/api/agent/interactive-requests\"",
-            "OpenAI Responses-style content parts",
+            "tool-progress",
+            "input_text",
+            "input_image",
         ],
     )
     require_text(
