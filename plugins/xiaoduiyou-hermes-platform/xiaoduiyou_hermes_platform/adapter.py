@@ -30,6 +30,7 @@ XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.8.3"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
+CHANNEL_DIRECTORY_REFRESH_SECONDS = 5.0
 
 # Tool calls and adapter.send() run in the same gateway task context, so this
 # lets tools enqueue structured document mutations that send() includes in the
@@ -801,7 +802,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
 
     async def _refresh_channel_directory_if_due(self) -> None:
         now = time.time()
-        if now - self._last_channel_directory_refresh_at < 30.0:
+        if now - self._last_channel_directory_refresh_at < CHANNEL_DIRECTORY_REFRESH_SECONDS:
             return
         self._last_channel_directory_refresh_at = now
         try:
