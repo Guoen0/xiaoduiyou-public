@@ -81,19 +81,30 @@ Use `data:image/png;base64,...` for generated images when you do not already hav
 
 When the user asks to send a Xiaoduiyou message later, create a cron job whose delivery target is in `deliver`. Do not write a future prompt that calls `send_message`, because cron runs do not expose the messaging toolset.
 
+For fixed-text reminders, prefer a no-agent cron script so the scheduler delivers the exact text without a future LLM turn. Create a small script under `${HERMES_HOME:-$HOME/.hermes}/scripts/`, then call `cronjob(action="create", script="<name>", no_agent=true, deliver="xiaoduiyou:<channel>")`. The script must print only the user-facing message. Do not print “已发送”, “done”, or delivery status; delivery success comes from the scheduler/platform response, not from the script text.
+
 - Current/default Home channel: `deliver: "xiaoduiyou:default"` or `deliver: "xiaoduiyou:主对话"`.
 - Named sidebar channel: `deliver: "xiaoduiyou:<visible channel title>"`, for example `xiaoduiyou:达拉崩吧`.
-- Keep the cron prompt to the exact user-facing content, for example `请只回复：测试 cron：1 分钟到了。`.
+- If a job is LLM-driven, keep the cron prompt to the exact user-facing content, for example `请只回复：测试 cron：1 分钟到了。`.
+- After creating the job, inspect the returned job object and confirm `deliver` is the intended Xiaoduiyou target, not `local`.
 
 Example:
 
 ```json
 {
   "action": "create",
-  "when": "in 1 minute",
-  "prompt": "请只回复：测试 cron：1 分钟到了。",
+  "schedule": "1m",
+  "script": "xiaoduiyou-reminder-20260611-0209.sh",
+  "no_agent": true,
   "deliver": "xiaoduiyou:达拉崩吧"
 }
+```
+
+Script content:
+
+```bash
+#!/usr/bin/env bash
+printf '%s\n' '测试 cron：1 分钟到了。'
 ```
 
 ## Legacy Script

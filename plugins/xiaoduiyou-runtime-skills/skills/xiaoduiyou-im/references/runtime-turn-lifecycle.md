@@ -43,7 +43,7 @@ For platform-originated outbound messages without an active pending turn, send a
 - Use `session_id` only when intentionally targeting one existing Xiaoduiyou session.
 - Links in `text` render clickable. `image_attachments[].link_url` makes the card image/title clickable. Use this for official-case-style Xiaohongshu/Taobao visual cards. For artifacts and document mutations, keep using active-turn `events`/`callback` plus document tools.
 
-For scheduled outbound messages, create `cronjob(action="create")` with a `deliver` target such as `xiaoduiyou:default`, `xiaoduiyou:主对话`, or `xiaoduiyou:<visible channel title>`. Keep the cron prompt to the exact user-facing reply, for example `请只回复：测试 cron：1 分钟到了。`. Do not schedule a future `send_message` call; cron runs do not expose the messaging toolset.
+For scheduled fixed-text outbound messages, create a no-agent script cron with a `deliver` target such as `xiaoduiyou:default`, `xiaoduiyou:主对话`, or `xiaoduiyou:<visible channel title>`. The script must print only the exact user-facing reply. Do not schedule a future `send_message` call; cron runs do not expose the messaging toolset, and delivery success is determined by the scheduler/platform response.
 
 Before final callback, validate that publish tabs contain only user-facing deliverables, sources remain in `过程材料`, and every image URL is browser-accessible.
 
