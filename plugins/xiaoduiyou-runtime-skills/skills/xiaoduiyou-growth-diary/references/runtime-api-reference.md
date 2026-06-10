@@ -78,7 +78,7 @@ The progress payload may include richer UI fields:
 
 ### Send a normal outbound chat message
 
-Use this when a connected Agent needs to send a message outside an active pending turn, for example a scheduled/initiated message or a platform `send_message` call. For background/default delivery, target the stable Home channel (`default`, shown to users as `主对话`) instead of looking up a floating session id.
+Use this when a connected Agent needs to send a message outside an active pending turn, for example a scheduled/initiated message or a platform `send_message` call. For background/default delivery, target the stable Home channel (`default`, shown to users as `主对话`) instead of looking up or preserving a UI session id.
 
 Preferred high-level endpoint/tool for image cards:
 
@@ -115,7 +115,7 @@ Backend behavior:
 - rejects local paths, `file:`, `blob:`, `localhost`, private-network URLs, non-image content-types, and images over 10 MB;
 - uploads images through Xiaoduiyou assets/TOS, then emits existing `image_attachments`.
 
-Legacy low-level endpoint:
+Specific active-channel endpoint:
 
 `POST /api/agent/sessions/{session_id}/messages`
 

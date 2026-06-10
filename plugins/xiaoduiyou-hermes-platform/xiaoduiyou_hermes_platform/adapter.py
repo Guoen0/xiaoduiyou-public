@@ -85,7 +85,7 @@ def _channels_for_agent_sessions(sessions: List[Dict[str, Any]]) -> List[Dict[st
         "type": "dm",
     }]
     seen_ids = {"default"}
-    hidden_purposes = {"growth_diary", "content_package", "feedback", "floating_agent"}
+    hidden_purposes = {"growth_diary", "content_package", "feedback", "home_channel"}
     for session in sessions:
         session_id = str(session.get("session_id") or "").strip()
         if not session_id or session_id in seen_ids:
@@ -263,7 +263,7 @@ def _format_runtime_context_for_agent(turn: Dict[str, Any]) -> str:
     provider = str(auth.get("provider") or "").strip()
     if provider:
         lines.append(f"auth.provider={provider}; auth.mode=connection_token_bound")
-    lines.append("本次 Xiaoduiyou API/成长日记/资产/会话写入必须使用上述 origin 与当前连接 token；禁止改用本地 config、生产/测试默认地址、维护者 URL 或浏览器里打开的其他小队友页面。")
+    lines.append("本次 Xiaoduiyou API/成长日记/资产/频道写入必须使用上述 origin 与当前连接 token；禁止改用本地 config、生产/测试默认地址、维护者 URL 或浏览器里打开的其他小队友页面。")
     return "\n".join(lines)
 
 
@@ -828,16 +828,16 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             if str(session.get("title") or "").strip() == chat_key:
                 return str(session.get("session_id") or chat_key)
 
-        alias_targets = {"", "xiaoduiyou", "home", "default", "主对话", "悬浮窗", "floating_agent"}
+        alias_targets = {"", "xiaoduiyou", "home", "default", "主对话"}
         if chat_key in alias_targets:
             for session in sessions:
-                if str(session.get("session_purpose") or "") == "floating_agent":
+                if str(session.get("session_purpose") or "") == "home_channel":
                     return str(session.get("session_id") or chat_key)
             return str(sessions[0].get("session_id") or chat_key)
         return chat_key
 
     def _is_home_channel_alias(self, chat_id: str) -> bool:
-        return str(chat_id or "").strip() in {"", "xiaoduiyou", "home", "default", "主对话", "悬浮窗", "floating_agent"}
+        return str(chat_id or "").strip() in {"", "xiaoduiyou", "home", "default", "主对话"}
 
     async def _post_session_message(self, chat_id: str, content: str) -> Dict[str, Any]:
         content = _clean_xiaoduiyou_delivery_content(content)

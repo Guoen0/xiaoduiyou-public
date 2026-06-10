@@ -26,8 +26,8 @@ stores them in `~/.codex/xiaoduiyou-connection.json`.
 - `xiaoduiyou_agent_turn_progress`
 - `xiaoduiyou_agent_turn_complete`
 - `xiaoduiyou_agent_turn_fail`
-- `xiaoduiyou_agent_sessions_list`
-- `xiaoduiyou_agent_session_message`
+- `xiaoduiyou_agent_channels_list`
+- `xiaoduiyou_agent_channel_message`
 - `xiaoduiyou_im_send`
 - `xiaoduiyou_interactive_request_create`
 - `xiaoduiyou_interactive_request_get`

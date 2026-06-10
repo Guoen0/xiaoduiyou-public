@@ -67,7 +67,7 @@ def request_json(url: str, *, method: str = "GET", tok: str, payload: Any = None
         raise RuntimeError(f"HTTP {exc.code} {url}: {exc.read().decode('utf-8', 'replace')}") from exc
 
 
-def list_sessions(base: str, tok: str) -> list[dict[str, Any]]:
+def list_channels(base: str, tok: str) -> list[dict[str, Any]]:
     data = request_json(f"{base}/api/agent/sessions", tok=tok)
     sessions = data.get("sessions")
     return [s for s in sessions if isinstance(s, dict)] if isinstance(sessions, list) else []
@@ -102,12 +102,12 @@ def main() -> int:
     p.add_argument("--session-id")
     p.add_argument("--text", default="视觉卡片")
     p.add_argument("--cards-json", help="JSON array or path. Each card needs image_path or image_url plus title/link_url/subtitle/badge.")
-    p.add_argument("--list-sessions", action="store_true")
+    p.add_argument("--list-channels", action="store_true")
     p.add_argument("--allow-local-storage", action="store_true", help="Deprecated compatibility flag; /api/agent/im/send owns final asset storage.")
     args = p.parse_args()
     base, tok = base_url(args.base_url), token(args.token)
-    if args.list_sessions:
-        print(json.dumps({"base_url": base, "sessions": list_sessions(base, tok)}, ensure_ascii=False, indent=2))
+    if args.list_channels:
+        print(json.dumps({"base_url": base, "channels": list_channels(base, tok)}, ensure_ascii=False, indent=2))
         return 0
     if not args.cards_json:
         raise SystemExit("Pass --cards-json")

@@ -83,7 +83,7 @@ function formatAgentRuntimeContext(turn) {
   const auth = context.auth && typeof context.auth === "object" ? context.auth : {};
   const provider = String(auth.provider ?? "").trim();
   if (provider) lines.push(`auth.provider=${provider}; auth.mode=connection_token_bound`);
-  lines.push("本次 Xiaoduiyou API/成长日记/资产/会话写入必须使用上述 origin 与当前连接 token；禁止改用本地 config、生产/测试默认地址、维护者 URL 或浏览器里打开的其他小队友页面。");
+  lines.push("本次 Xiaoduiyou API/成长日记/资产/频道写入必须使用上述 origin 与当前连接 token；禁止改用本地 config、生产/测试默认地址、维护者 URL 或浏览器里打开的其他小队友页面。");
   return lines.join("\n");
 }
 

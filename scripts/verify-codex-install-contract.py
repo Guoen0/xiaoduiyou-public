@@ -111,7 +111,7 @@ def main() -> None:
             "async def list_channels",
             "\"id\": \"default\"",
             "\"name\": \"主对话\"",
-            "\"floating_agent\"",
+            "\"home_channel\"",
             "_write_xiaoduiyou_channel_directory",
         ],
     )

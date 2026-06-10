@@ -244,10 +244,10 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         turn_id = required(args, "turn_id")
         return text_result(request_json(f"/api/agent/turns/{parse.quote(turn_id)}/failure", method="POST", body={"error": required(args, "error")}))
 
-    if name == "xiaoduiyou_agent_sessions_list":
+    if name == "xiaoduiyou_agent_channels_list":
         return text_result(request_json("/api/agent/sessions"))
 
-    if name == "xiaoduiyou_agent_session_message":
+    if name == "xiaoduiyou_agent_channel_message":
         session_id = required(args, "session_id")
         body: dict[str, Any]
         if isinstance(args.get("payload"), dict):
@@ -414,13 +414,13 @@ TOOLS = [
         "inputSchema": schema({"turn_id": {"type": "string"}, "error": {"type": "string"}}, ["turn_id", "error"]),
     },
     {
-        "name": "xiaoduiyou_agent_sessions_list",
-        "description": "List Xiaoduiyou sessions accessible to the current connection token.",
+        "name": "xiaoduiyou_agent_channels_list",
+        "description": "List Xiaoduiyou channels accessible to the current connection token. Results include internal session_id values only for targeting a specific active channel.",
         "inputSchema": schema({}),
     },
     {
-        "name": "xiaoduiyou_agent_session_message",
-        "description": "Send an Agent message into a Xiaoduiyou session.",
+        "name": "xiaoduiyou_agent_channel_message",
+        "description": "Send an Agent message into a specific Xiaoduiyou channel by its internal session_id. Prefer xiaoduiyou_im_send with channel=default for background/Home delivery.",
         "inputSchema": schema({"session_id": {"type": "string"}, "text": {"type": "string"}, "payload": {"type": "object", "additionalProperties": True}}, ["session_id"]),
     },
     {

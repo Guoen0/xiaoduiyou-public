@@ -78,7 +78,7 @@ Do **not** send visual cards to Xiaoduiyou as Markdown images or local `MEDIA:/.
 ```bash
 HERMES_SKILL_HOME="${HERMES_HOME:-$HOME/.hermes}"
 python "$HERMES_SKILL_HOME/skills/xiaoduiyou/xiaoduiyou-im/scripts/send_visual_cards.py" \
-  --list-sessions
+  --list-channels
 python "$HERMES_SKILL_HOME/skills/xiaoduiyou/xiaoduiyou-im/scripts/send_visual_cards.py" \
   --channel default \
   --text '龙柳小红书参考卡片' \

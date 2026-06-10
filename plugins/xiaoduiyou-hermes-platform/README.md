@@ -81,7 +81,7 @@ After restart, verify channel discovery from Hermes:
 send_message(action="list")
 ```
 
-The list should include `xiaoduiyou:主对话` and named Xiaoduiyou channels such as `xiaoduiyou:达拉崩吧`. If it only shows stale `sess_...` entries, rerun the Xiaoduiyou install/update prompt and restart the corresponding Hermes profile.
+The list should include `xiaoduiyou:主对话` and named Xiaoduiyou channels such as `xiaoduiyou:达拉崩吧`. If these channels are missing, rerun the Xiaoduiyou install/update prompt and restart the corresponding Hermes profile.
 
 ## Important boundary
 
