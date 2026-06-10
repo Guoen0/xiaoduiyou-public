@@ -166,12 +166,6 @@ export XDY_CONNECTION_TOKEN="<由小队友设置页提供>"
 - 按 README 的 Runtime skill routing 和 Common Agent rules 执行。
 ````
 
-## Third-party Agent guidance
-
-Clone/update this repository in a dedicated install/cache directory, read the matching `skills/*/SKILL.md`, use Xiaoduiyou app-provided connection values, and follow the bundled skill references instead of guessing product behavior.
-
-Notes: OpenClaw must not clone/update this repository under `${OPENCLAW_HOME:-~/.openclaw}/workspace`; generated `.zip` artifacts and maintainer-local paths/secrets are intentionally not tracked here.
-
 ## Installed Hermes update prompt
 
 For an already-connected Hermes Agent where the token is unchanged, use this short prompt. Set `HERMES_HOME` first if updating a Hermes profile.
