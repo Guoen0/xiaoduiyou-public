@@ -26,7 +26,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.11.2"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.12.1"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -72,6 +72,22 @@ def _sender_id_from_turn(turn: Dict[str, Any]) -> str:
         if value:
             return value
     return "xiaoduiyou-user"
+
+
+def _hermes_user_id_from_turn(turn: Dict[str, Any]) -> str:
+    # Hermes pairing belongs to the connected Xiaoduiyou home, while the actual
+    # family member sender is preserved in the message text and runtime context.
+    for key in ("account_id", "home_id"):
+        value = str(turn.get(key) or "").strip()
+        if value:
+            return value
+    runtime_context = turn.get("agent_runtime_context") or turn.get("runtime_context")
+    if isinstance(runtime_context, dict):
+        for key in ("account_id", "home_id", "family_id"):
+            value = str(runtime_context.get(key) or "").strip()
+            if value:
+                return value
+    return _sender_id_from_turn(turn)
 
 
 def _chat_type_for_session(session: Dict[str, Any]) -> str:
@@ -666,6 +682,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         agent_message = _agent_event_text_for_turn(turn)
         sender_name = _sender_display_name_from_turn(turn)
         sender_id = _sender_id_from_turn(turn)
+        hermes_user_id = _hermes_user_id_from_turn(turn)
         if not turn_id or not session_id or not user_message:
             logger.warning("Xiaoduiyou claimed malformed turn: %s", claimed)
             return
@@ -684,7 +701,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
                 chat_id=session_id,
                 chat_name=str(session.get("title") or "Xiaoduiyou"),
                 chat_type=_chat_type_for_session(session),
-                user_id=sender_id,
+                user_id=hermes_user_id,
                 user_name=sender_name,
                 message_id=turn_id,
             )
@@ -733,7 +750,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             chat_id=session_id,
             chat_name=str(session.get("title") or "Xiaoduiyou"),
             chat_type=_chat_type_for_session(session),
-            user_id=sender_id,
+            user_id=hermes_user_id,
             user_name=sender_name,
             message_id=turn_id,
         )

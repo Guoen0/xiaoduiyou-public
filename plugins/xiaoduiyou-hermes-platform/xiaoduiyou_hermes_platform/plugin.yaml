@@ -1,7 +1,7 @@
 name: xiaoduiyou-hermes-platform
 label: Xiaoduiyou
 kind: platform
-version: 2026.6.11.2
+version: 2026.6.12.1
 description: Hermes Gateway adapter and document tools for Xiaoduiyou.
 author: Hermes Agent
 optional_env:
