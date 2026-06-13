@@ -488,13 +488,17 @@ def _request_json(url: str, *, method: str = "GET", payload: Optional[Dict[str, 
 
 
 
-def _upload_asset_file(base_url: str, token: str, path: str, *, session_id: str = "", timeout: float = DEFAULT_TIMEOUT_SECONDS) -> str:
+def _upload_asset_file(base_url: str, token: str, path: str, *, session_id: str = "", turn_id: str = "", document_id: str = "", timeout: float = DEFAULT_TIMEOUT_SECONDS) -> str:
     boundary = f"----XiaoduiyouHermes{int(time.time() * 1000)}"
     filename = os.path.basename(path) or "image"
     mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     fields = {"source": "external_import", "require_remote_storage": "true"}
     if session_id:
         fields["session_id"] = session_id
+    if turn_id:
+        fields["turn_id"] = turn_id
+    if document_id:
+        fields["document_id"] = document_id
     chunks: List[bytes] = []
     for name, value in fields.items():
         chunks.append(f"--{boundary}\r\n".encode("utf-8"))
@@ -525,7 +529,7 @@ def _upload_asset_file(base_url: str, token: str, path: str, *, session_id: str 
     return url
 
 
-def _assetize_visual_card_payload(base_url: str, token: str, session_id: str, payload: Dict[str, Any], timeout: float = DEFAULT_TIMEOUT_SECONDS) -> Dict[str, Any]:
+def _assetize_visual_card_payload(base_url: str, token: str, session_id: str, payload: Dict[str, Any], timeout: float = DEFAULT_TIMEOUT_SECONDS, *, turn_id: str = "", document_id: str = "") -> Dict[str, Any]:
     if not token:
         return payload
     next_payload = dict(payload)
@@ -542,7 +546,7 @@ def _assetize_visual_card_payload(base_url: str, token: str, session_id: str, pa
                     media_paths, _media_types = _download_image_attachments([image_url], timeout)
                     if media_paths:
                         try:
-                            attachment["image_url"] = _upload_asset_file(base_url, token, media_paths[0], session_id=session_id, timeout=timeout)
+                            attachment["image_url"] = _upload_asset_file(base_url, token, media_paths[0], session_id=session_id, turn_id=turn_id, document_id=document_id, timeout=timeout)
                         finally:
                             try:
                                 os.unlink(media_paths[0])
@@ -769,6 +773,8 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
     def _tool_context_for_turn(self, turn: Dict[str, Any], *, session_id: str = "", turn_id: str = "") -> Dict[str, Any]:
         runtime_context = turn.get("agent_runtime_context") or turn.get("runtime_context")
         runtime_context = runtime_context if isinstance(runtime_context, dict) else {}
+        screen_context = turn.get("screen_context") or {}
+        screen_context = screen_context if isinstance(screen_context, dict) else {}
         base_url = str(
             runtime_context.get("api_origin")
             or runtime_context.get("base_url")
@@ -781,6 +787,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             "token": self.connection_token,
             "session_id": session_id or str(runtime_context.get("session_id") or ""),
             "turn_id": turn_id,
+            "document_id": str(screen_context.get("document_id") or runtime_context.get("document_id") or ""),
             "home_id": str(runtime_context.get("home_id") or ""),
             "family_id": str(runtime_context.get("family_id") or ""),
             "environment": str(runtime_context.get("environment") or ""),
@@ -1333,7 +1340,7 @@ def _tool_delete_document(args: Dict[str, Any], **_: Any) -> str:
 
 def _tool_get_document(args: Dict[str, Any], **_: Any) -> str:
     context = _active_tool_context()
-    document_id = str(args.get("document_id") or "").strip()
+    document_id = str(args.get("document_id") or context.get("document_id") or "").strip()
     session_id = str(args.get("session_id") or context.get("session_id") or "").strip()
     query: Dict[str, Any] = {
         "view": str(args.get("view") or "summary").strip() or "summary",
@@ -1400,12 +1407,21 @@ def _active_tool_context() -> Dict[str, Any]:
     return next_context
 
 
+def _growth_diary_query_string(context: Dict[str, Any], params: Optional[Dict[str, Any]] = None) -> str:
+    query: Dict[str, Any] = dict(params or {})
+    for key in ("turn_id", "session_id"):
+        value = str(context.get(key) or "").strip()
+        if value and key not in query:
+            query[key] = value
+    return f"?{parse.urlencode(query)}" if query else ""
+
+
 def _tool_growth_diary_get(args: Dict[str, Any], **_: Any) -> str:
     context = _active_tool_context()
     filter_spec = _growth_diary_filter_spec(args)
     view = str(args.get("view") or "").strip()
     record_query = _growth_diary_records_query(args, filter_spec, view)
-    query_string = f"?{parse.urlencode(record_query)}" if record_query else ""
+    query_string = _growth_diary_query_string(context, record_query)
     result = _request_json(
         f"{context['base_url']}/api/growth-diary{query_string}",
         timeout=DEFAULT_TIMEOUT_SECONDS,
@@ -1673,8 +1689,9 @@ def _tool_growth_diary_patch(args: Dict[str, Any], **_: Any) -> str:
     if not isinstance(payload, dict):
         raise RuntimeError("payload must be an object matching /api/growth-diary PATCH")
     try:
+        query_string = _growth_diary_query_string(context)
         result = _request_json(
-            f"{context['base_url']}/api/growth-diary",
+            f"{context['base_url']}/api/growth-diary{query_string}",
             method="PATCH",
             payload=payload,
             timeout=DEFAULT_TIMEOUT_SECONDS,
@@ -1701,6 +1718,7 @@ def _safe_tool_context(context: Dict[str, Any]) -> Dict[str, Any]:
         "family_id": context.get("family_id"),
         "session_id": context.get("session_id"),
         "turn_id": context.get("turn_id"),
+        "document_id": context.get("document_id"),
         "auth": "connector_token_bound",
     }
 
