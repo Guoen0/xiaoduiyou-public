@@ -25,8 +25,9 @@ Load this when the user asks to:
 5. Upload photos/assets via connector-supported `/api/assets` tooling before saving attachment fields.
 6. Preserve enum option IDs/names from live schema; do not invent options unless the user explicitly asks to add them.
 7. Deduplicate repeated real-world care events: same time + same event = one record with additional source/notes.
-8. For event time, use the user's message time as the fallback source of truth. If the user states an explicit date/time, use that. If the user says "now", "刚才", or gives no time, derive `occurred_at` and `date` from the active Xiaoduiyou turn/user-message `created_at` timestamp. Agent writes must send `date` as `YYYY-MM-DD` and `occurred_at` as `YYYY-MM-DD HH:mm:ss` with matching dates; short times like `19:20` are invalid and will be rejected. Do not invent clock times, round to arbitrary times, or use the Agent's local/system time unless that time is the Xiaoduiyou-provided turn timestamp.
-9. Keep family-care records in Feishu when the user is talking about the Feishu family log; use Xiaoduiyou Growth Diary only when the task is clearly Xiaoduiyou/Discord-side diary.
+8. Always set `recorder` for message-derived records from the active Xiaoduiyou sender `display_name` (for example `大笨钟` or `金心`) and preserve the raw user wording in `original_message`; do not default human-reported events to `臭宝机器人` or omit the recorder when sender context is present.
+9. For event time, use the user's message time as the fallback source of truth. If the user states an explicit date/time for that specific event, use that. If the user says "now", "刚才", or gives no time, derive `occurred_at` and `date` from the active Xiaoduiyou turn/user-message `created_at` timestamp. Example: `12:20 吃馒头` records food at 12:20; a later bare `喝奶 180` records at the message send time, not 12:20. Do not carry a previously mentioned clock time forward to later events unless the user explicitly ties that later event to the same time. If a prior unlogged message needs recording/correction, look up that message's timestamp from session/gateway context when available and write it directly; do not ask the caregiver to remember, resend, or restate the time. Agent writes must send `date` as `YYYY-MM-DD` and `occurred_at` as `YYYY-MM-DD HH:mm:ss` with matching dates; short times like `19:20` are invalid and will be rejected. Do not invent clock times, round to arbitrary times, or use the Agent's local/system time unless that time is the Xiaoduiyou-provided turn timestamp.
+10. Keep family-care records in Feishu when the user is talking about the Feishu family log; use Xiaoduiyou Growth Diary only when the task is clearly Xiaoduiyou/Discord-side diary.
 
 ## Case map owned by Growth Diary
 
@@ -48,6 +49,11 @@ Load this when the user asks to:
 
 ## Tool use
 
+- Xiaoduiyou Growth Diary operating knowledge belongs in this skill, not Hermes memory. When the user corrects diary behavior or a caregiver shorthand is learned, patch this skill so future Xiaoduiyou agents share the same behavior.
 - Primary path: `xiaoduiyou_growth_diary_get` before every write, then `xiaoduiyou_growth_diary_patch` for mutations.
 - Use `date`, `start_date`/`end_date`, and/or `record_limit` on reads whenever the user gives a target date/range.
+- For edits to an existing record, use `updates` as one item per field: `{table_id, record_id, field_id, value}`. Do **not** send an update object with `values: {...}`; that shape is only for new `records` and can fail with `COLUMN_NOT_FOUND`.
+- When correcting a recently logged no-time event, identify the exact record by date/event/title/source first, then set `occurred_at` to the original Xiaoduiyou message timestamp (or the existing record `created_at` converted to local event time if that is the only connector-visible trace), not the page date and not the Agent runtime clock.
+- Current screen/page date is UI context only. The user may be viewing a different date/page; never let visible page date override explicit user time/date or Xiaoduiyou message-send time.
+- Caregiver shorthand: for `锌` / `加锌` with a bare number (e.g. `锌 1`, `加锌2`), interpret the number as milliliters and save `unit: "ml"`, title/content like `锌 1ml`, unless the user explicitly states another unit.
 - Do not use local scripts, browser cookies, config files, terminal history, or connection-token discovery for connected-agent diary I/O. If the connector tools are unavailable, stop and ask for reconnection/target scope.

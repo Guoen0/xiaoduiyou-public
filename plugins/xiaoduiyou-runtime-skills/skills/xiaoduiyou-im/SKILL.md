@@ -19,6 +19,7 @@ Load this when:
 
 ## Non-negotiables
 
+0. Xiaoduiyou operating knowledge belongs in Xiaoduiyou skills, not Hermes memory. Treat the agent as a Xiaoduiyou developer and earliest user: when a Xiaoduiyou workflow lesson, UI/runtime convention, or caregiver shorthand is discovered, patch the relevant `xiaoduiyou-*` skill so other agents can inherit it; do not store that experience only in profile memory.
 1. Prefer the `xiaoduiyou_im_send` tool for visual cards. It accepts OpenAI Responses-style `content[]` parts and the Xiaoduiyou backend uploads images/assets.
 2. Visual cards in Xiaoduiyou render as `image_attachments[]`, not `MEDIA:/...`, Markdown images, browser screenshots, or link-only text.
 3. Local/server-static paths are invalid in final chat cards. Pass HTTPS images or `data:image/...;base64,...` to `xiaoduiyou_im_send`; never pass `/tmp`, `/Users`, `file:`, `blob:`, `localhost`, or private-network URLs.
