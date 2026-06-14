@@ -7,14 +7,6 @@ HERMES_HOME_DIR="${HERMES_HOME:-${HOME}/.hermes}"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd -- "$script_dir/.." && pwd)"
 
-require_env() {
-  local name="$1"
-  if [ -z "${!name:-}" ]; then
-    echo "Missing required environment variable: $name" >&2
-    exit 2
-  fi
-}
-
 require_cmd() {
   local name="$1"
   if ! command -v "$name" >/dev/null 2>&1; then
@@ -23,7 +15,6 @@ require_cmd() {
   fi
 }
 
-require_env XDY_BASE_URL
 require_cmd git
 require_cmd hermes
 require_cmd python3
@@ -67,23 +58,16 @@ write_hermes_config() {
   mkdir -p "$(dirname "$config_file")"
   touch "$config_file"
   cp "$config_file" "${config_file}.bak-xiaoduiyou-$(date +%Y%m%d%H%M%S)"
-  python3 - "$config_file" "$XDY_BASE_URL" "${XDY_CONNECTION_TOKEN:-}" <<'PY'
+  python3 - "$config_file" "${XDY_BASE_URL:-}" "${XDY_CONNECTION_TOKEN:-}" <<'PY'
 from pathlib import Path
 import json
 import re
 import sys
 
 path = Path(sys.argv[1])
-base_url = sys.argv[2]
-token = sys.argv[3]
+base_url = sys.argv[2].strip()
+token = sys.argv[3].strip()
 lines = path.read_text(encoding="utf-8").splitlines()
-
-if not token.strip():
-    match = re.search(r'(?m)^\s*connection_token:\s*["\']?([^"\'\n]+)', "\n".join(lines))
-    token = match.group(1).strip() if match else ""
-if not token:
-    print("Missing XDY_CONNECTION_TOKEN and no existing platforms.xiaoduiyou.extra.connection_token found in config.yaml", file=sys.stderr)
-    sys.exit(2)
 
 def indent_of(line: str) -> int:
     return len(line) - len(line.lstrip(" "))
@@ -158,6 +142,50 @@ def yaml_list_block(key: str, values: list[str], indent: int) -> list[str]:
     item_prefix = " " * (indent + 2)
     return [f"{prefix}{key}:"] + [f"{item_prefix}- {value}" for value in values]
 
+def scalar_value(line: str, key: str) -> str:
+    stripped = line.strip()
+    match = re.match(rf"^{re.escape(key)}\s*:\s*(.*)$", stripped)
+    if not match:
+        return ""
+    value = match.group(1).strip()
+    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+        value = value[1:-1]
+    return value
+
+def find_nested_scalar(path_keys: list[str]) -> str:
+    if not path_keys:
+        return ""
+    current = find_top_key(path_keys[0])
+    if current < 0:
+        return ""
+    for key in path_keys[1:-1]:
+        end = block_end(current)
+        current = find_child(current, end, key)
+        if current < 0:
+            return ""
+    end = block_end(current)
+    leaf = find_child(current, end, path_keys[-1])
+    if leaf < 0:
+        return ""
+    return scalar_value(lines[leaf], path_keys[-1])
+
+if not base_url:
+    base_url = find_nested_scalar(["platforms", "xiaoduiyou", "extra", "base_url"])
+if not base_url:
+    print("Missing XDY_BASE_URL and no existing platforms.xiaoduiyou.extra.base_url found in config.yaml", file=sys.stderr)
+    sys.exit(2)
+
+if not token:
+    token = find_nested_scalar(["platforms", "xiaoduiyou", "extra", "connection_token"])
+if not token:
+    # Backward-compatible fallback for older configs that had the token in the
+    # Xiaoduiyou block but not under the current exact nesting.
+    match = re.search(r'(?m)^\s*connection_token:\s*["\']?([^"\'\n]+)', "\n".join(lines))
+    token = match.group(1).strip() if match else ""
+if not token:
+    print("Missing XDY_CONNECTION_TOKEN and no existing platforms.xiaoduiyou.extra.connection_token found in config.yaml", file=sys.stderr)
+    sys.exit(2)
+
 toolsets = [
     "web",
     "browser",
@@ -213,6 +241,49 @@ install_hermes_runtime_skills() {
   rmdir "$legacy_skills_dir" >/dev/null 2>&1 || true
 }
 
+restart_hermes_gateway() {
+  if [ "${XDY_RESTART_HERMES:-1}" = "0" ]; then
+    echo "Skipped Hermes Gateway restart because XDY_RESTART_HERMES=0."
+    return
+  fi
+
+  local hermes_bin
+  hermes_bin="$(command -v hermes)"
+
+  if [ "${_HERMES_GATEWAY:-}" = "1" ]; then
+    local restart_log="${HERMES_HOME_DIR}/logs/xiaoduiyou-plugin-upgrade-restart.log"
+    mkdir -p "$(dirname "$restart_log")"
+    python3 - "$hermes_bin" "$HERMES_HOME_DIR" "$restart_log" <<'PY'
+import os
+import subprocess
+import sys
+
+hermes_bin, hermes_home, restart_log = sys.argv[1:4]
+env = os.environ.copy()
+env.pop("_HERMES_GATEWAY", None)
+env["HERMES_HOME"] = hermes_home
+command = (
+    "sleep 1; "
+    "printf '\\n=== xiaoduiyou plugin upgrade restart %s ===\\n' \"$(date '+%Y-%m-%d %H:%M:%S')\"; "
+    "exec \"$1\" gateway restart"
+)
+with open(restart_log, "a", encoding="utf-8") as log:
+    subprocess.Popen(
+        ["/bin/sh", "-c", command, "sh", hermes_bin],
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        env=env,
+        start_new_session=True,
+        close_fds=True,
+    )
+PY
+    echo "Scheduled Hermes Gateway restart outside the running gateway process; log: ${restart_log}"
+    return
+  fi
+
+  HERMES_HOME="$HERMES_HOME_DIR" "$hermes_bin" gateway restart
+}
+
 if git -C "$repo_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   if [ "${XDY_SKIP_REPO_UPDATE:-0}" != "1" ]; then
     git -C "$repo_dir" fetch origin main
@@ -228,6 +299,6 @@ install_hermes_runtime_skills
 clear_legacy_hermes_env_overrides
 
 write_hermes_config
-HERMES_HOME="$HERMES_HOME_DIR" hermes gateway restart
+restart_hermes_gateway
 
 echo "Xiaoduiyou Hermes plugin and runtime skills are installed in ${HERMES_HOME_DIR}."
