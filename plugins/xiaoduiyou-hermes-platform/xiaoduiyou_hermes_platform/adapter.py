@@ -1210,6 +1210,7 @@ def _looks_like_status_progress(content: str) -> bool:
     stripped = (content or "").strip()
     return stripped.startswith((
         "⏳ Still working...",
+        "⏳ Working",
         "⚠️ No activity for ",
         "ℹ Codex ",
     ))
