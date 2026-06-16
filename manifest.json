@@ -10,12 +10,13 @@
     "skills": {
       "xiaoduiyou_im": "skills/xiaoduiyou-im",
       "xiaoduiyou_doc_content_package": "skills/xiaoduiyou-doc-content-package",
-      "xiaoduiyou_growth_diary": "skills/xiaoduiyou-growth-diary"
+      "xiaoduiyou_growth_diary": "skills/xiaoduiyou-growth-diary",
+      "xiaoduiyou_feedback_issues": "skills/xiaoduiyou-feedback-issues"
     }
   },
   "notes": [
     "Agents install package directories from this repository via git clone or git pull.",
     "Generated zip artifacts are intentionally not part of the app project distribution.",
-    "There is no xiaoduiyou-usage-workflow router; public runtime cases are split across the three surface-specific skills."
+    "There is no xiaoduiyou-usage-workflow router; public runtime cases are split across the surface-specific skills."
   ]
 }
