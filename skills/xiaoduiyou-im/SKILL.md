@@ -28,6 +28,7 @@ Load this when:
 5. For product questions: Xiaohongshu provides lived-experience/reference evidence; Taobao/Tmall provides buyable candidates/parameters.
 6. For document/content-package artifacts, travel plans, publish tabs, or process docs, load `xiaoduiyou-doc-content-package`; do not keep that workflow inside IM.
 7. For Growth Diary records, load `xiaoduiyou-growth-diary`; do not send diary-only data as generic chat cards unless the user asks for a chat preview.
+8. Keep private family context out of skill files. In a local Hermes environment, read or create `${HERMES_HOME:-$HOME/.hermes}/private/xiaoduiyou-family-care-preferences.md` for family-specific names, IDs, childcare preferences, and durable care-history facts. Update that file when the user gives durable private preferences; keep reusable product behavior in this skill. This path is outside `skills/` and `plugins/` so skill upgrades should not overwrite it.
 
 ## Case map owned by IM
 
@@ -58,6 +59,7 @@ Load this when:
 
 Use this section for Xiaoduiyou chat answers about baby/toddler development, parenting decisions, family caregiving patterns, routines, feeding/sleep cooperation, emotion, behavior, discipline, play, and early education when the user is not asking to write records.
 
+- Before relying on family-specific facts such as child nickname, caregiver labels, developmental history, Feishu IDs, or household preferences, check `${HERMES_HOME:-$HOME/.hermes}/private/xiaoduiyou-family-care-preferences.md` when running in local Hermes. If it is missing and the user provides durable private context, create it there instead of adding that data to this skill.
 - Give modern, evidence-based, non-stereotyped advice. Do not rely on gender scripts such as "mother = naturally sensitive/caretaking" or "father = naturally strong/decision-maker." Infer only from observed behavior, stated context, and explicit uncertainty.
 - Explain behavior through several lenses together: developmental stage, attachment, learning/routines, cognition, emotion coaching, environment design, caregiver consistency, and family-system fatigue or conflict.
 - Structure substantial advice as: conclusion first, developmental task, what adults should do, what adults should avoid, home implementation, and uncertainty/red flags.
