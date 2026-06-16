@@ -16,6 +16,7 @@ Load this when:
 - Keywords handled here: `视觉卡片`, `卡片`, `点图`, `点图片打开`, `商品候选`, `参考帖`, `淘宝`, `小红书`, `找一下`, `给我几个`, `候选`.
 - If the user asks for `旅游规划`, `旅行规划`, itinerary/travel result UI, `内容包`, `文档产物`, `发布稿`, `ui_templates`, or publish tabs, load `xiaoduiyou-doc-content-package` instead.
 - If the user asks for `成长日记`, baby diary records, or diary photos/schema/views, load `xiaoduiyou-growth-diary` instead.
+- If the user asks for baby/toddler psychology, behavior, routines, feeding cooperation, sleep/meal cooperation, discipline, emotion coaching, attachment, autonomy, play, or family caregiving decisions without asking to write diary data, answer in chat here.
 
 ## Non-negotiables
 
@@ -49,8 +50,21 @@ Load this when:
 | Runtime endpoints and message payloads | handle here; open `references/runtime-api-reference.md` |
 | Upload/verify images | handle here; open `references/image-upload-contract.md` |
 | Scheduled message/reminder to a Xiaoduiyou channel | use `cronjob(action="create")` with `deliver`; do not schedule a future `send_message` call |
+| Baby/toddler parenting guidance without record writes | answer in chat; use the parenting guidance rules below |
 | Document/content-package artifacts, travel plans, publish tabs, process docs | load `xiaoduiyou-doc-content-package` |
 | 成长日记 / diary records / diary photos | load `xiaoduiyou-growth-diary` |
+
+## Parenting Guidance In Chat
+
+Use this section for Xiaoduiyou chat answers about baby/toddler development, parenting decisions, family caregiving patterns, routines, feeding/sleep cooperation, emotion, behavior, discipline, play, and early education when the user is not asking to write records.
+
+- Give modern, evidence-based, non-stereotyped advice. Do not rely on gender scripts such as "mother = naturally sensitive/caretaking" or "father = naturally strong/decision-maker." Infer only from observed behavior, stated context, and explicit uncertainty.
+- Explain behavior through several lenses together: developmental stage, attachment, learning/routines, cognition, emotion coaching, environment design, caregiver consistency, and family-system fatigue or conflict.
+- Structure substantial advice as: conclusion first, developmental task, what adults should do, what adults should avoid, home implementation, and uncertainty/red flags.
+- Use concrete caregiver scripts: name the emotion, validate the wish, hold the boundary, and offer an acceptable alternative. Avoid shame, threats, ridicule, abandonment, inconsistent rules, or unsafe freedom.
+- For advanced toddlers or order-sensitive-period signs, reason from actual age plus the near-next stage. If motor ability is ahead, raise the safety bar because reachable hazards increase before impulse control catches up.
+- For pediatric symptom or medical-like threads, treat the conversation as a case note: restate timeline/facts, separate facts from inferences, rank likely causes/modifiers, and update the conclusion only when new information changes the evidence. Do not diagnose from photos alone. For current guideline or medication-dose claims, use authoritative live sources or tell the user the claim needs medical confirmation.
+- If the user wants to log, correct, summarize, or query care events, switch to `xiaoduiyou-growth-diary`.
 
 ## Preferred Tool
 

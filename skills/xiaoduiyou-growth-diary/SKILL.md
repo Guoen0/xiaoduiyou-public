@@ -57,3 +57,25 @@ Load this when the user asks to:
 - Current screen/page date is UI context only. The user may be viewing a different date/page; never let visible page date override explicit user time/date or Xiaoduiyou message-send time.
 - Caregiver shorthand: for `锌` / `加锌` with a bare number (e.g. `锌 1`, `加锌2`), interpret the number as milliliters and save `unit: "ml"`, title/content like `锌 1ml`, unless the user explicitly states another unit.
 - Do not use local scripts, browser cookies, config files, terminal history, or connection-token discovery for connected-agent diary I/O. If the connector tools are unavailable, stop and ask for reconnection/target scope.
+
+## Care Record Semantics
+
+Use these rules for high-frequency baby-care records such as milk, meals, water, supplements, stool, sleep, outings, symptoms, height/weight, photos, notes, and daily summaries.
+
+- Keep records traceable: preserve raw caregiver wording in `original_message`; clean the title/content for readability; set `recorder` from the active sender when available.
+- Normalize obvious shorthand instead of asking the caregiver to rephrase. Examples: bare milk amounts mean `ml`; `喝奶-90` means `喝奶 90ml`; `拉屎/拉臭/大便` means stool; Chinese count words like `一次/两次` should become numeric quantities when the schema supports it.
+- For milk without an amount, only default an amount when there is a stable family convention or nearby context. Otherwise record the event without inventing quantity.
+- Treat additives given with milk as part of the milk record when the wording is one combined event, for example `喝奶 180，加锌 1.5ml`; do not split into a separate supplement record unless the user clearly reports a separate supplement event.
+- If the caregiver gives content first and says the time will come later, hold it in the current conversation instead of creating a guessed-time row. When the time arrives, create one record and preserve both messages in `original_message`.
+- If the user sends a late-night correction after midnight with wording like `昨晚`, `晚上那顿`, or an obvious prior-evening reference, map it to the previous calendar date and verify `date` plus `occurred_at`.
+- For coarse time-of-day stool records such as `中午拉屎`, do not ask for exact time. Use a representative time only if the product/schema requires a timestamp, and state in content that exact time/character was not specified.
+- Corrections update the existing real-world event instead of creating duplicates. Duplicate reports from multiple caregivers for the same event should merge into one record, preserving useful source wording.
+- Photos can support descriptions of visible features, but do not diagnose from images alone. Pair photo-based notes with observable markers and red flags.
+
+## Risk, Advice, And Summaries
+
+- Ordinary meals, milk, water, sleep, and normal stool should stay low-noise: normal risk, brief factual content, and no alarmist advice.
+- Use observation/advice/red-flag levels only for meaningful concerns: blood/black stool, repeated watery stool with poor energy/low urine/dry lips, persistent high fever, frequent vomiting, allergy signs, medication ambiguity, falls/burns/ingestion, eye-area swelling with persistent rubbing, or other clear safety issues.
+- Advice should be concise, practical, non-diagnostic, and visible to caregivers when it affects shared care. Mention concrete observable markers such as energy, urine, hydration, fever, blood, repeated watery stool, pain, rash, swelling, or breathing.
+- For daily summaries, merge and de-duplicate instead of listing every raw event. Prefer two user-facing parts when the schema/content allows it: `汇总评估` for factual assessment and `明日建议` for monitoring/action guidance.
+- When summarizing symptoms or medical-like histories, keep a structured case frame: timeline, feeds/foods, medications, labs if provided, response to interventions, facts versus inferences, leading explanation, aggravating factors, and red flags that require medical care.
