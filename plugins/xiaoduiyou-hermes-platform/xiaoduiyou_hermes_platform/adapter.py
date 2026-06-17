@@ -26,7 +26,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.18.2"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.18.3"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -1147,8 +1147,13 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         if not turn_id:
             return SendResult(success=False, error=f"No Xiaoduiyou pending turn for session {chat_id}")
 
-        if str(message_id).startswith("xiaoduiyou_tool_") or _looks_like_tool_progress(content):
-            delta = _progress_delta(str(message_id), content or "")
+        message_key = str(message_id)
+        clean_content = (content or "").replace("▉", "").rstrip()
+        content_is_tool_progress = _looks_like_tool_progress(content)
+        if message_key.startswith("xiaoduiyou_tool_") and not content_is_tool_progress:
+            _PROGRESS_BY_MESSAGE.pop(message_key, None)
+        elif message_key.startswith("xiaoduiyou_tool_") or content_is_tool_progress:
+            delta = _progress_delta(message_key, content or "")
             if not delta:
                 return SendResult(success=True, message_id=message_id)
             try:
@@ -1158,7 +1163,6 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
                 logger.error("Xiaoduiyou progress edit failed: %s", exc, exc_info=True)
                 return SendResult(success=False, error=str(exc))
 
-        clean_content = (content or "").replace("▉", "").rstrip()
         if finalize:
             actions = _drain_actions(chat_key)
             payload: Dict[str, Any] = {"progress": clean_content or "完成。"}
