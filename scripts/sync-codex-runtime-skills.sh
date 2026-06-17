@@ -7,7 +7,7 @@ TARGET_DIR="$PUBLIC_DIR/plugins/xiaoduiyou-runtime-skills/skills"
 
 mkdir -p "$TARGET_DIR"
 
-for skill in xiaoduiyou-im xiaoduiyou-doc-content-package xiaoduiyou-growth-diary; do
+for skill in xiaoduiyou-im xiaoduiyou-doc-content-package xiaoduiyou-growth-diary xiaoduiyou-feedback-issues; do
   rm -rf "$TARGET_DIR/$skill"
   rsync -a --delete \
     --exclude '__pycache__/' \

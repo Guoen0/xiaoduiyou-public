@@ -37,6 +37,7 @@ These runtime skills are installed by the `xiaoduiyou-runtime-skills` Codex plug
 - Chat-only tasks, cards, runtime messages: follow `xiaoduiyou-im`; use `xiaoduiyou_im_send` for clickable image cards.
 - Documents, content packages, process docs, publish notes: follow `xiaoduiyou-doc-content-package`.
 - Growth Diary records, schema, views, and diary photos: follow `xiaoduiyou-growth-diary`.
+- Public feedback-handler or explicit `session_purpose: feedback` turns: follow `xiaoduiyou-feedback-issues`; ordinary chat that mentions feedback stays in `xiaoduiyou-im`.
 
 ## Growth Diary Rules
 

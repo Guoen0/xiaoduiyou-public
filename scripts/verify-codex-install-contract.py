@@ -15,6 +15,12 @@ RUNTIME_SKILLS = [
     "xiaoduiyou-im",
     "xiaoduiyou-doc-content-package",
     "xiaoduiyou-growth-diary",
+    "xiaoduiyou-feedback-issues",
+]
+RUNTIME_API_REFERENCE_SKILLS = [
+    "xiaoduiyou-im",
+    "xiaoduiyou-doc-content-package",
+    "xiaoduiyou-growth-diary",
 ]
 
 
@@ -67,6 +73,7 @@ def main() -> None:
             "xiaoduiyou-im",
             "xiaoduiyou-doc-content-package",
             "xiaoduiyou-growth-diary",
+            "xiaoduiyou-feedback-issues",
         ],
     )
     require_text(
@@ -100,6 +107,7 @@ def main() -> None:
             "xiaoduiyou-im",
             "xiaoduiyou-doc-content-package",
             "xiaoduiyou-growth-diary",
+            "xiaoduiyou-feedback-issues",
             "xiaoduiyou_im_send",
             "xiaoduiyou_interactive_request_create",
             "xiaoduiyou_interactive_request_wait",
@@ -117,7 +125,7 @@ def main() -> None:
             "_write_xiaoduiyou_channel_directory",
         ],
     )
-    for skill in RUNTIME_SKILLS:
+    for skill in RUNTIME_API_REFERENCE_SKILLS:
         require_text(
             ROOT / "skills" / skill / "references" / "runtime-api-reference.md",
             [
