@@ -14,24 +14,24 @@ Xiaoduiyou UI
   → Xiaoduiyou event log + WebSocket update
 ```
 
-Install this plugin from the public repository checkout, not from an app-hosted zip:
+Install or update this plugin and the Xiaoduiyou runtime skills by running the public repository installer directly. Do not manually `rsync` this plugin or write a multi-step update plan unless you are debugging the installer itself:
 
 ```bash
 XDY_PUBLIC_REPO="https://github.com/Guoen0/xiaoduiyou-public.git"
 XDY_PUBLIC_DIR="$HOME/.xiaoduiyou/xiaoduiyou-public"
 mkdir -p "$HOME/.xiaoduiyou"
 if [ -d "$XDY_PUBLIC_DIR/.git" ]; then
-  git -C "$XDY_PUBLIC_DIR" pull --ff-only
+  git -C "$XDY_PUBLIC_DIR" fetch origin main
+  git -C "$XDY_PUBLIC_DIR" reset --hard origin/main
+  git -C "$XDY_PUBLIC_DIR" clean -fd
 else
   git clone "$XDY_PUBLIC_REPO" "$XDY_PUBLIC_DIR"
 fi
 
-HERMES_HOME_DIR="${HERMES_HOME:-$HOME/.hermes}"
-mkdir -p "$HERMES_HOME_DIR/plugins/xiaoduiyou_hermes_platform"
-rsync -a --delete "$XDY_PUBLIC_DIR/plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform/" "$HERMES_HOME_DIR/plugins/xiaoduiyou_hermes_platform/"
+"$XDY_PUBLIC_DIR/scripts/install-hermes.sh"
 ```
 
-Enable it in `${HERMES_HOME:-~/.hermes}/config.yaml` with a Xiaoduiyou-issued base URL and connection token. See the root `README.md` for the full Agent setup prompt.
+The installer preserves existing `${HERMES_HOME:-~/.hermes}/config.yaml` Xiaoduiyou `base_url` and `connection_token` when they are already configured, installs the platform plugin and runtime skills into the active Hermes home, and restarts the gateway. See the root `README.md` for the full Agent setup prompt.
 
 Do not configure `platform_toolsets.xiaoduiyou` as only `["xiaoduiyou"]`: that exposes Xiaoduiyou document tools but removes normal Hermes local tools such as file, terminal, web search, browser, and code execution.
 
