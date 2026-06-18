@@ -20,7 +20,7 @@ from typing import Any
 from urllib import error, parse, request
 
 
-RUNNER_VERSION = "2026.6.3.9-codex-runner"
+RUNNER_VERSION = "2026.6.18.1-codex-runner"
 DEFAULT_HOME = Path.home() / ".codex" / "xiaoduiyou-runner"
 DEFAULT_CONFIG = DEFAULT_HOME / "config.json"
 DEFAULT_LOG = DEFAULT_HOME / "runner.log"
@@ -216,6 +216,46 @@ def turn_dict(payload: dict[str, Any]) -> dict[str, Any]:
 
 def turn_message(payload: dict[str, Any]) -> str:
     return str(turn_dict(payload).get("user_message") or "").strip()
+
+
+def route_specialized_planner(payload: dict[str, Any]) -> str | None:
+    message = turn_message(payload).lower()
+    normalized = "".join(message.split())
+    if not normalized:
+        return None
+
+    visual_terms = [
+        "视觉卡片", "图片卡片", "可视化卡片", "海报卡片", "分享卡", "卡片图",
+        "做张卡片", "生成卡片", "生成一张图", "做张图", "海报",
+    ]
+    if any(term in normalized for term in visual_terms):
+        return "visual_card"
+
+    document_terms = [
+        "内容包", "发布稿", "小红书文案", "朋友圈文案", "生成文档", "创建文档",
+        "删掉这个文档", "删除这个文档", "删掉这份文档", "删除这份文档",
+        "删掉这个内容包", "删除这个内容包", "删掉当前文档", "删除当前文档",
+        "删掉当前内容包", "删除当前内容包",
+    ]
+    if any(term in normalized for term in document_terms):
+        return "document"
+
+    growth_terms = [
+        "成长日记", "成长记录", "宝宝记录", "喂奶", "喝奶", "奶量", "拉臭",
+        "大便", "小便", "尿布", "辅食", "吃饭", "睡觉", "睡眠", "体温",
+        "发烧", "咳嗽", "湿疹", "身高", "体重", "疫苗",
+    ]
+    growth_actions = ["记录", "记一下", "记下", "添加", "新增", "更新", "改成", "删除", "删掉", "查询", "总结", "统计"]
+    quantity_units = ["ml", "毫升", "次", "克", "g", "kg", "公斤", "cm", "厘米", "小时", "分钟"]
+    has_growth_term = any(term in normalized for term in growth_terms)
+    has_growth_action = any(action in normalized for action in growth_actions)
+    has_quantity_unit = any(unit in normalized for unit in quantity_units)
+    if has_growth_term and (has_growth_action or has_quantity_unit):
+        return "growth_diary"
+    if any(term in normalized for term in ["刚喝", "喝了", "拉了", "睡了"]) and has_quantity_unit:
+        return "growth_diary"
+
+    return None
 
 
 def local_datetime_from_turn(payload: dict[str, Any]) -> dt.datetime:
@@ -793,10 +833,14 @@ def handle_one(config: dict[str, Any], client: XiaoduiyouClient) -> bool:
         return True
     log(f"claimed turn {turn_id}")
     try:
-        reply = handle_model_planned_growth_diary_turn(config, client, claimed)
-        if reply is None:
+        route = route_specialized_planner(claimed)
+        log(f"turn {turn_id} route={route or 'codex'}")
+        reply = None
+        if route == "growth_diary":
+            reply = handle_model_planned_growth_diary_turn(config, client, claimed)
+        elif route == "visual_card":
             reply = handle_model_planned_visual_card_turn(config, client, claimed)
-        if reply is None:
+        elif route == "document":
             reply = handle_model_planned_document_turn(config, client, claimed)
         if reply is None:
             reply = run_codex(config, claimed)
