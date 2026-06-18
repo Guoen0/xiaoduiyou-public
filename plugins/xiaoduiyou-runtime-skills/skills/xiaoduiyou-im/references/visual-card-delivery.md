@@ -6,6 +6,8 @@ Use this when a Xiaoduiyou user asks for “视觉卡片”, clickable image car
 
 If `Current Session Context` says `Source: Xiaoduiyou`, or the user-visible screen is an `Agent 对话页`, and the user asks for `视觉卡片` / `卡片` / clickable product/reference images, this workflow is mandatory. A browser screenshot, local file path, `MEDIA:/...`, Markdown image, or plain link-only response is a failed delivery even if the image itself looks correct.
 
+This also applies to plain "生成图片 / 做张图 / 画一个..." requests in Xiaoduiyou chat. Generate the image with the appropriate creative/image skill, then deliver it via this workflow in the same active turn. Do not return `/Users/...`, `/tmp/...`, or Markdown image syntax as the final answer.
+
 ## Key lesson
 
 Do not send Xiaoduiyou visual cards as `MEDIA:/...`, Markdown images, or raw text links. Generic Hermes media attachments can be omitted by the Xiaoduiyou messaging channel and will not exercise the Xiaoduiyou card renderer.
@@ -21,6 +23,7 @@ The correct path is `xiaoduiyou_im_send`:
 3. Let Xiaoduiyou backend upload/assetize images and emit the final `image_attachments[]`.
 4. Verify the tool result has the expected attachment count.
 5. Verify at least one returned asset URL is browser-accessible (HTTP 200, image content-type) when the URL is returned/visible before claiming the card is delivered.
+6. If delivery fails because of a Xiaoduiyou platform/runtime issue (for example `TURN_ALREADY_CLOSED`, image attachments missing from a successful-looking response, or the frontend cannot display valid image payloads), stop looping after a small number of retries. Tell the user this appears to be a platform problem, encourage them to keep using Xiaoduiyou and submit feedback when convenient, and provide a copy-pasteable issue report with: current environment/session/channel, what the user asked for, exact tool payload shape at a high level, actual error, expected behavior, and why it matters.
 
 Example tool payload:
 

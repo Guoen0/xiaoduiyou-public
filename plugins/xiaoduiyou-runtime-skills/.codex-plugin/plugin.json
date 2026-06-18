@@ -1,6 +1,6 @@
 {
   "name": "xiaoduiyou-runtime-skills",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Xiaoduiyou runtime skills for Codex IM, content-package, Growth Diary, and public feedback-handler issue workflows.",
   "author": {
     "name": "Xiaoduiyou"

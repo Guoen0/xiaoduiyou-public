@@ -22,14 +22,17 @@ Load this when:
 ## Non-negotiables
 
 0. Xiaoduiyou operating knowledge belongs in Xiaoduiyou skills, not Hermes memory. Treat the agent as a Xiaoduiyou developer and earliest user: when a Xiaoduiyou workflow lesson, UI/runtime convention, or caregiver shorthand is discovered, patch the relevant `xiaoduiyou-*` skill so other agents can inherit it; do not store that experience only in profile memory.
-1. Prefer the `xiaoduiyou_im_send` tool for visual cards. It accepts OpenAI Responses-style `content[]` parts and the Xiaoduiyou backend uploads images/assets.
-2. Visual cards in Xiaoduiyou render as `image_attachments[]`, not `MEDIA:/...`, Markdown images, browser screenshots, or link-only text.
-3. Local/server-static paths are invalid in final chat cards. Pass HTTPS images or `data:image/...;base64,...` to `xiaoduiyou_im_send`; never pass `/tmp`, `/Users`, `file:`, `blob:`, `localhost`, or private-network URLs.
-4. Verify delivery: response event type, attachment count, and at least one image URL HTTP 200 image content-type.
-5. For product questions: Xiaohongshu provides lived-experience/reference evidence; Taobao/Tmall provides buyable candidates/parameters.
-6. For document/content-package artifacts, travel plans, publish tabs, or process docs, load `xiaoduiyou-doc-content-package`; do not keep that workflow inside IM.
-7. For Growth Diary records, load `xiaoduiyou-growth-diary`; do not send diary-only data as generic chat cards unless the user asks for a chat preview.
-8. Keep private family context out of skill files. In a local Hermes environment, read or create `${HERMES_HOME:-$HOME/.hermes}/private/xiaoduiyou-family-care-preferences.md` for family-specific names, IDs, childcare preferences, and durable care-history facts. Update that file when the user gives durable private preferences; keep reusable product behavior in this skill. This path is outside `skills/` and `plugins/` so skill upgrades should not overwrite it.
+1. **If the current screen/source is Xiaoduiyou Agent 对话页 and the user asks to generate or return an image, load this skill before final delivery even if the creative prompt itself is handled by an image-generation skill.** The deliverable must be a Xiaoduiyou IM image/card, not a generic Hermes Markdown image.
+2. Prefer the `xiaoduiyou_im_send` tool for visual cards. It accepts OpenAI Responses-style `content[]` parts and the Xiaoduiyou backend uploads images/assets.
+3. Visual cards in Xiaoduiyou render as `image_attachments[]`, not `MEDIA:/...`, Markdown images, browser screenshots, or link-only text.
+4. Local/server-static paths are invalid in final chat cards. Pass HTTPS images or `data:image/...;base64,...` to `xiaoduiyou_im_send`; never pass `/tmp`, `/Users`, `file:`, `blob:`, `localhost`, or private-network URLs.
+5. **Send the Xiaoduiyou IM payload inside the same active turn before the final text reply.** Do not first finalize with a local/Markdown path and try to "补发" later; the runtime may close the turn and reject late IM sends.
+6. Verify delivery: response event type, attachment count, and at least one image URL HTTP 200 image content-type.
+7. If Xiaoduiyou IM delivery fails with a platform/runtime error (for example `TURN_ALREADY_CLOSED`, missing attachments despite correct `xiaoduiyou_im_send`, or frontend cannot display supported image payloads), do not keep silently retrying or blame the user. Briefly explain that this looks like a platform issue, encourage the user to keep using the product and to submit feedback when convenient, and provide a concise copy-pasteable bug report with environment/session, repro steps, actual/expected result, and exact error.
+8. For product questions: Xiaohongshu provides lived-experience/reference evidence; Taobao/Tmall provides buyable candidates/parameters.
+9. For document/content-package artifacts, travel plans, publish tabs, or process docs, load `xiaoduiyou-doc-content-package`; do not keep that workflow inside IM.
+10. For Growth Diary records, load `xiaoduiyou-growth-diary`; do not send diary-only data as generic chat cards unless the user asks for a chat preview.
+11. Keep private family context out of skill files. In a local Hermes environment, read or create `${HERMES_HOME:-$HOME/.hermes}/private/xiaoduiyou-family-care-preferences.md` for family-specific names, IDs, childcare preferences, and durable care-history facts. Update that file when the user gives durable private preferences; keep reusable product behavior in this skill. This path is outside `skills/` and `plugins/` so skill upgrades should not overwrite it.
 
 ## Case map owned by IM
 
