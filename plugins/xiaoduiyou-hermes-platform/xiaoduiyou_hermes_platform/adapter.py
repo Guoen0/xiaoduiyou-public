@@ -26,7 +26,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.20.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.18.3"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -1686,47 +1686,13 @@ def _growth_diary_patch_failure_result(exc: Exception) -> Dict[str, Any]:
     }
 
 
-_GROWTH_DIARY_PATCH_KEYS = {"records", "updates", "deletions", "field_options", "views"}
-
-
-def _growth_diary_patch_payload_from_args(args: Dict[str, Any]) -> Dict[str, Any]:
-    if not isinstance(args, dict):
-        raise RuntimeError("payload must be an object matching /api/growth-diary PATCH")
-
-    direct_payload = {key: args[key] for key in _GROWTH_DIARY_PATCH_KEYS if key in args}
-    if direct_payload:
-        return direct_payload
-
-    for wrapper_key in ("payload", "arguments", "input"):
-        if wrapper_key in args:
-            return _growth_diary_patch_payload_from_value(args[wrapper_key])
-
-    return {}
-
-
-def _growth_diary_patch_payload_from_value(value: Any) -> Dict[str, Any]:
-    if isinstance(value, str):
-        try:
-            value = json.loads(value)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("payload must be a JSON object, not an invalid JSON string") from exc
-    if not isinstance(value, dict):
-        raise RuntimeError("payload must be an object matching /api/growth-diary PATCH")
-
-    direct_payload = {key: value[key] for key in _GROWTH_DIARY_PATCH_KEYS if key in value}
-    if direct_payload:
-        return direct_payload
-
-    for wrapper_key in ("payload", "arguments", "input"):
-        if wrapper_key in value:
-            return _growth_diary_patch_payload_from_value(value[wrapper_key])
-
-    return value
-
-
 def _tool_growth_diary_patch(args: Dict[str, Any], **_: Any) -> str:
     context = _active_tool_context()
-    payload = _growth_diary_patch_payload_from_args(args)
+    payload = args.get("payload")
+    if payload is None:
+        payload = {key: value for key, value in args.items() if key not in {"payload"}}
+    if not isinstance(payload, dict):
+        raise RuntimeError("payload must be an object matching /api/growth-diary PATCH")
     try:
         query_string = _growth_diary_query_string(context)
         result = _request_json(
