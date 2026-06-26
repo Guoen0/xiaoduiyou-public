@@ -81,7 +81,7 @@ def main() -> None:
     require_text(
         ROOT / "plugins" / "xiaoduiyou-codex-platform" / "scripts" / "xiaoduiyou_mcp.py",
         [
-            "CONNECTOR_VERSION = \"2026.6.26-codex.2\"",
+            "CONNECTOR_VERSION = \"2026.6.26-codex.3\"",
             "\"name\": \"xiaoduiyou_im_send\"",
             "\"name\": \"xiaoduiyou_interactive_request_create\"",
             "\"name\": \"xiaoduiyou_interactive_request_wait\"",
