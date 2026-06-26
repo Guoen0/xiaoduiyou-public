@@ -331,6 +331,21 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         except Exception as exc:
             return text_result(growth_diary_patch_failure(exc), is_error=True)
 
+    if name == "xiaoduiyou_child_get":
+        allowed = ["session_id", "turn_id"]
+        return text_result(request_json(f"/api/child{compact_query({key: args.get(key) for key in allowed})}"))
+
+    if name == "xiaoduiyou_child_patch":
+        profile = args.get("profile")
+        if not isinstance(profile, dict):
+            raise ValueError("profile must be a JSON object")
+        allowed = ["session_id", "turn_id"]
+        return text_result(request_json(
+            f"/api/child{compact_query({key: args.get(key) for key in allowed})}",
+            method="PATCH",
+            body={"profile": profile},
+        ))
+
     if name == "xiaoduiyou_documents_get":
         query = compact_query({key: args.get(key) for key in ["view", "field", "start", "block_limit", "char_limit"]})
         document_id = str(args.get("document_id") or "").strip()
@@ -504,6 +519,32 @@ TOOLS = [
             "timeout_seconds": {"type": "number", "minimum": 1, "maximum": 600},
             "interval_seconds": {"type": "number", "minimum": 0.5, "maximum": 10},
         }, ["request_id"]),
+    },
+    {
+        "name": "xiaoduiyou_child_get",
+        "description": "Read Xiaoduiyou child basic profile data for the connected account. Use skill xiaoduiyou-child-profile before writes.",
+        "inputSchema": schema({"session_id": {"type": "string"}, "turn_id": {"type": "string"}}),
+    },
+    {
+        "name": "xiaoduiyou_child_patch",
+        "description": "Patch Xiaoduiyou child basic profile data. Call xiaoduiyou_child_get first and send only profile fields explicitly provided by the user.",
+        "inputSchema": schema({
+            "profile": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "name": {"type": "string"},
+                    "birthday": {"type": "string", "description": "YYYY-MM-DD"},
+                    "gender": {"type": "string"},
+                    "allergy": {"type": "string"},
+                    "heightCm": {"type": "string"},
+                    "weightKg": {"type": "string"},
+                    "photoUrl": {"type": "string"},
+                },
+            },
+            "session_id": {"type": "string"},
+            "turn_id": {"type": "string"},
+        }, ["profile"]),
     },
     {
         "name": "xiaoduiyou_growth_diary_get",

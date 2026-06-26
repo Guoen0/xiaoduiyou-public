@@ -1,5 +1,5 @@
 import { resolveXiaoduiyouAccount } from "./accounts.js";
-import { getXiaoduiyouDocument, getXiaoduiyouGrowthDiary, patchXiaoduiyouGrowthDiary, sendXiaoduiyouImMessage } from "./client.js";
+import { getXiaoduiyouChild, getXiaoduiyouDocument, getXiaoduiyouGrowthDiary, patchXiaoduiyouChild, patchXiaoduiyouGrowthDiary, sendXiaoduiyouImMessage } from "./client.js";
 import { summarizeGrowthDiaryPatchResult } from "./growth-diary-summary.js";
 import { activeXiaoduiyouToolContext, queueXiaoduiyouDocumentAction } from "./tool-context.js";
 
@@ -43,6 +43,42 @@ const GrowthDiaryPatchSchema = {
     account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the default/current connector account." },
   },
   required: ["payload"],
+};
+
+const ChildGetSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    session_id: { type: "string", description: "Optional Xiaoduiyou session id used to scope public-agent tokens. Omit inside an active turn." },
+    turn_id: { type: "string", description: "Optional Xiaoduiyou turn id used to scope public-agent tokens. Omit inside an active turn." },
+    account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the default/current connector account." },
+  },
+};
+
+const ChildProfileSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    name: { type: "string", description: "Child display name/nickname." },
+    birthday: { type: "string", description: "Birthday as YYYY-MM-DD." },
+    gender: { type: "string", description: "男孩, 女孩, 未填写, or localized equivalent." },
+    allergy: { type: "string", description: "Key allergy or suspected allergy note. Empty string clears it." },
+    heightCm: { type: "string", description: "Height in cm as a string, e.g. 80." },
+    weightKg: { type: "string", description: "Weight in kg as a string, e.g. 10.5." },
+    photoUrl: { type: "string", description: "HTTPS photo URL already uploaded to Xiaoduiyou/TOS assets." },
+  },
+};
+
+const ChildPatchSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    profile: ChildProfileSchema,
+    session_id: { type: "string", description: "Optional Xiaoduiyou session id used to scope public-agent tokens. Omit inside an active turn." },
+    turn_id: { type: "string", description: "Optional Xiaoduiyou turn id used to scope public-agent tokens. Omit inside an active turn." },
+    account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the default/current connector account." },
+  },
+  required: ["profile"],
 };
 
 const DocumentGetSchema = {
@@ -275,6 +311,45 @@ function createGrowthDiaryPatchTool(config) {
   };
 }
 
+function createChildGetTool(config) {
+  return {
+    name: "xiaoduiyou_child_get",
+    label: "Xiaoduiyou Child Get",
+    description: "Read Xiaoduiyou child basic profile data for the current connected Xiaoduiyou account. Use skill xiaoduiyou-child-profile before profile writes.",
+    parameters: ChildGetSchema,
+    execute: async (_toolCallId, rawParams = {}) => {
+      const context = activeXiaoduiyouToolContext();
+      const account = resolveToolAccount(config, { ...rawParams, account_id: rawParams.account_id || context.accountId });
+      const result = await getXiaoduiyouChild(account, {
+        session_id: rawParams.session_id || context.sessionId,
+        turn_id: rawParams.turn_id || context.turnId,
+      });
+      return jsonResult(result);
+    },
+  };
+}
+
+function createChildPatchTool(config) {
+  return {
+    name: "xiaoduiyou_child_patch",
+    label: "Xiaoduiyou Child Patch",
+    description: "Patch Xiaoduiyou child basic profile data for the current connected Xiaoduiyou account. Use skill xiaoduiyou-child-profile and call xiaoduiyou_child_get first. Only send profile fields the user explicitly provided.",
+    parameters: ChildPatchSchema,
+    execute: async (_toolCallId, rawParams = {}) => {
+      const context = activeXiaoduiyouToolContext();
+      const account = resolveToolAccount(config, { ...rawParams, account_id: rawParams.account_id || context.accountId });
+      if (!rawParams.profile || typeof rawParams.profile !== "object" || Array.isArray(rawParams.profile)) {
+        throw new Error("profile must be a JSON object");
+      }
+      const result = await patchXiaoduiyouChild(account, { profile: rawParams.profile }, {
+        session_id: rawParams.session_id || context.sessionId,
+        turn_id: rawParams.turn_id || context.turnId,
+      });
+      return jsonResult({ ok: true, child: result.child });
+    },
+  };
+}
+
 function createDocumentGetTool(config) {
   return {
     name: "xiaoduiyou_documents_get",
@@ -411,6 +486,8 @@ function createImSendTool(config) {
 }
 
 export function registerXiaoduiyouTools(api) {
+  api.registerTool(createChildGetTool(api.config), { name: "xiaoduiyou_child_get" });
+  api.registerTool(createChildPatchTool(api.config), { name: "xiaoduiyou_child_patch" });
   api.registerTool(createGrowthDiaryGetTool(api.config), { name: "xiaoduiyou_growth_diary_get" });
   api.registerTool(createGrowthDiaryPatchTool(api.config), { name: "xiaoduiyou_growth_diary_patch" });
   api.registerTool(createDocumentGetTool(api.config), { name: "xiaoduiyou_documents_get" });

@@ -1,7 +1,7 @@
 {
   "name": "xiaoduiyou-runtime-skills",
-  "version": "0.1.5",
-  "description": "Xiaoduiyou runtime skills for Codex IM, content-package, Growth Diary, and public feedback-handler issue workflows.",
+  "version": "0.1.6",
+  "description": "Xiaoduiyou runtime skills for Codex IM, content-package, Growth Diary, child profile, and public feedback-handler issue workflows.",
   "author": {
     "name": "Xiaoduiyou"
   },
@@ -15,13 +15,14 @@
     "im",
     "content-package",
     "growth-diary",
+    "child-profile",
     "public-feedback-handler"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Xiaoduiyou Runtime Skills",
-    "shortDescription": "Use Xiaoduiyou IM, document, Growth Diary, and public feedback-handler workflows in Codex.",
-    "longDescription": "Installs the Xiaoduiyou runtime skills that define IM message handling, visual card delivery, document and content-package creation, Growth Diary read/write behavior, and public feedback-handler issue triage for Codex.",
+    "shortDescription": "Use Xiaoduiyou IM, document, Growth Diary, child profile, and public feedback-handler workflows in Codex.",
+    "longDescription": "Installs the Xiaoduiyou runtime skills that define IM message handling, visual card delivery, document and content-package creation, Growth Diary read/write behavior, child basic-profile updates, and public feedback-handler issue triage for Codex.",
     "developerName": "Xiaoduiyou",
     "category": "Productivity",
     "capabilities": [
@@ -32,6 +33,7 @@
       "Use Xiaoduiyou IM runtime rules.",
       "Create a Xiaoduiyou content package.",
       "Write a Xiaoduiyou Growth Diary record.",
+      "Update a Xiaoduiyou child basic profile.",
       "Triage a Xiaoduiyou public feedback-handler session with session_purpose: feedback."
     ],
     "brandColor": "#2563EB"

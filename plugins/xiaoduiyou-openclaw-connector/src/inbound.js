@@ -212,6 +212,7 @@ export async function handleXiaoduiyouTurn({ account, config, turn, runtime }) {
   const documentToolNote = [
     "Xiaoduiyou connector tools are available.",
     "For Growth Diary tasks, use skill xiaoduiyou-growth-diary, call xiaoduiyou_growth_diary_get first, then xiaoduiyou_growth_diary_patch for writes; do not search local files/env/config for connection_token and do not call /api/growth-diary manually from terminal.",
+    "For child basic profile tasks (name, birthday, gender, allergy, height, weight, photo), use skill xiaoduiyou-child-profile, call xiaoduiyou_child_get first, then xiaoduiyou_child_patch for explicit profile updates.",
     "For Growth Diary event time, use explicit user wording first; if absent, use this Xiaoduiyou turn's Timestamp/created_at, never the Agent runtime clock or an invented time.",
     "Agent-created records must include date as YYYY-MM-DD and occurred_at as YYYY-MM-DD HH:mm:ss with matching dates; short times like 19:20 are invalid and will be rejected.",
     "For ordinary chat, answer normally and do not call document tools.",

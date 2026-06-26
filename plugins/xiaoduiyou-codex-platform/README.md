@@ -32,6 +32,8 @@ stores them in `~/.codex/xiaoduiyou-connection.json`.
 - `xiaoduiyou_interactive_request_create`
 - `xiaoduiyou_interactive_request_get`
 - `xiaoduiyou_interactive_request_wait`
+- `xiaoduiyou_child_get`
+- `xiaoduiyou_child_patch`
 - `xiaoduiyou_growth_diary_get`
 - `xiaoduiyou_growth_diary_patch`
 - `xiaoduiyou_documents_get`

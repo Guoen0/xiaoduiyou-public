@@ -729,6 +729,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             "Xiaoduiyou connector tools are available. "
             "For Growth Diary tasks, use skill xiaoduiyou-growth-diary, call xiaoduiyou_growth_diary_get first, then xiaoduiyou_growth_diary_patch for writes; "
             "do not search local files/env/config for connection_token and do not call /api/growth-diary manually from terminal. "
+            "For child basic profile tasks (name, birthday, gender, allergy, height, weight, photo), use skill xiaoduiyou-child-profile, call xiaoduiyou_child_get first, then xiaoduiyou_child_patch for explicit profile updates. "
             "For Growth Diary event time, use explicit user wording first; if absent, use this Xiaoduiyou turn's created_at, never the Agent runtime clock or an invented time. "
             "Agent-created records must include date as YYYY-MM-DD and occurred_at as YYYY-MM-DD HH:mm:ss with matching dates; short times like 19:20 are invalid and will be rejected. "
             "For ordinary chat, answer normally and do not call document tools. "
@@ -1437,6 +1438,41 @@ def _tool_growth_diary_get(args: Dict[str, Any], **_: Any) -> str:
     return json.dumps({"ok": True, "context": _safe_tool_context(context), "filter": filter_spec or None, "growth_diary": result}, ensure_ascii=False)
 
 
+def _tool_child_get(args: Dict[str, Any], **_: Any) -> str:
+    context = _active_tool_context()
+    query_string = _growth_diary_query_string(context, {
+        key: args.get(key)
+        for key in ("session_id", "turn_id")
+        if args.get(key)
+    })
+    result = _request_json(
+        f"{context['base_url']}/api/child{query_string}",
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+        token=context["token"],
+    )
+    return json.dumps({"ok": True, "context": _safe_tool_context(context), "child": result.get("child", result)}, ensure_ascii=False)
+
+
+def _tool_child_patch(args: Dict[str, Any], **_: Any) -> str:
+    context = _active_tool_context()
+    profile = args.get("profile")
+    if not isinstance(profile, dict):
+        raise RuntimeError("profile must be an object with child basic-info fields")
+    query_string = _growth_diary_query_string(context, {
+        key: args.get(key)
+        for key in ("session_id", "turn_id")
+        if args.get(key)
+    })
+    result = _request_json(
+        f"{context['base_url']}/api/child{query_string}",
+        method="PATCH",
+        payload={"profile": profile},
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+        token=context["token"],
+    )
+    return json.dumps({"ok": True, "context": _safe_tool_context(context), "child": result.get("child", result)}, ensure_ascii=False)
+
+
 def _growth_diary_records_query(args: Dict[str, Any], filter_spec: Dict[str, Any], view: str) -> Dict[str, Any]:
     event_type = str(args.get("event_type") or "").strip()
     query = str(args.get("query") or args.get("q") or "").strip()
@@ -1763,6 +1799,59 @@ def register(ctx) -> None:
         max_message_length=XiaoduiyouAdapter.MAX_MESSAGE_LENGTH,
         cron_deliver_env_var="XIAODUIYOU_HOME_CHANNEL",
         standalone_sender_fn=_standalone_send,
+    )
+
+    ctx.register_tool(
+        name="xiaoduiyou_child_get",
+        toolset=TOOLSET,
+        description="Read Xiaoduiyou child basic profile data through the connector-owned origin/token for the current Xiaoduiyou turn. Use skill xiaoduiyou-child-profile before profile writes.",
+        emoji="👶",
+        schema={
+            "name": "xiaoduiyou_child_get",
+            "description": "Read child basic profile data for the current Xiaoduiyou home. Use skill xiaoduiyou-child-profile before writes. Do not search for connection_token manually.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "Optional Xiaoduiyou session id for scope. Omit inside an active turn."},
+                    "turn_id": {"type": "string", "description": "Optional Xiaoduiyou turn id for scope. Omit inside an active turn."},
+                },
+            },
+        },
+        handler=_tool_child_get,
+        check_fn=check_requirements,
+    )
+    ctx.register_tool(
+        name="xiaoduiyou_child_patch",
+        toolset=TOOLSET,
+        description="Patch Xiaoduiyou child basic profile data through the connector-owned origin/token for the current Xiaoduiyou turn. Use skill xiaoduiyou-child-profile and call get first.",
+        emoji="🧸",
+        schema={
+            "name": "xiaoduiyou_child_patch",
+            "description": "Patch child basic profile data for the current Xiaoduiyou home. Call xiaoduiyou_child_get first, then send only profile fields explicitly provided by the user. Do not update development skill nodes here.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "profile": {
+                        "type": "object",
+                        "description": "Partial child profile patch. Omit unknown fields; use empty allergy to clear allergy.",
+                        "properties": {
+                            "name": {"type": "string", "description": "Child display name/nickname."},
+                            "birthday": {"type": "string", "description": "Birthday as YYYY-MM-DD."},
+                            "gender": {"type": "string", "description": "男孩, 女孩, 未填写, or localized equivalent."},
+                            "allergy": {"type": "string", "description": "Key allergy/suspected allergy note; empty string clears it."},
+                            "heightCm": {"type": "string", "description": "Height in cm as a string, e.g. 80."},
+                            "weightKg": {"type": "string", "description": "Weight in kg as a string, e.g. 10.5."},
+                            "photoUrl": {"type": "string", "description": "HTTPS child photo URL already uploaded to Xiaoduiyou/TOS assets."},
+                        },
+                    },
+                    "session_id": {"type": "string", "description": "Optional Xiaoduiyou session id for scope. Omit inside an active turn."},
+                    "turn_id": {"type": "string", "description": "Optional Xiaoduiyou turn id for scope. Omit inside an active turn."},
+                },
+                "required": ["profile"],
+            },
+        },
+        handler=_tool_child_patch,
+        check_fn=check_requirements,
     )
 
     ctx.register_tool(

@@ -72,7 +72,7 @@ for source in sources:
 marketplace.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 
-for skill in xiaoduiyou-im xiaoduiyou-doc-content-package xiaoduiyou-growth-diary xiaoduiyou-feedback-issues; do
+for skill in xiaoduiyou-im xiaoduiyou-doc-content-package xiaoduiyou-growth-diary xiaoduiyou-child-profile xiaoduiyou-feedback-issues; do
   if [ ! -f "$PERSONAL_PLUGIN_DIR/xiaoduiyou-runtime-skills/skills/$skill/SKILL.md" ]; then
     echo "Codex runtime skill was not installed correctly: $skill" >&2
     exit 1

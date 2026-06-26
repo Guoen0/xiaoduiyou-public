@@ -16,6 +16,7 @@ Load this when:
 - Keywords handled here: `视觉卡片`, `卡片`, `点图`, `点图片打开`, `商品候选`, `参考帖`, `淘宝`, `小红书`, `找一下`, `给我几个`, `候选`.
 - If the user asks for `旅游规划`, `旅行规划`, itinerary/travel result UI, `内容包`, `文档产物`, `发布稿`, `ui_templates`, or publish tabs, load `xiaoduiyou-doc-content-package` instead.
 - If the user asks for `成长日记`, baby diary records, or diary photos/schema/views, load `xiaoduiyou-growth-diary` instead.
+- If the user asks to view or update child basic info such as baby name/nickname, birthday, gender, allergy, height, weight, or child photo, load `xiaoduiyou-child-profile` instead.
 - If runtime/session context explicitly has `session_purpose: feedback`, or the current Hermes profile is the configured Xiaoduiyou public feedback handler, load `xiaoduiyou-feedback-issues` instead. Do not route ordinary chat just because the user says `反馈`, `bug`, `问题`, or `issue`.
 - If the user asks for baby/toddler psychology, behavior, routines, feeding cooperation, sleep/meal cooperation, discipline, emotion coaching, attachment, autonomy, play, or family caregiving decisions without asking to write diary data, answer in chat here.
 
@@ -44,6 +45,7 @@ Load this when:
 | Runtime send/message/card payload details | `references/runtime-api-reference.md` | Chat message endpoint and `image_attachments` payloads. |
 | Asset upload/image URL verification for chat cards | `references/image-upload-contract.md` | Upload local/generated images before final UI use. |
 | Runtime turn lifecycle / message stream state | `references/runtime-turn-lifecycle.md` | Debug or reason about Agent 对话页 runtime turns. |
+| Child basic profile: name/birthday/gender/allergy/height/weight/photo | load `xiaoduiyou-child-profile` | Basic profile writes use `xiaoduiyou_child_get` and `xiaoduiyou_child_patch`. |
 | Scheduled Xiaoduiyou message / reminder / cron delivery | `cronjob(action="create")` with `deliver` | Cron runs without `send_message`; delivery target must be encoded in `deliver`. |
 | Explicit `session_purpose: feedback` or configured public feedback Agent/profile | load `xiaoduiyou-feedback-issues` | Feedback triage is public-Agent-only; ordinary chat mentioning feedback stays in IM. |
 
@@ -57,6 +59,7 @@ Load this when:
 | Upload/verify images | handle here; open `references/image-upload-contract.md` |
 | Scheduled message/reminder to a Xiaoduiyou channel | use `cronjob(action="create")` with `deliver`; do not schedule a future `send_message` call |
 | Baby/toddler parenting guidance without record writes | answer in chat; use the parenting guidance rules below |
+| Child basic profile update/query | load `xiaoduiyou-child-profile` |
 | Explicit `session_purpose: feedback` or configured public feedback Agent/profile | load `xiaoduiyou-feedback-issues` |
 | Document/content-package artifacts, travel plans, publish tabs, process docs | load `xiaoduiyou-doc-content-package` |
 | 成长日记 / diary records / diary photos | load `xiaoduiyou-growth-diary` |

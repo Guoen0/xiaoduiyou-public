@@ -56,6 +56,17 @@ export async function patchXiaoduiyouGrowthDiary(account, payload) {
   });
 }
 
+export async function getXiaoduiyouChild(account, params = {}) {
+  return await requestJson(account, `/api/child${compactQuery(params)}`);
+}
+
+export async function patchXiaoduiyouChild(account, payload, params = {}) {
+  return await requestJson(account, `/api/child${compactQuery(params)}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
 export async function getXiaoduiyouDocument(account, params = {}) {
   const documentId = String(params.document_id ?? "").trim();
   const sessionId = String(params.session_id ?? "").trim();

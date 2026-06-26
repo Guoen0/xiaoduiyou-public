@@ -47,7 +47,7 @@ if git -C "$repo_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   fi
 fi
 
-for skill in xiaoduiyou-im xiaoduiyou-doc-content-package xiaoduiyou-growth-diary; do
+for skill in xiaoduiyou-im xiaoduiyou-doc-content-package xiaoduiyou-growth-diary xiaoduiyou-child-profile; do
   OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw skills install "$repo_dir/skills/$skill" --as "$skill" --force
   rm -rf "${OPENCLAW_HOME_ROOT}/.openclaw/.openclaw/workspace/skills/$skill"
 done
@@ -56,7 +56,7 @@ rmdir "${OPENCLAW_HOME_ROOT}/.openclaw/.openclaw/workspace" >/dev/null 2>&1 || t
 rmdir "${OPENCLAW_HOME_ROOT}/.openclaw/.openclaw" >/dev/null 2>&1 || true
 
 OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw skills uninstall xiaoduiyou-usage-workflow >/dev/null 2>&1 || true
-if ! OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw config set "agents.list[$XDY_OPENCLAW_AGENT_INDEX].skills" '["xiaoduiyou-im","xiaoduiyou-doc-content-package","xiaoduiyou-growth-diary"]' --strict-json; then
+if ! OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw config set "agents.list[$XDY_OPENCLAW_AGENT_INDEX].skills" '["xiaoduiyou-im","xiaoduiyou-doc-content-package","xiaoduiyou-growth-diary","xiaoduiyou-child-profile"]' --strict-json; then
   echo "Warning: could not update agents.list[$XDY_OPENCLAW_AGENT_INDEX].skills; leaving existing OpenClaw agent config unchanged." >&2
 fi
 tools_also_allow="$(
@@ -84,9 +84,12 @@ OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw gateway restart
 OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw skills info xiaoduiyou-im >/dev/null
 OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw skills info xiaoduiyou-doc-content-package >/dev/null
 OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw skills info xiaoduiyou-growth-diary >/dev/null
+OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw skills info xiaoduiyou-child-profile >/dev/null
 OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw plugins list | grep -i xiaoduiyou >/dev/null
 OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw config get tools.alsoAllow | grep -F 'group:plugins' >/dev/null
 grep -F 'xiaoduiyou_im_send' "$repo_dir/plugins/xiaoduiyou-openclaw-connector/openclaw.plugin.json" >/dev/null
+grep -F 'xiaoduiyou_child_get' "$repo_dir/plugins/xiaoduiyou-openclaw-connector/openclaw.plugin.json" >/dev/null
 grep -F 'xiaoduiyou_im_send' "$repo_dir/plugins/xiaoduiyou-openclaw-connector/src/tools.js" >/dev/null
+grep -F 'xiaoduiyou_child_patch' "$repo_dir/plugins/xiaoduiyou-openclaw-connector/src/tools.js" >/dev/null
 
 echo "Xiaoduiyou OpenClaw connector and skills are installed in ${OPENCLAW_HOME_ROOT}/.openclaw."

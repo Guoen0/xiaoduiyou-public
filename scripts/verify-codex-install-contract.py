@@ -15,6 +15,7 @@ RUNTIME_SKILLS = [
     "xiaoduiyou-im",
     "xiaoduiyou-doc-content-package",
     "xiaoduiyou-growth-diary",
+    "xiaoduiyou-child-profile",
     "xiaoduiyou-feedback-issues",
 ]
 RUNTIME_API_REFERENCE_SKILLS = [
@@ -73,6 +74,7 @@ def main() -> None:
             "xiaoduiyou-im",
             "xiaoduiyou-doc-content-package",
             "xiaoduiyou-growth-diary",
+            "xiaoduiyou-child-profile",
             "xiaoduiyou-feedback-issues",
         ],
     )
@@ -83,6 +85,8 @@ def main() -> None:
             "\"name\": \"xiaoduiyou_im_send\"",
             "\"name\": \"xiaoduiyou_interactive_request_create\"",
             "\"name\": \"xiaoduiyou_interactive_request_wait\"",
+            "\"name\": \"xiaoduiyou_child_get\"",
+            "\"name\": \"xiaoduiyou_child_patch\"",
             "\"/api/agent/im/send\"",
             "\"/api/agent/interactive-requests\"",
             "tool-progress",
@@ -107,6 +111,7 @@ def main() -> None:
             "xiaoduiyou-im",
             "xiaoduiyou-doc-content-package",
             "xiaoduiyou-growth-diary",
+            "xiaoduiyou-child-profile",
             "xiaoduiyou-feedback-issues",
             "xiaoduiyou_im_send",
             "xiaoduiyou_interactive_request_create",

@@ -14,6 +14,7 @@ Source of truth: `https://github.com/Guoen0/xiaoduiyou-public.git`. Clone or pul
 - IM skill: `skills/xiaoduiyou-im/`
 - Document/content-package skill: `skills/xiaoduiyou-doc-content-package/`
 - Growth Diary skill: `skills/xiaoduiyou-growth-diary/`
+- Child profile skill: `skills/xiaoduiyou-child-profile/`
 - Public feedback-handler skill: `skills/xiaoduiyou-feedback-issues/`
 - Package manifest: `manifest.json`
 
@@ -26,6 +27,7 @@ Connected Agents should use these surface-specific skills directly:
 | Agent 对话页 / chat-only task / cards / product-source candidates / runtime messages | `xiaoduiyou-im` |
 | 文档 / 内容包 / 发布稿 / 旅游规划 / process docs / `ui_templates` / `publish_notes` | `xiaoduiyou-doc-content-package` |
 | 成长日记 / 宝宝记录 / diary photos / diary schema or views | `xiaoduiyou-growth-diary` |
+| 孩子基础信息 / 名字 / 生日 / 性别 / 过敏 / 身高体重 / 照片 | `xiaoduiyou-child-profile` |
 | Explicit `session_purpose: feedback` or configured public feedback Agent/profile | `xiaoduiyou-feedback-issues` |
 
 There is no public `xiaoduiyou-usage-workflow` router. Cases live in the skill that owns the surface.
@@ -73,8 +75,8 @@ XDY_CONNECTION_TOKEN="<由小队友设置页提供>" \
 ```
 
 运行规则：
-- Hermes 安装脚本会安装/更新小队友 platform 插件，以及 `xiaoduiyou-im`、`xiaoduiyou-doc-content-package`、`xiaoduiyou-growth-diary`、`xiaoduiyou-feedback-issues` 四个 runtime skills。
-- 安装脚本会写入 `${HERMES_HOME:-~/.hermes}/config.yaml`，并把四个 runtime skills 安装到同一目录下的 `skills/xiaoduiyou/`；如果你在 Hermes profile 下运行，先确保 `HERMES_HOME` 指向该 profile 目录。
+- Hermes 安装脚本会安装/更新小队友 platform 插件，以及 `xiaoduiyou-im`、`xiaoduiyou-doc-content-package`、`xiaoduiyou-growth-diary`、`xiaoduiyou-child-profile`、`xiaoduiyou-feedback-issues` 五个 runtime skills。
+- 安装脚本会写入 `${HERMES_HOME:-~/.hermes}/config.yaml`，并把五个 runtime skills 安装到同一目录下的 `skills/xiaoduiyou/`；如果你在 Hermes profile 下运行，先确保 `HERMES_HOME` 指向该 profile 目录。
 - Hermes default 和 profile 是相互隔离的连接实例：生产 default 使用生产设置页提供的 `XDY_BASE_URL` / `XDY_CONNECTION_TOKEN`，review/test profile 使用 review/test 设置页提供的 `XDY_BASE_URL` / `XDY_CONNECTION_TOKEN`。不要从 default 复制 token 到 profile，也不要跨环境复用 token。
 - Xiaoduiyou Hermes 插件会维护 Hermes 可读的 channel directory：`send_message(action="list")` 应能看到 `xiaoduiyou:主对话`、`xiaoduiyou:<频道名>`，家庭群频道类型应为 `group`。如果看不到这些频道，重新执行安装/更新提示词并重启对应 Hermes profile。
 - 如果 Hermes 升级或 profile 迁移后连接异常，重新执行安装脚本；脚本会把旧的字符串 JSON 配置规整为 Hermes 可读取的 YAML list。
@@ -122,7 +124,7 @@ XDY_CONNECTION_TOKEN="<由小队友设置页提供>" \
 - `XDY_PUBLIC_DIR` 必须是专用安装缓存目录；不要指向 `${OPENCLAW_HOME:-~/.openclaw}/workspace`，也不要在 OpenClaw workspace 里 clone / pull 这个仓库。
 - 安装脚本会写入 OpenClaw 的 `.openclaw` 数据目录；如果你在 OpenClaw profile 下运行，先确保 `OPENCLAW_HOME` 指向 profile 的父目录。若误设为 `~/.openclaw`，脚本会归一化并清理旧的 `~/.openclaw/.openclaw` 小队友安装路径。
 - OpenClaw skill 只有进入当前 Agent 的 `agents.list[0].skills` allowlist 后才会进入模型上下文；仅安装到 `${OPENCLAW_HOME:-~/.openclaw}/workspace/skills` 不够。
-- OpenClaw tool policy 必须允许插件工具组；脚本会把 `tools.alsoAllow` 合并补上 `group:plugins`。如果 Connected tools 里看不到 `xiaoduiyou_im_send` / `xiaoduiyou_growth_diary_get` / `xiaoduiyou_growth_diary_patch`，先重新执行 `scripts/install-openclaw.sh` 并重启 Gateway。
+- OpenClaw tool policy 必须允许插件工具组；脚本会把 `tools.alsoAllow` 合并补上 `group:plugins`。如果 Connected tools 里看不到 `xiaoduiyou_im_send` / `xiaoduiyou_child_get` / `xiaoduiyou_growth_diary_get` / `xiaoduiyou_growth_diary_patch`，先重新执行 `scripts/install-openclaw.sh` 并重启 Gateway。
 - 按 README 的 Runtime skill routing 和 Common Agent rules 执行。
 ````
 
@@ -161,9 +163,9 @@ export XDY_CONNECTION_TOKEN="<由小队友设置页提供>"
 ```
 
 - 安装脚本会安装/更新三个 Codex 插件：`xiaoduiyou-runtime-skills`、`xiaoduiyou-codex-platform`、`xiaoduiyou-codex-runner`。
-- `xiaoduiyou-runtime-skills` 会把 `xiaoduiyou-im`、`xiaoduiyou-doc-content-package`、`xiaoduiyou-growth-diary`、`xiaoduiyou-feedback-issues` 装进 Codex；这些 runtime skills 是 IM、内容包、成长日记、public feedback handler 行为的来源。
+- `xiaoduiyou-runtime-skills` 会把 `xiaoduiyou-im`、`xiaoduiyou-doc-content-package`、`xiaoduiyou-growth-diary`、`xiaoduiyou-child-profile`、`xiaoduiyou-feedback-issues` 装进 Codex；这些 runtime skills 是 IM、内容包、成长日记、孩子基础信息、public feedback handler 行为的来源。
 - 安装脚本会写入本地连接配置，启动后台 runner，并验证平台连接；Codex 平台工具包括 `xiaoduiyou_im_send` 和 `xiaoduiyou_interactive_request_create` / `xiaoduiyou_interactive_request_wait`，用于发送 Xiaoduiyou 聊天图片卡片和人类授权审批卡片。
-- 安装后使用 `xiaoduiyou-codex-runner` skill 检查 runner 状态；使用 `xiaoduiyou-codex-platform` skill 处理需要平台 MCP 工具的任务；按 `xiaoduiyou-im` / `xiaoduiyou-doc-content-package` / `xiaoduiyou-growth-diary` / `xiaoduiyou-feedback-issues` 执行用户消息，其中 feedback skill 只用于明确的 public feedback handler 或 `session_purpose: feedback` 场景。
+- 安装后使用 `xiaoduiyou-codex-runner` skill 检查 runner 状态；使用 `xiaoduiyou-codex-platform` skill 处理需要平台 MCP 工具的任务；按 `xiaoduiyou-im` / `xiaoduiyou-doc-content-package` / `xiaoduiyou-growth-diary` / `xiaoduiyou-child-profile` / `xiaoduiyou-feedback-issues` 执行用户消息，其中 feedback skill 只用于明确的 public feedback handler 或 `session_purpose: feedback` 场景。
 - 不要把连接 token 打印回聊天；只汇报是否安装成功、runner 是否在线、失败时的明确原因。
 - 按 README 的 Runtime skill routing 和 Common Agent rules 执行。
 ````
