@@ -1,6 +1,6 @@
 {
   "name": "@xiaoduiyou/openclaw-connector",
-  "version": "2026.6.26.1",
+  "version": "2026.6.26.2",
   "description": "OpenClaw channel connector for Xiaoduiyou Agent turns.",
   "type": "module",
   "main": "./index.js",
