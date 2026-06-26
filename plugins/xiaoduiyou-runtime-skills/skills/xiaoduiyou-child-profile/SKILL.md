@@ -18,7 +18,7 @@ Load this when the user asks to view or update:
 - 身高、体重
 - 孩子照片/头像/相片 URL
 
-If the user asks to log feeding/sleep/stool/symptom events, load `xiaoduiyou-growth-diary` instead. If the user asks to toggle development milestones or skill nodes, use the child page UI/state workflow, not this basic-profile tool.
+If the user asks to log feeding/sleep/stool/symptom events, load `xiaoduiyou-growth-diary` instead. Growth Diary may still call this profile tool after diary writes for height, weight, allergy, suspected allergy, or allergy constitution so the current child basic-info fields stay in sync. If the user asks to toggle development milestones or skill nodes, use the child page UI/state workflow, not this basic-profile tool.
 
 ## Non-Negotiables
 
@@ -32,6 +32,7 @@ If the user asks to log feeding/sleep/stool/symptom events, load `xiaoduiyou-gro
 8. For photos, pass only an HTTPS `photoUrl` that is already uploaded to Xiaoduiyou/TOS assets. Do not pass local paths, `file:`, `blob:`, localhost, or private-network URLs.
 9. After patching, verify with `xiaoduiyou_child_get` and answer with the changed fields only.
 10. Keep private family facts out of skill files. In local Hermes, durable household preferences belong in `${HERMES_HOME:-$HOME/.hermes}/private/xiaoduiyou-family-care-preferences.md`, not here.
+11. When called from `xiaoduiyou-growth-diary` after a height/weight/allergy diary record, patch only the latest provided `heightCm`, `weightKg`, and/or `allergy`; the diary record remains the historical source of the event.
 
 ## Fields
 
