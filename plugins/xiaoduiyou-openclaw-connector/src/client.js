@@ -1,4 +1,4 @@
-export const XIAODUIYOU_CONNECTOR_VERSION = "2026.6.26.3";
+export const XIAODUIYOU_CONNECTOR_VERSION = "2026.6.27.1";
 
 async function readJsonResponse(response, path) {
   const rawText = await response.text();

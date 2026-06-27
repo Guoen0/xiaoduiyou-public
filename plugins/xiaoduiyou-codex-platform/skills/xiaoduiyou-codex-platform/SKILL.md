@@ -37,14 +37,16 @@ These runtime skills are installed by the `xiaoduiyou-runtime-skills` Codex plug
 - Chat-only tasks, cards, runtime messages: follow `xiaoduiyou-im`; use `xiaoduiyou_im_send` for clickable image cards.
 - Documents, content packages, process docs, publish notes: follow `xiaoduiyou-doc-content-package`.
 - Growth Diary records, schema, views, and diary photos: follow `xiaoduiyou-growth-diary`.
-- Child basic profile fields such as name, birthday, gender, allergy, height, weight, or photo: follow `xiaoduiyou-child-profile`.
+- Child profile and development fields such as name, birthday, gender, allergy, height, weight, photo, four development dimensions, or skill-node states: follow `xiaoduiyou-child-profile`.
 - Public feedback-handler or explicit `session_purpose: feedback` turns: follow `xiaoduiyou-feedback-issues`; ordinary chat that mentions feedback stays in `xiaoduiyou-im`.
 
 ## Child Profile Rules
 
 Always call `xiaoduiyou_child_get` before `xiaoduiyou_child_patch`.
 
-Patch only fields the user explicitly provided under `profile`: `name`, `birthday`, `gender`, `allergy`, `heightCm`, `weightKg`, or `photoUrl`. Do not use this tool for Growth Diary records or development skill-tree progress.
+Patch only fields the user explicitly provided under `profile`: `name`, `birthday`, `gender`, `allergy`, `heightCm`, `weightKg`, or `photoUrl`.
+
+For development progress, call `xiaoduiyou_child_get` and read `development[].nodes[]`. Patch `skill_node_states` with exact returned node keys and boolean values only. Do not invent node keys or overwrite unrelated nodes.
 
 ## Growth Diary Rules
 

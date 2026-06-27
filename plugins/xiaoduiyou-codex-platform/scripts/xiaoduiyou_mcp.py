@@ -337,13 +337,23 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
 
     if name == "xiaoduiyou_child_patch":
         profile = args.get("profile")
-        if not isinstance(profile, dict):
-            raise ValueError("profile must be a JSON object")
+        skill_node_states = args.get("skill_node_states")
+        payload: Dict[str, Any] = {}
+        if profile is not None:
+            if not isinstance(profile, dict):
+                raise ValueError("profile must be a JSON object")
+            payload["profile"] = profile
+        if skill_node_states is not None:
+            if not isinstance(skill_node_states, dict):
+                raise ValueError("skill_node_states must be a JSON object")
+            payload["skill_node_states"] = skill_node_states
+        if not payload:
+            raise ValueError("profile or skill_node_states is required")
         allowed = ["session_id", "turn_id"]
         return text_result(request_json(
             f"/api/child{compact_query({key: args.get(key) for key in allowed})}",
             method="PATCH",
-            body={"profile": profile},
+            body=payload,
         ))
 
     if name == "xiaoduiyou_documents_get":
@@ -522,12 +532,12 @@ TOOLS = [
     },
     {
         "name": "xiaoduiyou_child_get",
-        "description": "Read Xiaoduiyou child basic profile data for the connected account. Use skill xiaoduiyou-child-profile before writes.",
+        "description": "Read Xiaoduiyou child profile and four-dimension development skill-node progress for the connected account. Use skill xiaoduiyou-child-profile before writes.",
         "inputSchema": schema({"session_id": {"type": "string"}, "turn_id": {"type": "string"}}),
     },
     {
         "name": "xiaoduiyou_child_patch",
-        "description": "Patch Xiaoduiyou child basic profile data. Call xiaoduiyou_child_get first and send only profile fields explicitly provided by the user.",
+        "description": "Patch Xiaoduiyou child profile and/or development skill-node states. Call xiaoduiyou_child_get first and send only explicitly provided profile fields or skill_node_states keys.",
         "inputSchema": schema({
             "profile": {
                 "type": "object",
@@ -542,9 +552,14 @@ TOOLS = [
                     "photoUrl": {"type": "string"},
                 },
             },
+            "skill_node_states": {
+                "type": "object",
+                "description": "Development skill-node state patch. Keys are returned by xiaoduiyou_child_get development[].nodes[].key, e.g. grossMotor:独走几步. Values are true for lit/unlocked and false for unlit/locked.",
+                "additionalProperties": {"type": "boolean"},
+            },
             "session_id": {"type": "string"},
             "turn_id": {"type": "string"},
-        }, ["profile"]),
+        }),
     },
     {
         "name": "xiaoduiyou_growth_diary_get",

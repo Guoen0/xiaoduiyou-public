@@ -69,16 +69,22 @@ const ChildProfileSchema = {
   },
 };
 
+const ChildSkillNodeStatesSchema = {
+  type: "object",
+  description: "Development skill-node state patch. Keys are returned by xiaoduiyou_child_get development[].nodes[].key, e.g. grossMotor:独走几步. Values are true for lit/unlocked and false for unlit/locked.",
+  additionalProperties: { type: "boolean" },
+};
+
 const ChildPatchSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
     profile: ChildProfileSchema,
+    skill_node_states: ChildSkillNodeStatesSchema,
     session_id: { type: "string", description: "Optional Xiaoduiyou session id used to scope public-agent tokens. Omit inside an active turn." },
     turn_id: { type: "string", description: "Optional Xiaoduiyou turn id used to scope public-agent tokens. Omit inside an active turn." },
     account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the default/current connector account." },
   },
-  required: ["profile"],
 };
 
 const DocumentGetSchema = {
@@ -315,7 +321,7 @@ function createChildGetTool(config) {
   return {
     name: "xiaoduiyou_child_get",
     label: "Xiaoduiyou Child Get",
-    description: "Read Xiaoduiyou child basic profile data for the current connected Xiaoduiyou account. Use skill xiaoduiyou-child-profile before profile writes.",
+    description: "Read Xiaoduiyou child profile and four-dimension development skill-node progress for the current connected Xiaoduiyou account. Use skill xiaoduiyou-child-profile before profile or skill-node writes.",
     parameters: ChildGetSchema,
     execute: async (_toolCallId, rawParams = {}) => {
       const context = activeXiaoduiyouToolContext();
@@ -333,19 +339,32 @@ function createChildPatchTool(config) {
   return {
     name: "xiaoduiyou_child_patch",
     label: "Xiaoduiyou Child Patch",
-    description: "Patch Xiaoduiyou child basic profile data for the current connected Xiaoduiyou account. Use skill xiaoduiyou-child-profile and call xiaoduiyou_child_get first. Only send profile fields the user explicitly provided.",
+    description: "Patch Xiaoduiyou child profile and/or development skill-node states for the current connected Xiaoduiyou account. Use skill xiaoduiyou-child-profile and call xiaoduiyou_child_get first. Only send explicitly provided profile fields or skill_node_states keys.",
     parameters: ChildPatchSchema,
     execute: async (_toolCallId, rawParams = {}) => {
       const context = activeXiaoduiyouToolContext();
       const account = resolveToolAccount(config, { ...rawParams, account_id: rawParams.account_id || context.accountId });
-      if (!rawParams.profile || typeof rawParams.profile !== "object" || Array.isArray(rawParams.profile)) {
-        throw new Error("profile must be a JSON object");
+      const payload = {};
+      if (rawParams.profile !== undefined) {
+        if (!rawParams.profile || typeof rawParams.profile !== "object" || Array.isArray(rawParams.profile)) {
+          throw new Error("profile must be a JSON object");
+        }
+        payload.profile = rawParams.profile;
       }
-      const result = await patchXiaoduiyouChild(account, { profile: rawParams.profile }, {
+      if (rawParams.skill_node_states !== undefined) {
+        if (!rawParams.skill_node_states || typeof rawParams.skill_node_states !== "object" || Array.isArray(rawParams.skill_node_states)) {
+          throw new Error("skill_node_states must be a JSON object");
+        }
+        payload.skill_node_states = rawParams.skill_node_states;
+      }
+      if (!payload.profile && !payload.skill_node_states) {
+        throw new Error("profile or skill_node_states is required");
+      }
+      const result = await patchXiaoduiyouChild(account, payload, {
         session_id: rawParams.session_id || context.sessionId,
         turn_id: rawParams.turn_id || context.turnId,
       });
-      return jsonResult({ ok: true, child: result.child });
+      return jsonResult({ ok: true, child: result.child, development: result.development });
     },
   };
 }

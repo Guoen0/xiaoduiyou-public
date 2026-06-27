@@ -26,7 +26,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.26.3"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.27.1"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -729,7 +729,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             "Xiaoduiyou connector tools are available. "
             "For Growth Diary tasks, use skill xiaoduiyou-growth-diary, call xiaoduiyou_growth_diary_get first, then xiaoduiyou_growth_diary_patch for writes; "
             "do not search local files/env/config for connection_token and do not call /api/growth-diary manually from terminal. "
-            "For child basic profile tasks (name, birthday, gender, allergy, height, weight, photo), use skill xiaoduiyou-child-profile, call xiaoduiyou_child_get first, then xiaoduiyou_child_patch for explicit profile updates. "
+            "For child profile or development skill-node tasks (name, birthday, gender, allergy, height, weight, photo, four development dimensions, lit/unlit skill nodes), use skill xiaoduiyou-child-profile, call xiaoduiyou_child_get first, then xiaoduiyou_child_patch for explicit updates. "
             "For Growth Diary event time, use explicit user wording first; if absent, use this Xiaoduiyou turn's created_at, never the Agent runtime clock or an invented time. "
             "Agent-created records must include date as YYYY-MM-DD and occurred_at as YYYY-MM-DD HH:mm:ss with matching dates; short times like 19:20 are invalid and will be rejected. "
             "For ordinary chat, answer normally and do not call document tools. "
@@ -1450,14 +1450,24 @@ def _tool_child_get(args: Dict[str, Any], **_: Any) -> str:
         timeout=DEFAULT_TIMEOUT_SECONDS,
         token=context["token"],
     )
-    return json.dumps({"ok": True, "context": _safe_tool_context(context), "child": result.get("child", result)}, ensure_ascii=False)
+    return json.dumps({"ok": True, "context": _safe_tool_context(context), "child": result.get("child", result), "development": result.get("development")}, ensure_ascii=False)
 
 
 def _tool_child_patch(args: Dict[str, Any], **_: Any) -> str:
     context = _active_tool_context()
     profile = args.get("profile")
-    if not isinstance(profile, dict):
-        raise RuntimeError("profile must be an object with child basic-info fields")
+    skill_node_states = args.get("skill_node_states")
+    payload: Dict[str, Any] = {}
+    if profile is not None:
+        if not isinstance(profile, dict):
+            raise RuntimeError("profile must be an object with child basic-info fields")
+        payload["profile"] = profile
+    if skill_node_states is not None:
+        if not isinstance(skill_node_states, dict):
+            raise RuntimeError("skill_node_states must be an object of node keys to booleans")
+        payload["skill_node_states"] = skill_node_states
+    if not payload:
+        raise RuntimeError("profile or skill_node_states is required")
     query_string = _growth_diary_query_string(context, {
         key: args.get(key)
         for key in ("session_id", "turn_id")
@@ -1466,11 +1476,11 @@ def _tool_child_patch(args: Dict[str, Any], **_: Any) -> str:
     result = _request_json(
         f"{context['base_url']}/api/child{query_string}",
         method="PATCH",
-        payload={"profile": profile},
+        payload=payload,
         timeout=DEFAULT_TIMEOUT_SECONDS,
         token=context["token"],
     )
-    return json.dumps({"ok": True, "context": _safe_tool_context(context), "child": result.get("child", result)}, ensure_ascii=False)
+    return json.dumps({"ok": True, "context": _safe_tool_context(context), "child": result.get("child", result), "development": result.get("development")}, ensure_ascii=False)
 
 
 def _growth_diary_records_query(args: Dict[str, Any], filter_spec: Dict[str, Any], view: str) -> Dict[str, Any]:
@@ -1804,11 +1814,11 @@ def register(ctx) -> None:
     ctx.register_tool(
         name="xiaoduiyou_child_get",
         toolset=TOOLSET,
-        description="Read Xiaoduiyou child basic profile data through the connector-owned origin/token for the current Xiaoduiyou turn. Use skill xiaoduiyou-child-profile before profile writes.",
+        description="Read Xiaoduiyou child profile and four-dimension development skill-node progress through the connector-owned origin/token for the current Xiaoduiyou turn. Use skill xiaoduiyou-child-profile before profile or skill-node writes.",
         emoji="👶",
         schema={
             "name": "xiaoduiyou_child_get",
-            "description": "Read child basic profile data for the current Xiaoduiyou home. Use skill xiaoduiyou-child-profile before writes. Do not search for connection_token manually.",
+            "description": "Read child profile and development skill-node progress for the current Xiaoduiyou home. Use skill xiaoduiyou-child-profile before writes. Do not search for connection_token manually.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1823,11 +1833,11 @@ def register(ctx) -> None:
     ctx.register_tool(
         name="xiaoduiyou_child_patch",
         toolset=TOOLSET,
-        description="Patch Xiaoduiyou child basic profile data through the connector-owned origin/token for the current Xiaoduiyou turn. Use skill xiaoduiyou-child-profile and call get first.",
+        description="Patch Xiaoduiyou child profile and/or development skill-node states through the connector-owned origin/token for the current Xiaoduiyou turn. Use skill xiaoduiyou-child-profile and call get first.",
         emoji="🧸",
         schema={
             "name": "xiaoduiyou_child_patch",
-            "description": "Patch child basic profile data for the current Xiaoduiyou home. Call xiaoduiyou_child_get first, then send only profile fields explicitly provided by the user. Do not update development skill nodes here.",
+            "description": "Patch child profile data and/or development skill-node states for the current Xiaoduiyou home. Call xiaoduiyou_child_get first, then send only explicitly provided fields or skill_node_states keys.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1844,10 +1854,14 @@ def register(ctx) -> None:
                             "photoUrl": {"type": "string", "description": "HTTPS child photo URL already uploaded to Xiaoduiyou/TOS assets."},
                         },
                     },
+                    "skill_node_states": {
+                        "type": "object",
+                        "description": "Development skill-node state patch. Keys are returned by xiaoduiyou_child_get development[].nodes[].key, e.g. grossMotor:独走几步. Values are true for lit/unlocked and false for unlit/locked.",
+                        "additionalProperties": {"type": "boolean"},
+                    },
                     "session_id": {"type": "string", "description": "Optional Xiaoduiyou session id for scope. Omit inside an active turn."},
                     "turn_id": {"type": "string", "description": "Optional Xiaoduiyou turn id for scope. Omit inside an active turn."},
                 },
-                "required": ["profile"],
             },
         },
         handler=_tool_child_patch,

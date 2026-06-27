@@ -71,7 +71,7 @@ On macOS, prefer the LaunchAgent installed by `install-codex-runner.sh`.
 - For simple chat turns, return a concise user-facing response.
 - Do not expose local paths, tokens, or internal stack traces to Xiaoduiyou users.
 - Do not ask the Xiaoduiyou user to authorize, confirm, or continue processing in desktop Codex.
-- Follow the installed runtime skills for user intent: `xiaoduiyou-im` for chat/cards, `xiaoduiyou-doc-content-package` for documents/content packages, `xiaoduiyou-growth-diary` for baby diary data, `xiaoduiyou-child-profile` for child basic profile data, and `xiaoduiyou-feedback-issues` only for explicit public feedback-handler or `session_purpose: feedback` turns.
+- Follow the installed runtime skills for user intent: `xiaoduiyou-im` for chat/cards, `xiaoduiyou-doc-content-package` for documents/content packages, `xiaoduiyou-growth-diary` for baby diary data, `xiaoduiyou-child-profile` for child profile/development data, and `xiaoduiyou-feedback-issues` only for explicit public feedback-handler or `session_purpose: feedback` turns.
 - For Xiaoduiyou platform reads/writes, use the installed `xiaoduiyou-codex-platform` MCP tools directly.
 - For background Growth Diary turns, use the model to produce a structured action plan, then let the runner execute Xiaoduiyou platform APIs; do not depend on interactive MCP authorization inside `codex exec`.
 - For Growth Diary writes, call `xiaoduiyou_growth_diary_get` before `xiaoduiyou_growth_diary_patch`, then write the record directly with `records[].table_id`, `records[].source`, and `records[].values`.
