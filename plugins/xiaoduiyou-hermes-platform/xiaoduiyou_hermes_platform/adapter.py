@@ -26,7 +26,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.27.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.27.2"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -626,7 +626,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
     def name(self) -> str:
         return "Xiaoduiyou"
 
-    async def connect(self) -> bool:
+    async def connect(self, *, is_reconnect: bool = False) -> bool:
         if not self.base_url:
             self._set_fatal_error("config_missing", "Xiaoduiyou base_url is missing", retryable=False)
             return False
