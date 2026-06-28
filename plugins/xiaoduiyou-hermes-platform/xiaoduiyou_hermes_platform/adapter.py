@@ -684,7 +684,9 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         try:
             result = _request_json(url, timeout=self.request_timeout_seconds, token=self.connection_token)
             self._last_claim_at = time.time()
-            return result if result.get("turn") else None
+            if not isinstance(result, dict) or not result.get("turn"):
+                return None
+            return result
         except RuntimeError as exc:
             if _is_http_status(exc, 401):
                 raise XiaoduiyouAuthError(str(exc)) from exc
@@ -704,6 +706,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         hermes_user_id = _hermes_user_id_from_turn(turn)
         if not turn_id or not session_id or not user_message:
             logger.warning("Xiaoduiyou claimed malformed turn: %s", claimed)
+            await asyncio.sleep(self.poll_interval_seconds)
             return
 
         if str(turn.get("input_type") or "") == "command":
