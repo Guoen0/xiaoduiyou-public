@@ -31,7 +31,7 @@ Use `origin`/`base_url` plus connector-owned auth for `/api/growth-diary`, `/api
 `GET /api/hermes/turns/pending`
 
 - `200`: a turn payload is available. Use the returned `turn_id`, user message/context, session/document identifiers, and any auth/session metadata supplied by the runtime.
-- `404 {"error":"NO_PENDING_TURN"}`: healthy idle state; do not treat as failure.
+- `200 {"turn": null}`: healthy idle state; do not treat as failure.
 
 ### Send progress / tool progress
 

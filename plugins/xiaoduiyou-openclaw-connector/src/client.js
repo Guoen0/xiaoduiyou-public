@@ -1,4 +1,4 @@
-export const XIAODUIYOU_CONNECTOR_VERSION = "2026.6.27.1";
+export const XIAODUIYOU_CONNECTOR_VERSION = "2026.6.28.1";
 
 async function readJsonResponse(response, path) {
   const rawText = await response.text();
@@ -90,6 +90,10 @@ export async function pollXiaoduiyouTurn(account, signal) {
     if (error?.status === 404 || error?.code === "NO_PENDING_TURN") return null;
     throw error;
   }
+}
+
+export function isXiaoduiyouAuthError(error) {
+  return error?.status === 401 || error?.code === "UNAUTHENTICATED";
 }
 
 export async function postXiaoduiyouProgress(account, turnId, progress) {

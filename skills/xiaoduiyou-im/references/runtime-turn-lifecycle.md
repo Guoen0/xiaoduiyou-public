@@ -25,7 +25,7 @@ Use the Xiaoduiyou origin and auth context supplied by the active connection pro
 
 1. Poll pending work:
    - `GET /api/hermes/turns/pending`
-   - `404 {"error":"NO_PENDING_TURN"}` means healthy idle state.
+   - `200 {"turn": null}` means healthy idle state.
 2. Send incremental progress:
    - `POST /api/hermes/turns/{turn_id}/events`
    - body may include `progress` or `tool_progress`.

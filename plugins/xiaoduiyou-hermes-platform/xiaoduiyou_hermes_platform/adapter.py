@@ -26,7 +26,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.27.2"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.28.1"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -55,6 +55,14 @@ _TURN_BY_SESSION: Dict[str, str] = {}
 _ACTIONS_BY_SESSION: Dict[str, List[Dict[str, Any]]] = {}
 _PROGRESS_BY_MESSAGE: Dict[str, str] = {}
 _PROGRESS_COUNTER = 0
+
+
+class XiaoduiyouAuthError(RuntimeError):
+    pass
+
+
+def _is_http_status(exc: BaseException, status: int) -> bool:
+    return f"HTTP {status}" in str(exc)
 
 
 
@@ -662,6 +670,11 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
                     await asyncio.sleep(self.poll_interval_seconds)
             except asyncio.CancelledError:
                 raise
+            except XiaoduiyouAuthError as exc:
+                logger.error("Xiaoduiyou authentication failed; stopping poll loop until the connection token is refreshed: %s", exc)
+                self._running = False
+                self._mark_disconnected()
+                break
             except Exception as exc:
                 logger.warning("Xiaoduiyou poll failed: %s", exc)
                 await asyncio.sleep(max(self.poll_interval_seconds, 3.0))
@@ -671,9 +684,11 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         try:
             result = _request_json(url, timeout=self.request_timeout_seconds, token=self.connection_token)
             self._last_claim_at = time.time()
-            return result
+            return result if result.get("turn") else None
         except RuntimeError as exc:
-            if "HTTP 404" in str(exc):
+            if _is_http_status(exc, 401):
+                raise XiaoduiyouAuthError(str(exc)) from exc
+            if _is_http_status(exc, 404):
                 return None
             raise
 
@@ -816,17 +831,24 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         return {"text": raw}
 
     def _list_agent_sessions(self) -> List[Dict[str, Any]]:
-        result = _request_json(
-            f"{self.base_url}/api/agent/sessions",
-            timeout=self.request_timeout_seconds,
-            token=self.connection_token,
-        )
+        try:
+            result = _request_json(
+                f"{self.base_url}/api/agent/sessions",
+                timeout=self.request_timeout_seconds,
+                token=self.connection_token,
+            )
+        except RuntimeError as exc:
+            if _is_http_status(exc, 401):
+                raise XiaoduiyouAuthError(str(exc)) from exc
+            raise
         sessions = result.get("sessions")
         return [session for session in sessions if isinstance(session, dict)] if isinstance(sessions, list) else []
 
     async def list_channels(self) -> List[Dict[str, Any]]:
         try:
             sessions = await asyncio.to_thread(self._list_agent_sessions)
+        except XiaoduiyouAuthError:
+            raise
         except Exception as exc:
             logger.warning("Xiaoduiyou session list lookup failed for channel directory: %s", exc)
             return _channels_for_agent_sessions([])
@@ -1002,7 +1024,10 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
                 _TURN_BY_SESSION[chat_key] = turn_id
                 return turn_id
         except Exception as exc:
-            logger.warning("Xiaoduiyou active turn lookup failed for %s: %s", chat_key, exc)
+            if _is_http_status(exc, 401):
+                logger.error("Xiaoduiyou authentication failed during active turn lookup for %s: %s", chat_key, exc)
+            else:
+                logger.warning("Xiaoduiyou active turn lookup failed for %s: %s", chat_key, exc)
         return ""
 
     async def send_exec_approval(

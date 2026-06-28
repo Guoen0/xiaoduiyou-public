@@ -20,12 +20,16 @@ from typing import Any
 from urllib import error, parse, request
 
 
-RUNNER_VERSION = "2026.6.18.1-codex-runner"
+RUNNER_VERSION = "2026.6.28.1-codex-runner"
 DEFAULT_HOME = Path.home() / ".codex" / "xiaoduiyou-runner"
 DEFAULT_CONFIG = DEFAULT_HOME / "config.json"
 DEFAULT_LOG = DEFAULT_HOME / "runner.log"
 DEFAULT_PID = DEFAULT_HOME / "runner.pid"
 PLATFORM_CONFIG = Path.home() / ".codex" / "xiaoduiyou-connection.json"
+
+
+class XiaoduiyouAuthError(RuntimeError):
+    pass
 
 
 def now() -> str:
@@ -123,10 +127,13 @@ class XiaoduiyouClient:
 
     def claim(self) -> dict[str, Any] | None:
         try:
-            return self.request_json("/api/agent/turns/pending")
+            payload = self.request_json("/api/agent/turns/pending")
+            return payload if payload.get("turn") else None
         except RuntimeError as exc:
             if getattr(exc, "status", None) == 404:
                 return None
+            if getattr(exc, "status", None) == 401:
+                raise XiaoduiyouAuthError("UNAUTHENTICATED") from exc
             raise
 
     def progress(self, turn_id: str, text: str) -> None:
@@ -876,6 +883,9 @@ def run_forever(_: argparse.Namespace) -> None:
             handled = handle_one(config, client)
             sleep_for = config.get("poll_interval_seconds") if handled else config.get("idle_sleep_seconds")
             time.sleep(float(sleep_for or 2))
+        except XiaoduiyouAuthError:
+            log("authentication failed; stopping runner until the connection token is refreshed")
+            break
         except Exception:
             log(traceback.format_exc().strip())
             time.sleep(5)

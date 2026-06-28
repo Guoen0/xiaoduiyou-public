@@ -4,7 +4,7 @@ import {
   listXiaoduiyouAccountIds,
   resolveXiaoduiyouAccount,
 } from "./accounts.js";
-import { pollXiaoduiyouTurn, sendXiaoduiyouSessionMessage } from "./client.js";
+import { isXiaoduiyouAuthError, pollXiaoduiyouTurn, sendXiaoduiyouSessionMessage } from "./client.js";
 import { handleXiaoduiyouTurn } from "./inbound.js";
 import { getXiaoduiyouRuntime } from "./runtime.js";
 
@@ -75,18 +75,32 @@ export const xiaoduiyouPlugin = createChatChannelPlugin({
         };
 
         ctx.setStatus({ accountId: account.accountId, running: true, connected: true, configured: true });
+        let authFailed = false;
         while (!ctx.abortSignal.aborted) {
           while (activeTurns.size >= account.turnConcurrency && !ctx.abortSignal.aborted) {
             await Promise.race(activeTurns);
           }
           if (ctx.abortSignal.aborted) break;
 
-          const turn = await pollXiaoduiyouTurn(account, ctx.abortSignal);
+          let turn = null;
+          try {
+            turn = await pollXiaoduiyouTurn(account, ctx.abortSignal);
+          } catch (error) {
+            if (isXiaoduiyouAuthError(error)) {
+              console.error("Xiaoduiyou authentication failed; stopping account polling", { accountId: account.accountId });
+              authFailed = true;
+              ctx.setStatus({ accountId: account.accountId, running: false, connected: false, configured: true, error: "UNAUTHENTICATED" });
+              break;
+            }
+            throw error;
+          }
           if (turn) startTurn(turn);
           await sleep(account.pollIntervalMs, ctx.abortSignal);
         }
         if (activeTurns.size > 0) await Promise.allSettled(activeTurns);
-        ctx.setStatus({ accountId: account.accountId, running: false });
+        ctx.setStatus(authFailed
+          ? { accountId: account.accountId, running: false, connected: false, configured: true, error: "UNAUTHENTICATED" }
+          : { accountId: account.accountId, running: false });
       },
     },
   },
