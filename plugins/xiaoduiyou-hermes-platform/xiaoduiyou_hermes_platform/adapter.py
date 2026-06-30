@@ -7,10 +7,15 @@ mutations happen only when the model calls xiaoduiyou document tools.
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import json
 import logging
 import mimetypes
 import os
+import secrets
+import ssl
+import struct
 import tempfile
 import time
 from contextvars import ContextVar
@@ -26,11 +31,13 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.6.28.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.1.2"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
 CHANNEL_DIRECTORY_REFRESH_SECONDS = 5.0
+WEBSOCKET_RETRY_SECONDS = 3.0
+WEBSOCKET_IDLE_REFRESH_SECONDS = 15.0
 
 # Tool calls and adapter.send() run in the same gateway task context, so this
 # lets tools enqueue structured document mutations that send() includes in the
@@ -61,8 +68,129 @@ class XiaoduiyouAuthError(RuntimeError):
     pass
 
 
+class XiaoduiyouWebSocketError(RuntimeError):
+    pass
+
+
 def _is_http_status(exc: BaseException, status: int) -> bool:
     return f"HTTP {status}" in str(exc)
+
+
+def _websocket_url_for_pending_turns(base_url: str) -> str:
+    parsed = parse.urlparse(base_url.rstrip("/"))
+    scheme = "wss" if parsed.scheme == "https" else "ws"
+    netloc = parsed.netloc or parsed.path
+    return f"{scheme}://{netloc}/ws/hermes/turns/pending"
+
+
+def _websocket_url_for_interactive_request(base_url: str, request_id: str) -> str:
+    parsed = parse.urlparse(base_url.rstrip("/"))
+    scheme = "wss" if parsed.scheme == "https" else "ws"
+    netloc = parsed.netloc or parsed.path
+    return f"{scheme}://{netloc}/ws/hermes/interactive-requests/{parse.quote(request_id, safe='')}"
+
+
+def _websocket_headers(base_url: str, websocket_key: str, token: str) -> bytes:
+    parsed = parse.urlparse(base_url)
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    headers = [
+        f"GET {path} HTTP/1.1",
+        f"Host: {parsed.netloc}",
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        f"Sec-WebSocket-Key: {websocket_key}",
+        "Sec-WebSocket-Version: 13",
+        "X-XDY-Connector-Provider: hermes",
+    ]
+    if token:
+        headers.append(f"Authorization: Bearer {token}")
+    return ("\r\n".join(headers) + "\r\n\r\n").encode("utf-8")
+
+
+async def _read_http_headers(reader: asyncio.StreamReader, timeout: float) -> tuple[int, Dict[str, str]]:
+    raw = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=timeout)
+    text = raw.decode("iso-8859-1", errors="replace")
+    lines = text.split("\r\n")
+    status_parts = lines[0].split()
+    status = int(status_parts[1]) if len(status_parts) >= 2 and status_parts[1].isdigit() else 0
+    headers: Dict[str, str] = {}
+    for line in lines[1:]:
+        if not line or ":" not in line:
+            continue
+        name, value = line.split(":", 1)
+        headers[name.strip().lower()] = value.strip()
+    return status, headers
+
+
+async def _open_websocket(url: str, *, token: str, timeout: float) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+    parsed = parse.urlparse(url)
+    if parsed.scheme not in {"ws", "wss"}:
+        raise XiaoduiyouWebSocketError(f"unsupported websocket scheme: {parsed.scheme}")
+    host = parsed.hostname
+    if not host:
+        raise XiaoduiyouWebSocketError("websocket host is missing")
+    port = parsed.port or (443 if parsed.scheme == "wss" else 80)
+    ssl_context = ssl.create_default_context() if parsed.scheme == "wss" else None
+    reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port, ssl=ssl_context), timeout=timeout)
+    websocket_key = base64.b64encode(secrets.token_bytes(16)).decode("ascii")
+    writer.write(_websocket_headers(url, websocket_key, token))
+    await writer.drain()
+    status, headers = await _read_http_headers(reader, timeout)
+    if status == 401:
+        writer.close()
+        await writer.wait_closed()
+        raise XiaoduiyouAuthError("websocket authentication failed: HTTP 401")
+    if status != 101:
+        writer.close()
+        await writer.wait_closed()
+        raise XiaoduiyouWebSocketError(f"websocket upgrade failed: HTTP {status}")
+    expected_accept = base64.b64encode(hashlib.sha1((websocket_key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()).decode("ascii")
+    if headers.get("sec-websocket-accept") != expected_accept:
+        writer.close()
+        await writer.wait_closed()
+        raise XiaoduiyouWebSocketError("websocket upgrade failed: bad Sec-WebSocket-Accept")
+    return reader, writer
+
+
+async def _read_websocket_text(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, timeout: float) -> Optional[str]:
+    header = await asyncio.wait_for(reader.readexactly(2), timeout=timeout)
+    first, second = header[0], header[1]
+    opcode = first & 0x0F
+    masked = bool(second & 0x80)
+    length = second & 0x7F
+    if length == 126:
+        length = struct.unpack("!H", await reader.readexactly(2))[0]
+    elif length == 127:
+        length = struct.unpack("!Q", await reader.readexactly(8))[0]
+    mask = await reader.readexactly(4) if masked else b""
+    payload = await reader.readexactly(length) if length else b""
+    if masked:
+        payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+    if opcode == 8:
+        raise XiaoduiyouWebSocketError("websocket closed by server")
+    if opcode == 9:
+        await _write_websocket_frame(writer, 0xA, payload)
+        return None
+    if opcode == 1:
+        return payload.decode("utf-8")
+    return None
+
+
+async def _write_websocket_frame(writer: asyncio.StreamWriter, opcode: int, payload: bytes = b"") -> None:
+    first = 0x80 | opcode
+    mask_key = secrets.token_bytes(4)
+    length = len(payload)
+    if length < 126:
+        header = bytes([first, 0x80 | length])
+    elif length < 65536:
+        header = bytes([first, 0x80 | 126]) + struct.pack("!H", length)
+    else:
+        header = bytes([first, 0x80 | 127]) + struct.pack("!Q", length)
+    masked_payload = bytes(byte ^ mask_key[index % 4] for index, byte in enumerate(payload))
+    writer.write(header + mask_key + masked_payload)
+    await writer.drain()
 
 
 
@@ -625,6 +753,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         self.poll_interval_seconds = float(extra.get("poll_interval_seconds") or DEFAULT_POLL_INTERVAL_SECONDS)
         self.request_timeout_seconds = float(extra.get("request_timeout_seconds") or DEFAULT_TIMEOUT_SECONDS)
         self.connection_token = _connection_token_from_config(config)
+        self.prefer_websocket = extra.get("prefer_websocket") is not False
         self._poll_task: asyncio.Task | None = None
         self._turn_by_session: Dict[str, str] = {}
         self._last_claim_at = 0.0
@@ -640,9 +769,9 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             return False
         self._running = True
         self._mark_connected()
-        self._poll_task = asyncio.create_task(self._poll_loop())
+        self._poll_task = asyncio.create_task(self._turn_stream_loop())
         if not self.connection_token:
-            logger.warning("Xiaoduiyou connection_token is missing; authenticated polling endpoints may return 401")
+            logger.warning("Xiaoduiyou connection_token is missing; authenticated turn stream endpoints may return 401")
         logger.info("Xiaoduiyou: connected to %s", self.base_url)
         return True
 
@@ -659,25 +788,34 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
     async def get_chat_info(self, chat_id: str) -> Dict[str, Any]:
         return {"name": f"Xiaoduiyou {chat_id}", "type": "dm"}
 
-    async def _poll_loop(self) -> None:
+    async def _turn_stream_loop(self) -> None:
         while self._running:
             try:
                 await self._refresh_channel_directory_if_due()
-                claimed = await asyncio.to_thread(self._claim_pending_turn)
-                if claimed:
-                    await self._handle_claimed_turn(claimed)
-                else:
-                    await asyncio.sleep(self.poll_interval_seconds)
+                if self.prefer_websocket:
+                    await self._websocket_pending_turn_loop()
+                    continue
+                await self._http_pending_turn_once()
             except asyncio.CancelledError:
                 raise
             except XiaoduiyouAuthError as exc:
-                logger.error("Xiaoduiyou authentication failed; stopping poll loop until the connection token is refreshed: %s", exc)
+                logger.error("Xiaoduiyou authentication failed; stopping turn stream until the connection token is refreshed: %s", exc)
                 self._running = False
                 self._mark_disconnected()
                 break
+            except XiaoduiyouWebSocketError as exc:
+                logger.warning("Xiaoduiyou websocket turn stream failed; falling back to HTTP claim before retrying: %s", exc)
+                await self._http_pending_turn_once(fallback_delay=max(self.poll_interval_seconds, WEBSOCKET_RETRY_SECONDS))
             except Exception as exc:
-                logger.warning("Xiaoduiyou poll failed: %s", exc)
+                logger.warning("Xiaoduiyou turn stream failed: %s", exc)
                 await asyncio.sleep(max(self.poll_interval_seconds, 3.0))
+
+    async def _http_pending_turn_once(self, *, fallback_delay: Optional[float] = None) -> None:
+        claimed = await asyncio.to_thread(self._claim_pending_turn)
+        if claimed:
+            await self._handle_claimed_turn(claimed)
+            return
+        await asyncio.sleep(fallback_delay if fallback_delay is not None else self.poll_interval_seconds)
 
     def _claim_pending_turn(self) -> Optional[Dict[str, Any]]:
         url = f"{self.base_url}/api/hermes/turns/pending"
@@ -693,6 +831,48 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             if _is_http_status(exc, 404):
                 return None
             raise
+
+    async def _websocket_pending_turn_loop(self) -> None:
+        websocket_url = _websocket_url_for_pending_turns(self.base_url)
+        logger.info("Xiaoduiyou: opening websocket turn stream %s", websocket_url)
+        reader: asyncio.StreamReader | None = None
+        writer: asyncio.StreamWriter | None = None
+        try:
+            reader, writer = await _open_websocket(websocket_url, token=self.connection_token, timeout=self.request_timeout_seconds)
+            logger.info("Xiaoduiyou: websocket turn stream connected")
+            while self._running:
+                await self._refresh_channel_directory_if_due()
+                try:
+                    message = await _read_websocket_text(reader, writer, WEBSOCKET_IDLE_REFRESH_SECONDS)
+                except asyncio.TimeoutError:
+                    continue
+                if not message:
+                    continue
+                self._last_claim_at = time.time()
+                try:
+                    payload = json.loads(message)
+                except json.JSONDecodeError as exc:
+                    raise XiaoduiyouWebSocketError(f"invalid websocket JSON: {exc}") from exc
+                if not isinstance(payload, dict):
+                    raise XiaoduiyouWebSocketError("invalid websocket payload")
+                if payload.get("error"):
+                    if str(payload.get("error")) == "UNAUTHENTICATED":
+                        raise XiaoduiyouAuthError("websocket turn stream returned UNAUTHENTICATED")
+                    logger.warning("Xiaoduiyou websocket turn stream returned error: %s", payload.get("error"))
+                    continue
+                if payload.get("turn"):
+                    await self._handle_claimed_turn(payload)
+        finally:
+            if writer:
+                try:
+                    await _write_websocket_frame(writer, 8)
+                except Exception:
+                    pass
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:
+                    pass
 
     async def _handle_claimed_turn(self, claimed: Dict[str, Any]) -> None:
         turn = claimed.get("turn") or {}
@@ -952,59 +1132,86 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             token=self.connection_token,
         )
 
-    def _watch_exec_approval(self, request_id: str, session_key: str, timeout_seconds: int = 300) -> None:
-        async def _run() -> None:
-            deadline = time.time() + timeout_seconds
-            while self._running and time.time() < deadline:
-                await asyncio.sleep(1)
-                try:
-                    result = await self._get_interactive_request(request_id)
-                    interactive_request = result.get("request") if isinstance(result, dict) else {}
+    async def _watch_interactive_request_state(self, request_id: str, timeout_seconds: int = 300) -> Optional[Dict[str, Any]]:
+        deadline = time.time() + timeout_seconds
+        if self.prefer_websocket:
+            reader: Optional[asyncio.StreamReader] = None
+            writer: Optional[asyncio.StreamWriter] = None
+            try:
+                reader, writer = await _open_websocket(
+                    _websocket_url_for_interactive_request(self.base_url, request_id),
+                    token=self.connection_token,
+                    timeout=self.request_timeout_seconds,
+                )
+                while self._running and time.time() < deadline:
+                    try:
+                        message = await _read_websocket_text(reader, writer, max(0.5, min(WEBSOCKET_IDLE_REFRESH_SECONDS, deadline - time.time())))
+                    except asyncio.TimeoutError:
+                        continue
+                    if not message:
+                        continue
+                    payload = json.loads(message)
+                    interactive_request = payload.get("request") if isinstance(payload, dict) else None
                     if not isinstance(interactive_request, dict):
                         continue
-                    status = str(interactive_request.get("status") or "")
-                    if status == "resolved":
-                        choice = str(interactive_request.get("choice") or "")
-                        if choice:
-                            try:
-                                from tools.approval import resolve_gateway_approval
-                                resolve_gateway_approval(session_key, choice)
-                            except Exception as exc:
-                                logger.error("Xiaoduiyou exec approval resolve failed: %s", exc, exc_info=True)
-                        return
-                    if status == "expired":
-                        return
+                    if str(interactive_request.get("status") or "") in {"resolved", "expired"}:
+                        return interactive_request
+            except (XiaoduiyouWebSocketError, XiaoduiyouAuthError, OSError, json.JSONDecodeError, asyncio.TimeoutError) as exc:
+                logger.debug("Xiaoduiyou interactive request websocket failed for %s: %s", request_id, exc)
+            finally:
+                if writer is not None:
+                    try:
+                        await _write_websocket_frame(writer, 0x8)
+                    except Exception:
+                        pass
+                    writer.close()
+                    try:
+                        await writer.wait_closed()
+                    except Exception:
+                        pass
+
+        while self._running and time.time() < deadline:
+            await asyncio.sleep(1)
+            try:
+                result = await self._get_interactive_request(request_id)
+                interactive_request = result.get("request") if isinstance(result, dict) else {}
+                if not isinstance(interactive_request, dict):
+                    continue
+                if str(interactive_request.get("status") or "") in {"resolved", "expired"}:
+                    return interactive_request
+            except Exception as exc:
+                logger.debug("Xiaoduiyou interactive request poll failed for %s: %s", request_id, exc)
+        return None
+
+    def _watch_exec_approval(self, request_id: str, session_key: str, timeout_seconds: int = 300) -> None:
+        async def _run() -> None:
+            interactive_request = await self._watch_interactive_request_state(request_id, timeout_seconds)
+            if not isinstance(interactive_request, dict) or str(interactive_request.get("status") or "") != "resolved":
+                return
+            choice = str(interactive_request.get("choice") or "")
+            if choice:
+                try:
+                    from tools.approval import resolve_gateway_approval
+                    resolve_gateway_approval(session_key, choice)
                 except Exception as exc:
-                    logger.debug("Xiaoduiyou exec approval poll failed for %s: %s", request_id, exc)
+                    logger.error("Xiaoduiyou exec approval resolve failed: %s", exc, exc_info=True)
 
         asyncio.create_task(_run())
 
     def _watch_slash_confirm(self, request_id: str, session_key: str, confirm_id: str, chat_id: str, timeout_seconds: int = 300) -> None:
         async def _run() -> None:
-            deadline = time.time() + timeout_seconds
-            while self._running and time.time() < deadline:
-                await asyncio.sleep(1)
+            interactive_request = await self._watch_interactive_request_state(request_id, timeout_seconds)
+            if not isinstance(interactive_request, dict) or str(interactive_request.get("status") or "") != "resolved":
+                return
+            choice = str(interactive_request.get("choice") or "")
+            if choice:
                 try:
-                    result = await self._get_interactive_request(request_id)
-                    interactive_request = result.get("request") if isinstance(result, dict) else {}
-                    if not isinstance(interactive_request, dict):
-                        continue
-                    status = str(interactive_request.get("status") or "")
-                    if status == "resolved":
-                        choice = str(interactive_request.get("choice") or "")
-                        if choice:
-                            try:
-                                from tools import slash_confirm as _slash_confirm_mod
-                                followup = await _slash_confirm_mod.resolve(session_key, confirm_id, choice)
-                                if followup:
-                                    await self.send(chat_id, followup)
-                            except Exception as exc:
-                                logger.error("Xiaoduiyou slash confirm resolve failed: %s", exc, exc_info=True)
-                        return
-                    if status == "expired":
-                        return
+                    from tools import slash_confirm as _slash_confirm_mod
+                    followup = await _slash_confirm_mod.resolve(session_key, confirm_id, choice)
+                    if followup:
+                        await self.send(chat_id, followup)
                 except Exception as exc:
-                    logger.debug("Xiaoduiyou slash confirm poll failed for %s: %s", request_id, exc)
+                    logger.error("Xiaoduiyou slash confirm resolve failed: %s", exc, exc_info=True)
 
         asyncio.create_task(_run())
 

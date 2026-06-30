@@ -3,7 +3,7 @@
   "kind": "channel",
   "channels": ["xiaoduiyou"],
   "name": "Xiaoduiyou",
-  "description": "Poll Xiaoduiyou /api/agent turns and run them through OpenClaw.",
+  "description": "Stream Xiaoduiyou Agent turns and run them through OpenClaw.",
   "contracts": {
     "tools": [
       "xiaoduiyou_child_get",
@@ -35,6 +35,7 @@
             "type": "array",
             "items": { "type": "string" }
           },
+          "preferWebSocket": { "type": "boolean" },
           "pollIntervalMs": { "type": "number" },
           "pollTimeoutMs": { "type": "number" },
           "botUserId": { "type": "string" },

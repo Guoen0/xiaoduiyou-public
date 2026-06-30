@@ -4,28 +4,18 @@ import {
   listXiaoduiyouAccountIds,
   resolveXiaoduiyouAccount,
 } from "./accounts.js";
-import { isXiaoduiyouAuthError, pollXiaoduiyouTurn, sendXiaoduiyouSessionMessage } from "./client.js";
+import { isXiaoduiyouAuthError, sendXiaoduiyouSessionMessage, watchXiaoduiyouTurns } from "./client.js";
 import { handleXiaoduiyouTurn } from "./inbound.js";
 import { getXiaoduiyouRuntime } from "./runtime.js";
-
-function sleep(ms, signal) {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener("abort", () => {
-      clearTimeout(timer);
-      resolve();
-    }, { once: true });
-  });
-}
 
 export const xiaoduiyouPlugin = createChatChannelPlugin({
   base: {
     id: "xiaoduiyou",
     meta: {
       id: "xiaoduiyou",
-      label: "Xiaoduiyou",
-      selectionLabel: "Xiaoduiyou",
-      blurb: "Poll Xiaoduiyou pending Agent turns and dispatch them to OpenClaw.",
+            label: "Xiaoduiyou",
+            selectionLabel: "Xiaoduiyou",
+            blurb: "Stream Xiaoduiyou pending Agent turns and dispatch them to OpenClaw.",
     },
     capabilities: { chatTypes: ["direct"] },
     reload: { configPrefixes: ["channels.xiaoduiyou"] },
@@ -76,26 +66,21 @@ export const xiaoduiyouPlugin = createChatChannelPlugin({
 
         ctx.setStatus({ accountId: account.accountId, running: true, connected: true, configured: true });
         let authFailed = false;
-        while (!ctx.abortSignal.aborted) {
-          while (activeTurns.size >= account.turnConcurrency && !ctx.abortSignal.aborted) {
-            await Promise.race(activeTurns);
-          }
-          if (ctx.abortSignal.aborted) break;
-
-          let turn = null;
-          try {
-            turn = await pollXiaoduiyouTurn(account, ctx.abortSignal);
-          } catch (error) {
-            if (isXiaoduiyouAuthError(error)) {
-              console.error("Xiaoduiyou authentication failed; stopping account polling", { accountId: account.accountId });
-              authFailed = true;
-              ctx.setStatus({ accountId: account.accountId, running: false, connected: false, configured: true, error: "UNAUTHENTICATED" });
-              break;
+        try {
+          await watchXiaoduiyouTurns(account, ctx.abortSignal, async (turn) => {
+            while (activeTurns.size >= account.turnConcurrency && !ctx.abortSignal.aborted) {
+              await Promise.race(activeTurns);
             }
+            if (!ctx.abortSignal.aborted) startTurn(turn);
+          });
+        } catch (error) {
+          if (isXiaoduiyouAuthError(error)) {
+            console.error("Xiaoduiyou authentication failed; stopping account turn stream", { accountId: account.accountId });
+            authFailed = true;
+            ctx.setStatus({ accountId: account.accountId, running: false, connected: false, configured: true, error: "UNAUTHENTICATED" });
+          } else {
             throw error;
           }
-          if (turn) startTurn(turn);
-          await sleep(account.pollIntervalMs, ctx.abortSignal);
         }
         if (activeTurns.size > 0) await Promise.allSettled(activeTurns);
         ctx.setStatus(authFailed

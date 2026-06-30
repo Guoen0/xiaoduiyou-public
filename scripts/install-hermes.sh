@@ -216,6 +216,7 @@ replace_direct_child(platforms_index, "xiaoduiyou", [
     "    extra:",
     f"      base_url: {json.dumps(base_url, ensure_ascii=False)}",
     f"      connection_token: {json.dumps(token, ensure_ascii=False)}",
+    "      prefer_websocket: true",
     "      poll_interval_seconds: 1.0",
     "    home_channel:",
     "      platform: xiaoduiyou",

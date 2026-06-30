@@ -4,12 +4,18 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime as dt
+import hashlib
 import html
 import json
 import os
+import secrets
 import signal
 import shutil
+import socket
+import ssl
+import struct
 import subprocess
 import sys
 import tempfile
@@ -20,7 +26,7 @@ from typing import Any
 from urllib import error, parse, request
 
 
-RUNNER_VERSION = "2026.6.28.1-codex-runner"
+RUNNER_VERSION = "2026.7.1.1-codex-runner"
 DEFAULT_HOME = Path.home() / ".codex" / "xiaoduiyou-runner"
 DEFAULT_CONFIG = DEFAULT_HOME / "config.json"
 DEFAULT_LOG = DEFAULT_HOME / "runner.log"
@@ -29,6 +35,10 @@ PLATFORM_CONFIG = Path.home() / ".codex" / "xiaoduiyou-connection.json"
 
 
 class XiaoduiyouAuthError(RuntimeError):
+    pass
+
+
+class XiaoduiyouWebSocketError(RuntimeError):
     pass
 
 
@@ -72,6 +82,7 @@ def config_from_env() -> dict[str, Any]:
         "connection_token": token,
         "poll_interval_seconds": float(os.environ.get("XDY_CODEX_RUNNER_POLL_INTERVAL", "2")),
         "idle_sleep_seconds": float(os.environ.get("XDY_CODEX_RUNNER_IDLE_SLEEP", "2")),
+        "prefer_websocket": os.environ.get("XDY_CODEX_RUNNER_PREFER_WEBSOCKET", "1") != "0",
         "codex_model": os.environ.get("XDY_CODEX_MODEL", "").strip(),
         "codex_bin": os.environ.get("XDY_CODEX_BIN", "").strip() or shutil.which("codex") or "codex",
         "codex_workdir": os.environ.get("XDY_CODEX_WORKDIR", str(Path.home())),
@@ -95,6 +106,8 @@ class XiaoduiyouClient:
     def __init__(self, config: dict[str, Any]) -> None:
         self.base_url = str(config["base_url"]).rstrip("/")
         self.token = str(config["connection_token"])
+        self.request_timeout_seconds = float(config.get("request_timeout_seconds") or 45)
+        self._websocket_buffer = b""
 
     def request_json(self, path: str, *, method: str = "GET", body: Any = None) -> Any:
         data = None if body is None else json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -135,6 +148,129 @@ class XiaoduiyouClient:
             if getattr(exc, "status", None) == 401:
                 raise XiaoduiyouAuthError("UNAUTHENTICATED") from exc
             raise
+
+    def websocket_url(self) -> str:
+        parsed = parse.urlparse(self.base_url)
+        scheme = "wss" if parsed.scheme == "https" else "ws"
+        return parse.urlunparse((scheme, parsed.netloc, "/ws/agent/turns/pending", "", "", ""))
+
+    def open_websocket(self) -> socket.socket:
+        url = self.websocket_url()
+        parsed = parse.urlparse(url)
+        host = parsed.hostname
+        if not host:
+            raise XiaoduiyouWebSocketError("websocket host is missing")
+        port = parsed.port or (443 if parsed.scheme == "wss" else 80)
+        raw_sock = socket.create_connection((host, port), timeout=self.request_timeout_seconds)
+        sock = ssl.create_default_context().wrap_socket(raw_sock, server_hostname=host) if parsed.scheme == "wss" else raw_sock
+        sock.settimeout(15)
+        key = base64.b64encode(secrets.token_bytes(16)).decode("ascii")
+        request_text = "\r\n".join([
+            f"GET {parsed.path or '/'} HTTP/1.1",
+            f"Host: {parsed.netloc}",
+            "Upgrade: websocket",
+            "Connection: Upgrade",
+            f"Sec-WebSocket-Key: {key}",
+            "Sec-WebSocket-Version: 13",
+            f"Authorization: Bearer {self.token}",
+            f"X-XDY-Connector-Version: {RUNNER_VERSION}",
+            "X-XDY-Connector-Provider: codex",
+            "",
+            "",
+        ])
+        sock.sendall(request_text.encode("utf-8"))
+        header = b""
+        while b"\r\n\r\n" not in header:
+            chunk = sock.recv(4096)
+            if not chunk:
+                raise XiaoduiyouWebSocketError("websocket closed during handshake")
+            header += chunk
+        head, remainder = header.split(b"\r\n\r\n", 1)
+        status_line, *header_lines = head.decode("iso-8859-1", errors="replace").split("\r\n")
+        parts = status_line.split()
+        status = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+        if status == 401:
+            sock.close()
+            raise XiaoduiyouAuthError("UNAUTHENTICATED")
+        if status != 101:
+            sock.close()
+            raise XiaoduiyouWebSocketError(f"websocket upgrade failed: HTTP {status}")
+        headers = {}
+        for line in header_lines:
+            if ":" in line:
+                name, value = line.split(":", 1)
+                headers[name.strip().lower()] = value.strip()
+        expected_accept = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()).decode("ascii")
+        if headers.get("sec-websocket-accept") != expected_accept:
+            sock.close()
+            raise XiaoduiyouWebSocketError("websocket upgrade failed: bad Sec-WebSocket-Accept")
+        self._websocket_buffer = remainder
+        return sock
+
+    def websocket_read_exact(self, sock: socket.socket, length: int) -> bytes:
+        while len(self._websocket_buffer) < length:
+            self._websocket_buffer += sock.recv(length - len(self._websocket_buffer))
+        value = self._websocket_buffer[:length]
+        self._websocket_buffer = self._websocket_buffer[length:]
+        return value
+
+    def websocket_send_frame(self, sock: socket.socket, opcode: int, payload: bytes = b"") -> None:
+        first = 0x80 | opcode
+        mask = secrets.token_bytes(4)
+        if len(payload) < 126:
+            header = bytes([first, 0x80 | len(payload)])
+        elif len(payload) < 65536:
+            header = bytes([first, 0x80 | 126]) + struct.pack("!H", len(payload))
+        else:
+            header = bytes([first, 0x80 | 127]) + struct.pack("!Q", len(payload))
+        masked = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+        sock.sendall(header + mask + masked)
+
+    def websocket_read_text(self, sock: socket.socket) -> str | None:
+        header = self.websocket_read_exact(sock, 2)
+        opcode = header[0] & 0x0F
+        length = header[1] & 0x7F
+        if length == 126:
+            length = struct.unpack("!H", self.websocket_read_exact(sock, 2))[0]
+        elif length == 127:
+            length = struct.unpack("!Q", self.websocket_read_exact(sock, 8))[0]
+        payload = self.websocket_read_exact(sock, length) if length else b""
+        if opcode == 8:
+            raise XiaoduiyouWebSocketError("websocket closed by server")
+        if opcode == 9:
+            self.websocket_send_frame(sock, 0xA, payload)
+            return None
+        if opcode != 1:
+            return None
+        return payload.decode("utf-8")
+
+    def watch_claims(self, should_stop) -> Any:
+        sock = self.open_websocket()
+        log(f"websocket turn stream connected {self.websocket_url()}")
+        try:
+            while not should_stop():
+                try:
+                    raw = self.websocket_read_text(sock)
+                except socket.timeout:
+                    continue
+                if not raw:
+                    continue
+                payload = json.loads(raw)
+                if not isinstance(payload, dict):
+                    raise XiaoduiyouWebSocketError("invalid websocket payload")
+                if payload.get("error"):
+                    if payload.get("error") == "UNAUTHENTICATED":
+                        raise XiaoduiyouAuthError("UNAUTHENTICATED")
+                    log(f"websocket turn stream error: {payload.get('error')}")
+                    continue
+                if payload.get("turn"):
+                    yield payload
+        finally:
+            try:
+                self.websocket_send_frame(sock, 8)
+            except Exception:
+                pass
+            sock.close()
 
     def progress(self, turn_id: str, text: str) -> None:
         self.request_json(f"/api/agent/turns/{parse.quote(turn_id)}/events", method="POST", body={"progress": text})
@@ -829,10 +965,7 @@ def handle_model_planned_document_turn(config: dict[str, Any], client: Xiaoduiyo
     return reply or "已处理。"
 
 
-def handle_one(config: dict[str, Any], client: XiaoduiyouClient) -> bool:
-    claimed = client.claim()
-    if not claimed:
-        return False
+def handle_claimed(config: dict[str, Any], client: XiaoduiyouClient, claimed: dict[str, Any]) -> bool:
     turn = claimed.get("turn") if isinstance(claimed.get("turn"), dict) else {}
     turn_id = str(turn.get("turn_id") or "")
     if not turn_id:
@@ -859,6 +992,13 @@ def handle_one(config: dict[str, Any], client: XiaoduiyouClient) -> bool:
     return True
 
 
+def handle_one(config: dict[str, Any], client: XiaoduiyouClient) -> bool:
+    claimed = client.claim()
+    if not claimed:
+        return False
+    return handle_claimed(config, client, claimed)
+
+
 def run_once(_: argparse.Namespace) -> None:
     config = load_config()
     handled = handle_one(config, XiaoduiyouClient(config))
@@ -880,6 +1020,13 @@ def run_forever(_: argparse.Namespace) -> None:
     signal.signal(signal.SIGINT, stop)
     while not stopping:
         try:
+            if config.get("prefer_websocket", True):
+                log("opening websocket turn stream")
+                for claimed in client.watch_claims(lambda: stopping):
+                    handle_claimed(config, client, claimed)
+                    if stopping:
+                        break
+                continue
             handled = handle_one(config, client)
             sleep_for = config.get("poll_interval_seconds") if handled else config.get("idle_sleep_seconds")
             time.sleep(float(sleep_for or 2))
@@ -888,6 +1035,16 @@ def run_forever(_: argparse.Namespace) -> None:
             break
         except Exception:
             log(traceback.format_exc().strip())
+            if config.get("prefer_websocket", True):
+                try:
+                    handled = handle_one(config, client)
+                    time.sleep(float(config.get("poll_interval_seconds") if handled else 5))
+                    continue
+                except XiaoduiyouAuthError:
+                    log("authentication failed; stopping runner until the connection token is refreshed")
+                    break
+                except Exception:
+                    log(traceback.format_exc().strip())
             time.sleep(5)
     log("runner stopped")
 

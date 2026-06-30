@@ -5,6 +5,12 @@ from __future__ import annotations
 
 import json
 import os
+import base64
+import hashlib
+import secrets
+import socket
+import ssl
+import struct
 import sys
 import time
 import traceback
@@ -13,8 +19,8 @@ from typing import Any
 from urllib import error, parse, request
 
 
-VERSION = "0.1.3"
-CONNECTOR_VERSION = "2026.6.26-codex.3"
+VERSION = "0.1.5"
+CONNECTOR_VERSION = "2026.7.1.2-codex"
 DEFAULT_CONFIG_PATH = Path.home() / ".codex" / "xiaoduiyou-connection.json"
 
 
@@ -113,6 +119,184 @@ def request_json(path: str, *, method: str = "GET", body: Any = None, headers: d
         raise err
 
 
+class XiaoduiyouWebSocketError(RuntimeError):
+    pass
+
+
+def pending_turns_websocket_url() -> str:
+    account = configured_account()
+    parsed = parse.urlparse(account["base_url"])
+    scheme = "wss" if parsed.scheme == "https" else "ws"
+    return parse.urlunparse((scheme, parsed.netloc, "/ws/agent/turns/pending", "", "", ""))
+
+
+def interactive_request_websocket_url(request_id: str) -> str:
+    account = configured_account()
+    parsed = parse.urlparse(account["base_url"])
+    scheme = "wss" if parsed.scheme == "https" else "ws"
+    path = f"/ws/agent/interactive-requests/{parse.quote(request_id, safe='')}"
+    return parse.urlunparse((scheme, parsed.netloc, path, "", "", ""))
+
+
+def websocket_send_frame(sock: socket.socket, opcode: int, payload: bytes = b"") -> None:
+    first = 0x80 | opcode
+    mask = secrets.token_bytes(4)
+    if len(payload) < 126:
+        header = bytes([first, 0x80 | len(payload)])
+    elif len(payload) < 65536:
+        header = bytes([first, 0x80 | 126]) + struct.pack("!H", len(payload))
+    else:
+        header = bytes([first, 0x80 | 127]) + struct.pack("!Q", len(payload))
+    masked = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+    sock.sendall(header + mask + masked)
+
+
+def websocket_read_exact(sock: socket.socket, length: int, buffer: bytearray) -> bytes:
+    while len(buffer) < length:
+        chunk = sock.recv(length - len(buffer))
+        if not chunk:
+            raise XiaoduiyouWebSocketError("websocket closed")
+        buffer.extend(chunk)
+    value = bytes(buffer[:length])
+    del buffer[:length]
+    return value
+
+
+def websocket_read_text(sock: socket.socket, buffer: bytearray) -> str | None:
+    header = websocket_read_exact(sock, 2, buffer)
+    opcode = header[0] & 0x0F
+    length = header[1] & 0x7F
+    if length == 126:
+        length = struct.unpack("!H", websocket_read_exact(sock, 2, buffer))[0]
+    elif length == 127:
+        length = struct.unpack("!Q", websocket_read_exact(sock, 8, buffer))[0]
+    payload = websocket_read_exact(sock, length, buffer) if length else b""
+    if opcode == 8:
+        raise XiaoduiyouWebSocketError("websocket closed by server")
+    if opcode == 9:
+        websocket_send_frame(sock, 0xA, payload)
+        return None
+    if opcode != 1:
+        return None
+    return payload.decode("utf-8")
+
+
+def open_websocket_url(url: str, timeout: float) -> tuple[socket.socket, bytearray]:
+    account = configured_account()
+    parsed = parse.urlparse(url)
+    host = parsed.hostname
+    if not host:
+        raise XiaoduiyouWebSocketError("websocket host is missing")
+    port = parsed.port or (443 if parsed.scheme == "wss" else 80)
+    raw_sock = socket.create_connection((host, port), timeout=timeout)
+    sock = ssl.create_default_context().wrap_socket(raw_sock, server_hostname=host) if parsed.scheme == "wss" else raw_sock
+    sock.settimeout(timeout)
+    key = base64.b64encode(secrets.token_bytes(16)).decode("ascii")
+    sock.sendall("\r\n".join([
+        f"GET {parsed.path or '/'} HTTP/1.1",
+        f"Host: {parsed.netloc}",
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        f"Sec-WebSocket-Key: {key}",
+        "Sec-WebSocket-Version: 13",
+        f"Authorization: Bearer {account['connection_token']}",
+        f"X-XDY-Connector-Version: {CONNECTOR_VERSION}",
+        "X-XDY-Connector-Provider: codex",
+        "",
+        "",
+    ]).encode("utf-8"))
+    raw = b""
+    while b"\r\n\r\n" not in raw:
+        chunk = sock.recv(4096)
+        if not chunk:
+            raise XiaoduiyouWebSocketError("websocket closed during handshake")
+        raw += chunk
+    head, rest = raw.split(b"\r\n\r\n", 1)
+    status_line, *header_lines = head.decode("iso-8859-1", errors="replace").split("\r\n")
+    parts = status_line.split()
+    status = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+    if status == 401:
+        sock.close()
+        err = RuntimeError("UNAUTHENTICATED")
+        setattr(err, "status", 401)
+        raise err
+    if status != 101:
+        sock.close()
+        raise XiaoduiyouWebSocketError(f"websocket upgrade failed: HTTP {status}")
+    headers = {}
+    for line in header_lines:
+        if ":" in line:
+            name, value = line.split(":", 1)
+            headers[name.strip().lower()] = value.strip()
+    expected_accept = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()).decode("ascii")
+    if headers.get("sec-websocket-accept") != expected_accept:
+        sock.close()
+        raise XiaoduiyouWebSocketError("websocket upgrade failed: bad Sec-WebSocket-Accept")
+    return sock, bytearray(rest)
+
+
+def open_pending_turns_websocket(timeout: float) -> tuple[socket.socket, bytearray]:
+    return open_websocket_url(pending_turns_websocket_url(), timeout)
+
+
+def claim_turn_via_websocket(timeout_seconds: float, *, wait_for_turn: bool = False) -> Any:
+    sock, buffer = open_pending_turns_websocket(timeout_seconds)
+    try:
+        deadline = time.time() + timeout_seconds
+        while time.time() <= deadline:
+            sock.settimeout(max(0.5, min(5.0, deadline - time.time())))
+            try:
+                raw = websocket_read_text(sock, buffer)
+            except socket.timeout:
+                continue
+            if not raw:
+                continue
+            payload = json.loads(raw)
+            if isinstance(payload, dict) and payload.get("error"):
+                if payload.get("error") == "UNAUTHENTICATED":
+                    err = RuntimeError("UNAUTHENTICATED")
+                    setattr(err, "status", 401)
+                    raise err
+                return payload
+            if wait_for_turn and isinstance(payload, dict) and not payload.get("turn"):
+                continue
+            return payload
+        return {"turn": None, "status": "NO_PENDING_TURN"}
+    finally:
+        try:
+            websocket_send_frame(sock, 8)
+        except Exception:
+            pass
+        sock.close()
+
+
+def wait_interactive_request_via_websocket(request_id: str, timeout_seconds: float) -> Any:
+    sock, buffer = open_websocket_url(interactive_request_websocket_url(request_id), timeout_seconds)
+    try:
+        deadline = time.time() + timeout_seconds
+        attempts = 0
+        while time.time() <= deadline:
+            sock.settimeout(max(0.5, min(5.0, deadline - time.time())))
+            try:
+                raw = websocket_read_text(sock, buffer)
+            except socket.timeout:
+                continue
+            if not raw:
+                continue
+            attempts += 1
+            payload = json.loads(raw)
+            request_payload = payload.get("request") if isinstance(payload, dict) else None
+            if isinstance(request_payload, dict) and request_payload.get("status") in ("resolved", "expired"):
+                return {"status": "DECISION_RECEIVED", "transport": "websocket", "attempts": attempts, "request": request_payload}
+        return {"status": "NO_DECISION", "transport": "websocket", "attempts": attempts, "request_id": request_id}
+    finally:
+        try:
+            websocket_send_frame(sock, 8)
+        except Exception:
+            pass
+        sock.close()
+
+
 def json_text(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2)
 
@@ -196,29 +380,41 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
 
     if name == "xiaoduiyou_agent_turn_claim":
         try:
-            return text_result(request_json("/api/agent/turns/pending"))
-        except RuntimeError as exc:
+            return text_result(claim_turn_via_websocket(float(args.get("timeout_seconds") or 30)))
+        except (RuntimeError, XiaoduiyouWebSocketError, OSError, json.JSONDecodeError) as exc:
+            if isinstance(exc, RuntimeError) and getattr(exc, "status", None) not in (None, 404):
+                raise
+            try:
+                return text_result(request_json("/api/agent/turns/pending"))
+            except RuntimeError as http_exc:
+                exc = http_exc
             if getattr(exc, "status", None) == 404:
                 return text_result({"turn": None, "status": "NO_PENDING_TURN"})
             raise
 
     if name == "xiaoduiyou_agent_turn_watch":
         timeout_seconds = max(1.0, min(float(args.get("timeout_seconds") or 60), 300.0))
-        interval_seconds = max(0.5, min(float(args.get("interval_seconds") or 2), 10.0))
-        deadline = time.time() + timeout_seconds
-        attempts = 0
-        last_error: dict[str, Any] | None = None
-        while time.time() <= deadline:
-            attempts += 1
-            try:
-                result = request_json("/api/agent/turns/pending")
-                return text_result({"status": "TURN_CLAIMED", "attempts": attempts, **(result if isinstance(result, dict) else {"result": result})})
-            except RuntimeError as exc:
-                if getattr(exc, "status", None) != 404:
-                    raise
-                last_error = {"status": getattr(exc, "status", None), "message": str(exc)}
-            time.sleep(interval_seconds)
-        return text_result({"turn": None, "status": "NO_PENDING_TURN", "attempts": attempts, "last_error": last_error})
+        try:
+            result = claim_turn_via_websocket(timeout_seconds, wait_for_turn=True)
+            if isinstance(result, dict) and result.get("turn"):
+                return text_result({"status": "TURN_CLAIMED", "transport": "websocket", **result})
+            return text_result(result)
+        except (XiaoduiyouWebSocketError, OSError, json.JSONDecodeError):
+            interval_seconds = max(0.5, min(float(args.get("interval_seconds") or 2), 10.0))
+            deadline = time.time() + timeout_seconds
+            attempts = 0
+            last_error: dict[str, Any] | None = None
+            while time.time() <= deadline:
+                attempts += 1
+                try:
+                    result = request_json("/api/agent/turns/pending")
+                    return text_result({"status": "TURN_CLAIMED", "transport": "http", "attempts": attempts, **(result if isinstance(result, dict) else {"result": result})})
+                except RuntimeError as exc:
+                    if getattr(exc, "status", None) != 404:
+                        raise
+                    last_error = {"status": getattr(exc, "status", None), "message": str(exc)}
+                time.sleep(interval_seconds)
+            return text_result({"turn": None, "status": "NO_PENDING_TURN", "attempts": attempts, "last_error": last_error})
 
     if name == "xiaoduiyou_agent_turn_progress":
         turn_id = required(args, "turn_id")
@@ -307,6 +503,10 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         request_id = required(args, "request_id")
         timeout_seconds = max(1.0, min(float(args.get("timeout_seconds") or 300), 600.0))
         interval_seconds = max(0.5, min(float(args.get("interval_seconds") or 1), 10.0))
+        try:
+            return text_result(wait_interactive_request_via_websocket(request_id, timeout_seconds))
+        except Exception:
+            pass
         deadline = time.time() + timeout_seconds
         attempts = 0
         while time.time() <= deadline:
@@ -314,9 +514,9 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             result = request_json(f"/api/agent/interactive-requests/{parse.quote(request_id)}")
             request_payload = result.get("request") if isinstance(result, dict) else None
             if isinstance(request_payload, dict) and request_payload.get("status") in ("resolved", "expired"):
-                return text_result({"status": "DECISION_RECEIVED", "attempts": attempts, "request": request_payload})
+                return text_result({"status": "DECISION_RECEIVED", "transport": "http", "attempts": attempts, "request": request_payload})
             time.sleep(interval_seconds)
-        return text_result({"status": "NO_DECISION", "attempts": attempts, "request_id": request_id})
+        return text_result({"status": "NO_DECISION", "transport": "http", "attempts": attempts, "request_id": request_id})
 
     if name == "xiaoduiyou_growth_diary_get":
         allowed = ["view", "date", "start_date", "end_date", "event_type", "query", "quantity", "unit", "record_limit"]

@@ -33,6 +33,7 @@ export function resolveXiaoduiyouAccount(cfg, accountId) {
     configured: Boolean(baseUrl && connectionToken),
     baseUrl,
     connectionToken,
+    preferWebSocket: merged.preferWebSocket !== false,
     pollIntervalMs: Number(merged.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS),
     pollTimeoutMs: Number(merged.pollTimeoutMs ?? DEFAULT_POLL_TIMEOUT_MS),
     turnConcurrency: Math.max(1, Number(merged.turnConcurrency ?? DEFAULT_TURN_CONCURRENCY) || DEFAULT_TURN_CONCURRENCY),

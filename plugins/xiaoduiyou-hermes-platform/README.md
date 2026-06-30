@@ -5,7 +5,7 @@ This is the maintained Hermes Gateway platform plugin for Xiaoduiyou. Install it
 ## What it provides
 
 - Hermes platform: `xiaoduiyou`
-- Polling of Xiaoduiyou pending turns
+- WebSocket streaming of Xiaoduiyou pending turns, with HTTP pending-poll fallback for older Xiaoduiyou backends
 - Progress/tool-progress delivery to Xiaoduiyou events
 - Final callback delivery to Xiaoduiyou
 - Agent-facing sender identity and current-screen context headers for vague messages such as “把这个改短一点”
@@ -38,6 +38,7 @@ platforms:
     enabled: true
     extra:
       base_url: https://YOUR_XIAODUIYOU_ORIGIN
+      prefer_websocket: true
       poll_interval_seconds: 1.0
     home_channel:
       platform: xiaoduiyou
@@ -68,6 +69,8 @@ platform_toolsets:
 Do not configure `platform_toolsets.xiaoduiyou` as only `[xiaoduiyou]`: that exposes Xiaoduiyou document tools but removes normal Hermes local tools such as file, terminal, web search, browser, and code execution.
 
 Use `platforms.xiaoduiyou.extra.base_url` and `platforms.xiaoduiyou.extra.connection_token` as the source of truth. Avoid setting `XIAODUIYOU_BASE_URL` or `XIAODUIYOU_CONNECTION_TOKEN` in the gateway environment because those variables override `config.yaml` and can leave Hermes connected to an old Xiaoduiyou environment.
+
+The plugin connects to `/ws/hermes/turns/pending` by default, and waits for exec approval / slash confirmation cards through `/ws/hermes/interactive-requests/:request_id`. `poll_interval_seconds` is retained as the fallback/retry cadence when WebSocket is unavailable or disabled with `prefer_websocket: false`.
 
 Restart Hermes Gateway after installing or changing config:
 
