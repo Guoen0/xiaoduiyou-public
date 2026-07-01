@@ -103,6 +103,7 @@ def _websocket_headers(base_url: str, websocket_key: str, token: str) -> bytes:
         f"Sec-WebSocket-Key: {websocket_key}",
         "Sec-WebSocket-Version: 13",
         "X-XDY-Connector-Provider: hermes",
+        f"X-XDY-Connector-Version: {XIAODUIYOU_HERMES_PLUGIN_VERSION}",
     ]
     if token:
         headers.append(f"Authorization: Bearer {token}")

@@ -243,7 +243,9 @@ install_hermes_runtime_skills() {
 }
 
 restart_hermes_gateway() {
-  if [ "${XDY_RESTART_HERMES:-1}" = "0" ]; then
+  local restart_requested="${XDY_RESTART_HERMES:-1}"
+
+  if [ "$restart_requested" = "0" ]; then
     echo "Skipped Hermes Gateway restart because XDY_RESTART_HERMES=0."
     return
   fi
@@ -253,24 +255,25 @@ restart_hermes_gateway() {
 
   if [ "${_HERMES_GATEWAY:-}" = "1" ]; then
     local restart_log="${HERMES_HOME_DIR}/logs/xiaoduiyou-plugin-upgrade-restart.log"
+    local restart_delay_seconds="${XDY_RESTART_DELAY_SECONDS:-90}"
     mkdir -p "$(dirname "$restart_log")"
-    python3 - "$hermes_bin" "$HERMES_HOME_DIR" "$restart_log" <<'PY'
+    python3 - "$hermes_bin" "$HERMES_HOME_DIR" "$restart_log" "$restart_delay_seconds" <<'PY'
 import os
 import subprocess
 import sys
 
-hermes_bin, hermes_home, restart_log = sys.argv[1:4]
+hermes_bin, hermes_home, restart_log, restart_delay_seconds = sys.argv[1:5]
 env = os.environ.copy()
 env.pop("_HERMES_GATEWAY", None)
 env["HERMES_HOME"] = hermes_home
 command = (
-    "sleep 1; "
+    "sleep \"$2\"; "
     "printf '\\n=== xiaoduiyou plugin upgrade restart %s ===\\n' \"$(date '+%Y-%m-%d %H:%M:%S')\"; "
     "exec \"$1\" gateway restart"
 )
 with open(restart_log, "a", encoding="utf-8") as log:
     subprocess.Popen(
-        ["/bin/sh", "-c", command, "sh", hermes_bin],
+        ["/bin/sh", "-c", command, "sh", hermes_bin, restart_delay_seconds],
         stdout=log,
         stderr=subprocess.STDOUT,
         env=env,
@@ -278,7 +281,7 @@ with open(restart_log, "a", encoding="utf-8") as log:
         close_fds=True,
     )
 PY
-    echo "Scheduled Hermes Gateway restart outside the running gateway process; log: ${restart_log}"
+    echo "Scheduled Hermes Gateway restart outside the running gateway process in ${restart_delay_seconds}s; log: ${restart_log}"
     return
   fi
 

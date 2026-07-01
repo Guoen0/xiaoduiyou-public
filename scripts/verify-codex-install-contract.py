@@ -128,6 +128,7 @@ def main() -> None:
             "\"id\": \"default\"",
             "\"name\": \"主对话\"",
             "\"home_channel\"",
+            "X-XDY-Connector-Version",
             "_write_xiaoduiyou_channel_directory",
         ],
     )
