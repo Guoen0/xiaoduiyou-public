@@ -27,8 +27,9 @@ Load this when:
 2. Prefer the `xiaoduiyou_im_send` tool for visual cards. It accepts OpenAI Responses-style `content[]` parts and the Xiaoduiyou backend uploads images/assets.
 3. Visual cards in Xiaoduiyou render as `image_attachments[]`, not `MEDIA:/...`, Markdown images, browser screenshots, or link-only text.
 4. Local/server-static paths are invalid in final chat cards. Pass HTTPS images or `data:image/...;base64,...` to `xiaoduiyou_im_send`; never pass `/tmp`, `/Users`, `file:`, `blob:`, `localhost`, or private-network URLs.
-5. **Send the Xiaoduiyou IM payload inside the same active turn before the final text reply.** Do not first finalize with a local/Markdown path and try to "补发" later; the runtime may close the turn and reject late IM sends.
-6. Verify delivery: response event type, attachment count, and at least one image URL HTTP 200 image content-type.
+5. **Hard lesson from user correction:** If the current source/screen is Xiaoduiyou and the deliverable is an image, do not put `MEDIA:/local/path` in the final answer. Convert the generated/local image to a deliverable Xiaoduiyou image first. Preferred workflow for generated images: QA the local output, remove/crop visible provider watermark if needed, upload the approved local file to Xiaoduiyou TOS (see `xiaoduiyou-tos-upload`), HEAD-verify the HTTPS URL returns `200 image/*`, then call `xiaoduiyou_im_send` with an `input_image` part and verify `attachment_count >= 1`. If a stable TOS upload is not needed and the model returned a valid HTTPS URL, that URL may be sent directly. Base64 `data:image/<type>;base64,...` is an acceptable fallback for small images.
+6. **Send the Xiaoduiyou IM payload inside the same active turn before the final text reply.** Do not first finalize with a local/Markdown path and try to "补发" later; the runtime may close the turn and reject late IM sends.
+7. Verify delivery: response event type, attachment count, and at least one image URL HTTP 200 image content-type.
 7. If Xiaoduiyou IM delivery fails with a platform/runtime error (for example `TURN_ALREADY_CLOSED`, missing attachments despite correct `xiaoduiyou_im_send`, or frontend cannot display supported image payloads), do not keep silently retrying or blame the user. Briefly explain that this looks like a platform issue, encourage the user to keep using the product and to submit feedback when convenient, and provide a concise copy-pasteable bug report with environment/session, repro steps, actual/expected result, and exact error.
 8. For product questions: Xiaohongshu provides lived-experience/reference evidence; Taobao/Tmall provides buyable candidates/parameters.
 9. For document/content-package artifacts, travel plans, publish tabs, or process docs, load `xiaoduiyou-doc-content-package`; do not keep that workflow inside IM.
@@ -80,6 +81,8 @@ Use this section for Xiaoduiyou chat answers about baby/toddler development, par
 ## Preferred Tool
 
 Call `xiaoduiyou_im_send` with OpenAI Responses-style content parts. Omit `session_id` for background/default delivery; Xiaoduiyou will route it to the stable Home `default` channel, shown to users as `主对话`. Pass `session_id` only when replying to a specific active session.
+
+For image-generation replies in Xiaoduiyou, the safe delivery sequence is: generate → inspect/QA local output → crop or regenerate if watermark/quality is unacceptable → upload the final file to TOS with `xiaoduiyou-tos-upload` when a durable HTTPS URL is useful → verify `200 image/*` → send the verified URL as an `input_image` card → only then final-text summarize. Never use `MEDIA:` as the Xiaoduiyou deliverable.
 
 ```json
 {
