@@ -201,7 +201,7 @@ When the runtime exposes Xiaoduiyou document tools, use them instead of direct d
 
 - `xiaoduiyou_documents_create(title, body?, block_json?, ui_templates?, fields?, attach_to_session?)`
 - `xiaoduiyou_documents_get(document_id?, session_id?, view?, field?, start?, block_limit?, char_limit?)`
-- `xiaoduiyou_documents_update(document_id?, command?, title?, body?, block_json?, ui_templates?, fields?, blocks?)`
+- `xiaoduiyou_documents_update(document_id?, command?, base_revision?, title?, body?, block_json?, ui_templates?, fields?, blocks?, platform?, index?, image_url?, images?, columns?)`
 - `xiaoduiyou_documents_delete(document_id?)`
 
 Use `xiaoduiyou_documents_get` default `view=summary` before edits. Use `view=field` for one metadata field such as `publish_notes.xiaohongshu` or `source_markdown`, and `view=blocks` for paged block content. Avoid `view=full` unless the user explicitly needs the entire document.
@@ -211,6 +211,11 @@ Supported update commands:
 - `overwrite`: replace title/body/block_json/templates/fields as supplied.
 - `append_blocks`: append structured blocks.
 - `patch_fields`: update metadata fields and/or `ui_templates` without rewriting the whole document.
+- `replace_publish_image`: replace one publish image by 1-based `index`, optionally sync the process-document `image_grid`, and preserve the old URL in history.
+- `upsert_image_grid`: create or replace a document `image_grid` from explicit images.
+- `sync_publish_images_to_document`: rebuild the document `image_grid` from live `publish_notes.<platform>.images`.
+
+Use `base_revision` from `xiaoduiyou_documents_get` for overwrites or high-risk image edits so stale payloads are rejected instead of silently replacing newer data.
 
 Use `fields.ui_templates` / top-level `ui_templates` and `fields.publish_notes` for visible result tabs. Use `body`, `block_json`, and `fields.source_markdown` for process/evidence material.
 

@@ -20,7 +20,7 @@ from urllib import error, parse, request
 
 
 VERSION = "0.1.5"
-CONNECTOR_VERSION = "2026.7.1.2-codex"
+CONNECTOR_VERSION = "2026.7.3.1-codex"
 DEFAULT_CONFIG_PATH = Path.home() / ".codex" / "xiaoduiyou-connection.json"
 
 
@@ -576,8 +576,15 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         payload = normalize_document_input(args, create=False)
         payload["command"] = args.get("command") or "overwrite"
         payload["updated_by"] = args.get("updated_by") or "codex"
+        if args.get("base_revision") is not None:
+            payload["base_revision"] = int(args.get("base_revision") or 0)
+        if args.get("allow_overwrite_after_patch") is not None:
+            payload["allow_overwrite_after_patch"] = bool(args.get("allow_overwrite_after_patch"))
         if isinstance(args.get("blocks"), list):
             payload["blocks"] = args["blocks"]
+        for key in ["platform", "index", "image_url", "caption", "history_caption", "sync_process_doc", "images", "columns"]:
+            if key in args:
+                payload[key] = args[key]
         return text_result(request_json(f"/api/docs/{parse.quote(document_id)}", method="PATCH", body=payload))
 
     if name == "xiaoduiyou_documents_delete":
@@ -784,7 +791,7 @@ TOOLS = [
     {
         "name": "xiaoduiyou_documents_update",
         "description": "Update a Xiaoduiyou document by document_id.",
-        "inputSchema": schema({"document_id": {"type": "string"}, "command": {"type": "string", "enum": ["overwrite", "append_blocks", "patch_fields"]}, "title": {"type": "string"}, "body": {"type": "string"}, "markdown": {"type": "string"}, "block_json": {"type": "object", "additionalProperties": True}, "blocks": {"type": "array", "items": {"type": "object", "additionalProperties": True}}, "fields": {"type": "object", "additionalProperties": True}, "ui_templates": {"type": "array", "items": {"type": "string", "enum": ["xiaohongshu", "moments"]}}}, ["document_id"]),
+        "inputSchema": schema({"document_id": {"type": "string"}, "command": {"type": "string", "enum": ["overwrite", "append_blocks", "patch_fields", "replace_publish_image", "upsert_image_grid", "sync_publish_images_to_document"]}, "base_revision": {"type": "integer"}, "allow_overwrite_after_patch": {"type": "boolean"}, "title": {"type": "string"}, "body": {"type": "string"}, "markdown": {"type": "string"}, "block_json": {"type": "object", "additionalProperties": True}, "blocks": {"type": "array", "items": {"type": "object", "additionalProperties": True}}, "fields": {"type": "object", "additionalProperties": True}, "ui_templates": {"type": "array", "items": {"type": "string", "enum": ["xiaohongshu", "moments"]}}, "platform": {"type": "string"}, "index": {"type": "integer"}, "image_url": {"type": "string"}, "caption": {"type": "string"}, "history_caption": {"type": "string"}, "sync_process_doc": {"type": "boolean"}, "images": {"type": "array", "items": {"type": "object", "additionalProperties": True}}, "columns": {"type": "integer"}}, ["document_id"]),
     },
     {
         "name": "xiaoduiyou_documents_delete",

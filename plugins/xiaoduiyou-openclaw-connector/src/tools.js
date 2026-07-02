@@ -7,6 +7,13 @@ function jsonResult(value) {
   return JSON.stringify(value, null, 2);
 }
 
+let documentMutationSeq = 0;
+
+function nextDocumentMutationId(operation) {
+  documentMutationSeq += 1;
+  return `mut_${operation}_${Date.now().toString(36)}_${documentMutationSeq}`;
+}
+
 function resolveToolAccount(config, rawParams) {
   const accountId = typeof rawParams?.account_id === "string" ? rawParams.account_id.trim() : undefined;
   const account = resolveXiaoduiyouAccount(config, accountId || undefined);
@@ -125,7 +132,9 @@ const DocumentUpdateSchema = {
   additionalProperties: false,
   properties: {
     document_id: { type: "string", description: "Optional document id. If omitted, Xiaoduiyou updates the current screen document/content package, then falls back to the current session document." },
-    command: { type: "string", enum: ["overwrite", "append_blocks", "patch_fields"], description: "Update mode. Defaults overwrite." },
+    command: { type: "string", enum: ["overwrite", "append_blocks", "patch_fields", "replace_publish_image", "upsert_image_grid", "sync_publish_images_to_document"], description: "Update mode. Defaults overwrite. replace_publish_image uses 1-based index." },
+    base_revision: { type: "integer", description: "Optional document revision read from xiaoduiyou_documents_get. If stale, Xiaoduiyou rejects the update instead of overwriting newer content." },
+    allow_overwrite_after_patch: { type: "boolean", description: "Rare escape hatch for same-callback overwrite after another update to the same document." },
     title: { type: "string", description: "New title for overwrite or patch_fields." },
     body: { type: "string", description: "New/append body text." },
     block_json: { type: "object", description: "Optional full Block JSON for overwrite.", additionalProperties: true },
@@ -140,6 +149,14 @@ const DocumentUpdateSchema = {
       items: { type: "object", additionalProperties: true },
     },
     fields: { type: "object", description: "Metadata fields for patch_fields/overwrite.", additionalProperties: true },
+    platform: { type: "string", description: "For content-package commands, e.g. xiaohongshu." },
+    index: { type: "integer", description: "For replace_publish_image: 1-based image index to replace." },
+    image_url: { type: "string", description: "For replace_publish_image: replacement image URL." },
+    caption: { type: "string", description: "Optional caption for a replaced image_grid item." },
+    history_caption: { type: "string", description: "Optional caption for storing the old image in generated_images_history." },
+    sync_process_doc: { type: "boolean", description: "For replace_publish_image: also update the document image_grid. Defaults true." },
+    images: { type: "array", description: "For upsert_image_grid: image URLs or objects with url/caption.", items: { anyOf: [{ type: "string" }, { type: "object", additionalProperties: true }] } },
+    columns: { type: "integer", description: "For image_grid commands: 2 or 3 columns.", minimum: 2, maximum: 3 },
   },
 };
 
@@ -247,12 +264,18 @@ function queuedResult(operation, action) {
   const target = action.document_id ? { document_id: action.document_id } : { current_session_document: true };
   return jsonResult({
     ok: true,
+    accepted: true,
     queued: true,
+    applied: false,
+    persisted: false,
+    state: "queued_for_final_callback",
     operation,
+    mutation_id: action.mutation_id,
+    command: action.input?.command,
     ...target,
     attach_to_session: action.operation === "create" ? Boolean(action.attach_to_session ?? true) : undefined,
     will_apply_on: "final_callback",
-    next_step: "Continue the answer normally. Do not repeat this tool call just to verify; use xiaoduiyou_documents_get after the final callback or in a later turn.",
+    next_step: "This update is not persisted yet. Do not tell the user the backend has been updated. Say only that the update has been queued; after the final callback or in a later turn, verify with xiaoduiyou_documents_get and compare the live revision/fields/blocks.",
   });
 }
 
@@ -410,6 +433,7 @@ function createDocumentCreateTool() {
       if (Object.keys(fields).length > 0) input.fields = fields;
       const action = {
         operation: "create",
+        mutation_id: nextDocumentMutationId("create"),
         attach_to_session: Boolean(rawParams.attach_to_session ?? true),
         input,
       };
@@ -438,6 +462,34 @@ function createDocumentUpdateTool() {
         if (rawParams.title) input.title = String(rawParams.title);
         const fields = mergeUiTemplatesIntoFields(rawParams, rawParams.fields);
         if (Object.keys(fields).length > 0) input.fields = fields;
+      } else if (command === "replace_publish_image") {
+        input = {
+          command: "replace_publish_image",
+          platform: String(rawParams.platform ?? "xiaohongshu"),
+          index: Number(rawParams.index),
+          image_url: String(rawParams.image_url ?? ""),
+          updated_by: "agent",
+        };
+        if (rawParams.caption) input.caption = String(rawParams.caption);
+        if (rawParams.history_caption) input.history_caption = String(rawParams.history_caption);
+        if (rawParams.sync_process_doc !== undefined) input.sync_process_doc = Boolean(rawParams.sync_process_doc);
+      } else if (command === "upsert_image_grid") {
+        input = {
+          command: "upsert_image_grid",
+          images: Array.isArray(rawParams.images) ? rawParams.images : [],
+          updated_by: "agent",
+        };
+        if (rawParams.platform) input.platform = String(rawParams.platform);
+        if (rawParams.columns !== undefined) input.columns = Number(rawParams.columns);
+        if (rawParams.title) input.title = String(rawParams.title);
+      } else if (command === "sync_publish_images_to_document") {
+        input = {
+          command: "sync_publish_images_to_document",
+          platform: String(rawParams.platform ?? "xiaohongshu"),
+          updated_by: "agent",
+        };
+        if (rawParams.columns !== undefined) input.columns = Number(rawParams.columns);
+        if (rawParams.title) input.title = String(rawParams.title);
       } else {
         const title = String(rawParams.title ?? "").trim();
         const body = String(rawParams.body ?? rawParams.markdown ?? "");
@@ -450,8 +502,10 @@ function createDocumentUpdateTool() {
         const fields = mergeUiTemplatesIntoFields(rawParams, rawParams.fields);
         if (Object.keys(fields).length > 0) input.fields = fields;
       }
+      if (rawParams.base_revision !== undefined) input.base_revision = Number(rawParams.base_revision);
+      if (rawParams.allow_overwrite_after_patch !== undefined) input.allow_overwrite_after_patch = Boolean(rawParams.allow_overwrite_after_patch);
       const documentId = String(rawParams.document_id ?? "").trim();
-      const action = { operation: "update", input };
+      const action = { operation: "update", mutation_id: nextDocumentMutationId("update"), input };
       if (documentId) action.document_id = documentId;
       queueXiaoduiyouDocumentAction(action);
       return queuedResult("update", action);
@@ -467,7 +521,7 @@ function createDocumentDeleteTool() {
     parameters: DocumentDeleteSchema,
     execute: async (_toolCallId, rawParams = {}) => {
       const documentId = String(rawParams.document_id ?? "").trim();
-      const action = { operation: "delete" };
+      const action = { operation: "delete", mutation_id: nextDocumentMutationId("delete") };
       if (documentId) action.document_id = documentId;
       queueXiaoduiyouDocumentAction(action);
       return queuedResult("delete", action);

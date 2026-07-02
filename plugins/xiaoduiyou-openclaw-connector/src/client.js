@@ -3,7 +3,7 @@ import net from "node:net";
 import tls from "node:tls";
 import { once } from "node:events";
 
-export const XIAODUIYOU_CONNECTOR_VERSION = "2026.7.1.1";
+export const XIAODUIYOU_CONNECTOR_VERSION = "2026.7.3.1";
 const WEBSOCKET_RETRY_MS = 3_000;
 const WEBSOCKET_IDLE_TIMEOUT_MS = 15_000;
 

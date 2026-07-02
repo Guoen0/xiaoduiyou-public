@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.1.2"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.3.1"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -62,6 +62,7 @@ _TURN_BY_SESSION: Dict[str, str] = {}
 _ACTIONS_BY_SESSION: Dict[str, List[Dict[str, Any]]] = {}
 _PROGRESS_BY_MESSAGE: Dict[str, str] = {}
 _PROGRESS_COUNTER = 0
+_DOCUMENT_MUTATION_COUNTER = 0
 
 
 class XiaoduiyouAuthError(RuntimeError):
@@ -533,6 +534,12 @@ def _drain_actions(chat_id: str = "") -> List[Dict[str, Any]]:
                 if json.dumps(action, sort_keys=True, ensure_ascii=False) not in seen
             )
     return actions
+
+
+def _next_document_mutation_id(operation: str) -> str:
+    global _DOCUMENT_MUTATION_COUNTER
+    _DOCUMENT_MUTATION_COUNTER += 1
+    return f"mut_{operation}_{int(time.time() * 1000):x}_{_DOCUMENT_MUTATION_COUNTER}"
 
 
 def _block(text: str, block_type: str = "paragraph") -> Dict[str, Any]:
@@ -1427,10 +1434,16 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
 def _queued_result(operation: str, action: Dict[str, Any]) -> str:
     payload: Dict[str, Any] = {
         "ok": True,
+        "accepted": True,
         "queued": True,
+        "applied": False,
+        "persisted": False,
+        "state": "queued_for_final_callback",
         "operation": operation,
+        "mutation_id": action.get("mutation_id"),
+        "command": (action.get("input") or {}).get("command") if isinstance(action.get("input"), dict) else None,
         "will_apply_on": "final_callback",
-        "next_step": "Continue the answer normally. Do not repeat this tool call just to verify; use xiaoduiyou_documents_get after the final callback or in a later turn.",
+        "next_step": "This update is not persisted yet. Do not tell the user the backend has been updated. Say only that the update has been queued; after the final callback or in a later turn, verify with xiaoduiyou_documents_get and compare the live revision/fields/blocks.",
     }
     if action.get("document_id"):
         payload["document_id"] = action.get("document_id")
@@ -1517,6 +1530,7 @@ def _tool_create_document(args: Dict[str, Any], **_: Any) -> str:
     block_json = _normalize_block_json(args.get("block_json"), title=title, body=body)
     action = {
         "operation": "create",
+        "mutation_id": _next_document_mutation_id("create"),
         "attach_to_session": bool(args.get("attach_to_session", True)),
         "input": {
             "title": title,
@@ -1550,6 +1564,42 @@ def _tool_update_document(args: Dict[str, Any], **_: Any) -> str:
         fields = _merge_ui_templates_into_fields(args, fields)
         if fields:
             input_payload["fields"] = fields
+    elif command == "replace_publish_image":
+        input_payload = {
+            "command": "replace_publish_image",
+            "platform": str(args.get("platform") or "xiaohongshu"),
+            "index": int(args.get("index") or 0),
+            "image_url": str(args.get("image_url") or ""),
+            "updated_by": "agent",
+        }
+        if args.get("caption"):
+            input_payload["caption"] = str(args["caption"])
+        if args.get("history_caption"):
+            input_payload["history_caption"] = str(args["history_caption"])
+        if "sync_process_doc" in args:
+            input_payload["sync_process_doc"] = bool(args.get("sync_process_doc"))
+    elif command == "upsert_image_grid":
+        input_payload = {
+            "command": "upsert_image_grid",
+            "images": args.get("images") if isinstance(args.get("images"), list) else [],
+            "updated_by": "agent",
+        }
+        if args.get("platform"):
+            input_payload["platform"] = str(args["platform"])
+        if args.get("columns") is not None:
+            input_payload["columns"] = int(args.get("columns") or 2)
+        if args.get("title"):
+            input_payload["title"] = str(args["title"])
+    elif command == "sync_publish_images_to_document":
+        input_payload = {
+            "command": "sync_publish_images_to_document",
+            "platform": str(args.get("platform") or "xiaohongshu"),
+            "updated_by": "agent",
+        }
+        if args.get("columns") is not None:
+            input_payload["columns"] = int(args.get("columns") or 2)
+        if args.get("title"):
+            input_payload["title"] = str(args["title"])
     else:
         title = str(args.get("title") or "").strip()
         body = str(args.get("body") or args.get("markdown") or "")
@@ -1564,7 +1614,11 @@ def _tool_update_document(args: Dict[str, Any], **_: Any) -> str:
         fields = _merge_ui_templates_into_fields(args, fields)
         if fields:
             input_payload["fields"] = fields
-    action: Dict[str, Any] = {"operation": "update", "input": input_payload}
+    if args.get("base_revision") is not None:
+        input_payload["base_revision"] = int(args.get("base_revision") or 0)
+    if args.get("allow_overwrite_after_patch") is not None:
+        input_payload["allow_overwrite_after_patch"] = bool(args.get("allow_overwrite_after_patch"))
+    action: Dict[str, Any] = {"operation": "update", "mutation_id": _next_document_mutation_id("update"), "input": input_payload}
     if document_id:
         action["document_id"] = document_id
     _queue_action(action)
@@ -1573,7 +1627,7 @@ def _tool_update_document(args: Dict[str, Any], **_: Any) -> str:
 
 def _tool_delete_document(args: Dict[str, Any], **_: Any) -> str:
     document_id = str(args.get("document_id") or "").strip()
-    action: Dict[str, Any] = {"operation": "delete"}
+    action: Dict[str, Any] = {"operation": "delete", "mutation_id": _next_document_mutation_id("delete")}
     if document_id:
         action["document_id"] = document_id
     _queue_action(action)
@@ -1603,7 +1657,12 @@ def _tool_get_document(args: Dict[str, Any], **_: Any) -> str:
         timeout=DEFAULT_TIMEOUT_SECONDS,
         token=context["token"],
     )
-    return json.dumps({"ok": True, "context": _safe_tool_context(context), "document": result}, ensure_ascii=False)
+    safe_context = _safe_tool_context(context)
+    if isinstance(result, dict):
+        document = result.get("document")
+        if isinstance(document, dict) and document.get("document_id"):
+            safe_context["document_id"] = str(document.get("document_id") or "")
+    return json.dumps({"ok": True, "context": safe_context, "document": result}, ensure_ascii=False)
 
 
 def _tool_im_send(args: Dict[str, Any], **_: Any) -> str:
@@ -2215,7 +2274,9 @@ def register(ctx) -> None:
                 "type": "object",
                 "properties": {
                     "document_id": {"type": "string", "description": "Optional document id. If omitted, Xiaoduiyou updates the current screen document/content package, then falls back to the current session document."},
-                    "command": {"type": "string", "enum": ["overwrite", "append_blocks", "patch_fields"], "description": "Update mode. Defaults overwrite."},
+                    "command": {"type": "string", "enum": ["overwrite", "append_blocks", "patch_fields", "replace_publish_image", "upsert_image_grid", "sync_publish_images_to_document"], "description": "Update mode. Defaults overwrite. replace_publish_image uses 1-based index."},
+                    "base_revision": {"type": "integer", "description": "Optional document revision read from xiaoduiyou_documents_get. If stale, Xiaoduiyou rejects the update instead of overwriting newer content."},
+                    "allow_overwrite_after_patch": {"type": "boolean", "description": "Rare escape hatch for same-callback overwrite after another update to the same document."},
                     "title": {"type": "string", "description": "New title for overwrite or patch_fields."},
                     "body": {"type": "string", "description": "New/append body text."},
                     "block_json": {"type": "object", "description": "Optional full Block JSON for overwrite."},
@@ -2233,6 +2294,18 @@ def register(ctx) -> None:
                         },
                     },
                     "fields": {"type": "object", "description": "Metadata fields for patch_fields/overwrite."},
+                    "platform": {"type": "string", "description": "For content-package commands, e.g. xiaohongshu."},
+                    "index": {"type": "integer", "description": "For replace_publish_image: 1-based image index to replace."},
+                    "image_url": {"type": "string", "description": "For replace_publish_image: replacement image URL."},
+                    "caption": {"type": "string", "description": "Optional caption for a replaced image_grid item."},
+                    "history_caption": {"type": "string", "description": "Optional caption for storing the old image in generated_images_history."},
+                    "sync_process_doc": {"type": "boolean", "description": "For replace_publish_image: also update the document image_grid. Defaults true."},
+                    "images": {
+                        "type": "array",
+                        "description": "For upsert_image_grid: image URLs or objects with url/caption.",
+                        "items": {"type": "object", "additionalProperties": True},
+                    },
+                    "columns": {"type": "integer", "description": "For image_grid commands: 2 or 3 columns."},
                 },
             },
         },
