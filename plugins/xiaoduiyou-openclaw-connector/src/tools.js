@@ -1,5 +1,5 @@
 import { resolveXiaoduiyouAccount } from "./accounts.js";
-import { getXiaoduiyouChild, getXiaoduiyouDocument, getXiaoduiyouGrowthDiary, patchXiaoduiyouChild, patchXiaoduiyouGrowthDiary, sendXiaoduiyouImMessage } from "./client.js";
+import { getXiaoduiyouChild, getXiaoduiyouDocument, getXiaoduiyouGrowthDiary, patchXiaoduiyouChild, patchXiaoduiyouGrowthDiary, sendXiaoduiyouImMessage, updateXiaoduiyouDocument } from "./client.js";
 import { summarizeGrowthDiaryPatchResult } from "./growth-diary-summary.js";
 import { activeXiaoduiyouToolContext, queueXiaoduiyouDocumentAction } from "./tool-context.js";
 
@@ -133,6 +133,8 @@ const DocumentUpdateSchema = {
   properties: {
     document_id: { type: "string", description: "Optional document id. If omitted, Xiaoduiyou updates the current screen document/content package, then falls back to the current session document." },
     command: { type: "string", enum: ["overwrite", "append_blocks", "patch_fields", "replace_publish_image", "upsert_image_grid", "sync_publish_images_to_document"], description: "Update mode. Defaults overwrite. replace_publish_image uses 1-based index." },
+    apply_mode: { type: "string", enum: ["queued", "immediate"], description: "Default queued applies on final callback. immediate writes now and returns persisted state; use only when the user needs read-after-write certainty." },
+    wait_for_persist: { type: "boolean", description: "Shortcut for apply_mode=immediate." },
     base_revision: { type: "integer", description: "Optional document revision read from xiaoduiyou_documents_get. If stale, Xiaoduiyou rejects the update instead of overwriting newer content." },
     allow_overwrite_after_patch: { type: "boolean", description: "Rare escape hatch for same-callback overwrite after another update to the same document." },
     title: { type: "string", description: "New title for overwrite or patch_fields." },
@@ -443,7 +445,7 @@ function createDocumentCreateTool() {
   };
 }
 
-function createDocumentUpdateTool() {
+function createDocumentUpdateTool(config) {
   return {
     name: "xiaoduiyou_documents_update",
     label: "Xiaoduiyou Documents Update",
@@ -505,6 +507,15 @@ function createDocumentUpdateTool() {
       if (rawParams.base_revision !== undefined) input.base_revision = Number(rawParams.base_revision);
       if (rawParams.allow_overwrite_after_patch !== undefined) input.allow_overwrite_after_patch = Boolean(rawParams.allow_overwrite_after_patch);
       const documentId = String(rawParams.document_id ?? "").trim();
+      const immediate = rawParams.wait_for_persist === true || rawParams.apply_mode === "immediate";
+      if (immediate) {
+        const context = activeXiaoduiyouToolContext();
+        const targetDocumentId = documentId || String(context.documentId ?? context.document_id ?? "").trim();
+        if (!targetDocumentId) throw new Error("apply_mode=immediate requires document_id or active screen document_id");
+        const account = resolveToolAccount(config, { account_id: context.accountId });
+        const result = await updateXiaoduiyouDocument(account, targetDocumentId, input);
+        return jsonResult({ ok: true, accepted: true, queued: false, applied: true, persisted: true, state: "persisted", operation: "update", command: input.command, document_id: targetDocumentId, document: result.document ?? result });
+      }
       const action = { operation: "update", mutation_id: nextDocumentMutationId("update"), input };
       if (documentId) action.document_id = documentId;
       queueXiaoduiyouDocumentAction(action);
@@ -565,7 +576,7 @@ export function registerXiaoduiyouTools(api) {
   api.registerTool(createGrowthDiaryPatchTool(api.config), { name: "xiaoduiyou_growth_diary_patch" });
   api.registerTool(createDocumentGetTool(api.config), { name: "xiaoduiyou_documents_get" });
   api.registerTool(createDocumentCreateTool(), { name: "xiaoduiyou_documents_create" });
-  api.registerTool(createDocumentUpdateTool(), { name: "xiaoduiyou_documents_update" });
+  api.registerTool(createDocumentUpdateTool(api.config), { name: "xiaoduiyou_documents_update" });
   api.registerTool(createDocumentDeleteTool(), { name: "xiaoduiyou_documents_delete" });
   api.registerTool(createImSendTool(api.config), { name: "xiaoduiyou_im_send" });
 }

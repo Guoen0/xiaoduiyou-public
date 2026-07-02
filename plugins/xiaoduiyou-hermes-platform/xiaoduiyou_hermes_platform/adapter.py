@@ -1618,6 +1618,30 @@ def _tool_update_document(args: Dict[str, Any], **_: Any) -> str:
         input_payload["base_revision"] = int(args.get("base_revision") or 0)
     if args.get("allow_overwrite_after_patch") is not None:
         input_payload["allow_overwrite_after_patch"] = bool(args.get("allow_overwrite_after_patch"))
+    if args.get("wait_for_persist") is True or args.get("apply_mode") == "immediate":
+        context = _active_tool_context()
+        target_document_id = document_id or str(context.get("document_id") or "").strip()
+        if not target_document_id:
+            raise RuntimeError("apply_mode=immediate requires document_id or active screen document_id")
+        result = _request_json(
+            f"{context['base_url']}/api/docs/{parse.quote(target_document_id, safe='')}",
+            method="PATCH",
+            payload=input_payload,
+            timeout=DEFAULT_TIMEOUT_SECONDS,
+            token=context["token"],
+        )
+        return json.dumps({
+            "ok": True,
+            "accepted": True,
+            "queued": False,
+            "applied": True,
+            "persisted": True,
+            "state": "persisted",
+            "operation": "update",
+            "command": input_payload.get("command"),
+            "document_id": target_document_id,
+            "document": result.get("document") if isinstance(result, dict) else result,
+        }, ensure_ascii=False)
     action: Dict[str, Any] = {"operation": "update", "mutation_id": _next_document_mutation_id("update"), "input": input_payload}
     if document_id:
         action["document_id"] = document_id
@@ -2275,6 +2299,8 @@ def register(ctx) -> None:
                 "properties": {
                     "document_id": {"type": "string", "description": "Optional document id. If omitted, Xiaoduiyou updates the current screen document/content package, then falls back to the current session document."},
                     "command": {"type": "string", "enum": ["overwrite", "append_blocks", "patch_fields", "replace_publish_image", "upsert_image_grid", "sync_publish_images_to_document"], "description": "Update mode. Defaults overwrite. replace_publish_image uses 1-based index."},
+                    "apply_mode": {"type": "string", "enum": ["queued", "immediate"], "description": "Default queued applies on final callback. immediate writes now and returns persisted state; use only when the user needs read-after-write certainty."},
+                    "wait_for_persist": {"type": "boolean", "description": "Shortcut for apply_mode=immediate."},
                     "base_revision": {"type": "integer", "description": "Optional document revision read from xiaoduiyou_documents_get. If stale, Xiaoduiyou rejects the update instead of overwriting newer content."},
                     "allow_overwrite_after_patch": {"type": "boolean", "description": "Rare escape hatch for same-callback overwrite after another update to the same document."},
                     "title": {"type": "string", "description": "New title for overwrite or patch_fields."},

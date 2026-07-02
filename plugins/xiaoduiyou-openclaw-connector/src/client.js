@@ -99,6 +99,13 @@ export async function getXiaoduiyouDocument(account, params = {}) {
   throw new Error("xiaoduiyou_documents_get requires document_id or an active Xiaoduiyou session");
 }
 
+export async function updateXiaoduiyouDocument(account, documentId, payload) {
+  return await requestJson(account, `/api/docs/${encodeURIComponent(documentId)}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
 export async function pollXiaoduiyouTurn(account, signal) {
   try {
     const payload = await requestJson(account, "/api/agent/turns/pending", { signal });
