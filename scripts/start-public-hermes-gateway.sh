@@ -9,6 +9,7 @@ export HERMES_ACCEPT_HOOKS="${HERMES_ACCEPT_HOOKS:-1}"
 LOG_FILE="${XDY_PUBLIC_HERMES_GATEWAY_LOG:-$HERMES_HOME/logs/gateway-public-agent.log}"
 WATCHDOG_LOG_FILE="${XDY_PUBLIC_HERMES_WATCHDOG_LOG:-$HERMES_HOME/logs/gateway-public-agent-watchdog.log}"
 WATCHDOG_INTERVAL_SECONDS="${XDY_PUBLIC_HERMES_WATCHDOG_INTERVAL_SECONDS:-60}"
+WATCHDOG_PID_FILE="$HERMES_HOME/gateway-public-agent-watchdog.pid"
 
 mkdir -p "$HERMES_HOME/logs" "$HERMES_HOME/scripts"
 
@@ -24,7 +25,10 @@ log_watchdog() {
 }
 
 gateway_running() {
-  hermes gateway status >/dev/null 2>&1
+  local status
+  status="$(hermes gateway status 2>&1 || true)"
+  printf '%s' "$status" | grep -q 'Gateway is running' || return 1
+  ps -eo command | grep -E 'hermes gateway run' | grep -v grep >/dev/null 2>&1
 }
 
 start_gateway() {
@@ -40,6 +44,7 @@ start_gateway() {
 }
 
 watch_gateway() {
+  echo "$$" >"$WATCHDOG_PID_FILE"
   while true; do
     sleep "$WATCHDOG_INTERVAL_SECONDS"
     if gateway_running; then
@@ -51,6 +56,14 @@ watch_gateway() {
   done
 }
 
+watchdog_running() {
+  [ -f "$WATCHDOG_PID_FILE" ] || return 1
+  local pid
+  pid="$(tr -dc '0-9' < "$WATCHDOG_PID_FILE")"
+  [ -n "$pid" ] || return 1
+  kill -0 "$pid" >/dev/null 2>&1
+}
+
 case "${XDY_PUBLIC_HERMES_STARTUP_MODE:-serve}" in
   once)
     start_gateway
@@ -60,9 +73,10 @@ case "${XDY_PUBLIC_HERMES_STARTUP_MODE:-serve}" in
     ;;
   serve|'')
     start_gateway
-    if ! pgrep -u "$(id -u)" -f 'XDY_PUBLIC_HERMES_STARTUP_MODE=watchdog .*start-public-agent-gateway.sh' >/dev/null 2>&1; then
+    if ! watchdog_running; then
       nohup env HOME="$HOME" HERMES_HOME="$HERMES_HOME" PATH="$PATH" HERMES_ACCEPT_HOOKS="$HERMES_ACCEPT_HOOKS" \
         XDY_PUBLIC_HERMES_STARTUP_MODE=watchdog "$0" >>"$WATCHDOG_LOG_FILE" 2>&1 &
+      echo "$!" >"$WATCHDOG_PID_FILE"
       log_watchdog "watchdog started pid=$!"
     fi
     ;;
