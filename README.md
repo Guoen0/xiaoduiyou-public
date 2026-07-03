@@ -201,3 +201,20 @@ fi
 
 只汇报是否安装成功、是否在线、失败原因。
 ````
+
+## Maintainer-only production public Hermes autostart
+
+Production public Hermes runs on the dedicated public-agent Devbox and connects
+to `https://www.xiaoduiyou.team`. Maintainers can install or repair the Sealos
+startup hook without reading or printing the token:
+
+```bash
+cd ~/xiaoduiyou-public
+git pull --ff-only origin main
+HERMES_HOME="$HOME/.hermes" ./scripts/install-public-hermes-autostart.sh
+"$HOME/.hermes/scripts/start-public-agent-gateway.sh"
+```
+
+The startup hook preserves the existing `HERMES_HOME/config.yaml` connection,
+starts `hermes gateway run` in the background, and keeps a lightweight watchdog
+that restarts the gateway process if it exits.
