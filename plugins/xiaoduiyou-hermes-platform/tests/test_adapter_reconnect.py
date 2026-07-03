@@ -93,12 +93,13 @@ class TurnStreamReconnectTests(unittest.IsolatedAsyncioTestCase):
         os.environ.pop("XIAODUIYOU_BASE_URL", None)
         os.environ.pop("XIAODUIYOU_CONNECTION_TOKEN", None)
 
-    def _new_adapter(self, *, prefer_websocket: bool = True):
+    def _new_adapter(self, *, prefer_websocket: bool = True, health_probe: bool = False):
         config = adapter.PlatformConfig(
             extra={
                 "base_url": "https://review.example.test",
                 "connection_token": "token",
                 "prefer_websocket": prefer_websocket,
+                "probe_health": health_probe,
                 "poll_interval_seconds": 0.01,
                 "request_timeout_seconds": 0.01,
             }
@@ -106,6 +107,88 @@ class TurnStreamReconnectTests(unittest.IsolatedAsyncioTestCase):
         instance = adapter.XiaoduiyouAdapter(config)
         instance._running = True
         return instance
+
+    async def test_health_probe_runs_before_websocket_stream(self):
+        instance = self._new_adapter(prefer_websocket=True, health_probe=True)
+        calls = []
+
+        def request_json(url, **kwargs):
+            calls.append(url)
+            return {"ready": True}
+
+        async def refresh():
+            return None
+
+        async def stop_after_websocket_open():
+            calls.append("websocket")
+            instance._running = False
+
+        original_request_json = adapter._request_json
+        instance._refresh_channel_directory_if_due = refresh
+        instance._websocket_pending_turn_loop = stop_after_websocket_open
+        adapter._request_json = request_json
+        try:
+            await instance._turn_stream_loop()
+        finally:
+            adapter._request_json = original_request_json
+
+        self.assertEqual(calls, ["https://review.example.test/api/hermes/health", "websocket"])
+        self.assertTrue(instance._health_endpoint_supported)
+
+    async def test_missing_health_endpoint_falls_back_to_pending_stream(self):
+        instance = self._new_adapter(prefer_websocket=True, health_probe=True)
+        calls = []
+
+        def request_json(url, **kwargs):
+            calls.append(url)
+            raise RuntimeError("HTTP 404: NOT_FOUND")
+
+        async def refresh():
+            return None
+
+        async def stop_after_websocket_open():
+            calls.append("websocket")
+            instance._running = False
+
+        original_request_json = adapter._request_json
+        instance._refresh_channel_directory_if_due = refresh
+        instance._websocket_pending_turn_loop = stop_after_websocket_open
+        adapter._request_json = request_json
+        try:
+            await instance._turn_stream_loop()
+        finally:
+            adapter._request_json = original_request_json
+
+        self.assertEqual(calls, ["https://review.example.test/api/hermes/health", "websocket"])
+        self.assertFalse(instance._health_endpoint_supported)
+        self.assertFalse(instance.marked_disconnected)
+
+    async def test_health_auth_failure_stops_stream_before_websocket(self):
+        instance = self._new_adapter(prefer_websocket=True, health_probe=True)
+        websocket_attempts = 0
+
+        def request_json(url, **kwargs):
+            raise RuntimeError("HTTP 401: UNAUTHENTICATED")
+
+        async def refresh():
+            return None
+
+        async def websocket_should_not_open():
+            nonlocal websocket_attempts
+            websocket_attempts += 1
+
+        original_request_json = adapter._request_json
+        instance._refresh_channel_directory_if_due = refresh
+        instance._websocket_pending_turn_loop = websocket_should_not_open
+        adapter._request_json = request_json
+        try:
+            await instance._turn_stream_loop()
+        finally:
+            adapter._request_json = original_request_json
+
+        self.assertEqual(websocket_attempts, 0)
+        self.assertFalse(instance._running)
+        self.assertTrue(instance.marked_disconnected)
 
     async def test_websocket_failure_with_http_503_fallback_keeps_loop_alive(self):
         instance = self._new_adapter(prefer_websocket=True)

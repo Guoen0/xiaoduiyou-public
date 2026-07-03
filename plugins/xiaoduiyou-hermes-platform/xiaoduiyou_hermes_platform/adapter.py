@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.4.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.4.2"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -745,7 +745,15 @@ def validate_config(config: PlatformConfig) -> tuple[bool, str]:
 
 def is_connected() -> bool:
     base_url = _base_url_from_config()
+    token = _connection_token_from_config()
     try:
+        if token:
+            try:
+                result = _request_json(f"{base_url}/api/hermes/health", timeout=5, token=token)
+                return bool(isinstance(result, dict) and result.get("ready"))
+            except RuntimeError as exc:
+                if not _is_http_status(exc, 404):
+                    return False
         _request_json(f"{base_url}/api/version", timeout=5)
         return True
     except Exception:
@@ -763,10 +771,13 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         self.request_timeout_seconds = float(extra.get("request_timeout_seconds") or DEFAULT_TIMEOUT_SECONDS)
         self.connection_token = _connection_token_from_config(config)
         self.prefer_websocket = extra.get("prefer_websocket") is not False
+        self.probe_health = extra.get("probe_health") is not False
         self._poll_task: asyncio.Task | None = None
         self._turn_by_session: Dict[str, str] = {}
         self._last_claim_at = 0.0
         self._last_channel_directory_refresh_at = 0.0
+        self._needs_health_probe = self.probe_health
+        self._health_endpoint_supported: Optional[bool] = None
 
     @property
     def name(self) -> str:
@@ -801,6 +812,9 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         recoverable_failures = 0
         while self._running:
             try:
+                if self.probe_health and self._needs_health_probe:
+                    await self._probe_health_once()
+                    self._needs_health_probe = False
                 await self._refresh_channel_directory_if_due()
                 if self.prefer_websocket:
                     await self._websocket_pending_turn_loop()
@@ -816,6 +830,8 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
                 self._mark_disconnected()
                 break
             except XiaoduiyouWebSocketError as exc:
+                if self.probe_health:
+                    self._needs_health_probe = True
                 recoverable_failures += 1
                 delay = self._reconnect_delay_seconds(recoverable_failures)
                 logger.warning("Xiaoduiyou websocket turn stream failed; trying one HTTP claim before reconnect in %.1fs: %s", delay, exc)
@@ -831,6 +847,8 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
                     logger.warning("Xiaoduiyou HTTP fallback after websocket failure failed; retrying in %.1fs: %s", delay, fallback_exc)
                     await asyncio.sleep(delay)
             except Exception as exc:
+                if self.probe_health:
+                    self._needs_health_probe = True
                 recoverable_failures += 1
                 delay = self._reconnect_delay_seconds(recoverable_failures)
                 logger.warning("Xiaoduiyou turn stream failed; retrying in %.1fs: %s", delay, exc)
@@ -845,6 +863,32 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             return delay
         jitter = secrets.randbelow(1000) / 1000.0 * jitter_window
         return min(MAX_RECONNECT_DELAY_SECONDS, delay + jitter)
+
+    async def _probe_health_once(self) -> None:
+        await asyncio.to_thread(self._probe_health)
+
+    def _probe_health(self) -> None:
+        url = f"{self.base_url}/api/hermes/health"
+        try:
+            result = _request_json(url, timeout=self.request_timeout_seconds, token=self.connection_token)
+        except RuntimeError as exc:
+            if _is_http_status(exc, 401):
+                raise XiaoduiyouAuthError(str(exc)) from exc
+            if _is_http_status(exc, 404):
+                if self._health_endpoint_supported is not False:
+                    logger.info("Xiaoduiyou: health endpoint unavailable; falling back to pending-turn stream readiness")
+                self._health_endpoint_supported = False
+                return
+            raise
+
+        if not isinstance(result, dict) or not result.get("ready"):
+            raise RuntimeError(f"Xiaoduiyou health check is not ready: {result}")
+        if self._health_endpoint_supported is not True:
+            logger.info("Xiaoduiyou: health endpoint ready")
+        self._health_endpoint_supported = True
+        agent_notice = str(result.get("agent_notice") or "").strip()
+        if agent_notice:
+            logger.warning("Xiaoduiyou: %s", agent_notice)
 
     async def _http_pending_turn_once(self, *, fallback_delay: Optional[float] = None) -> None:
         claimed = await asyncio.to_thread(self._claim_pending_turn)
