@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.4.2"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.4.3"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -754,6 +754,8 @@ def is_connected() -> bool:
             except RuntimeError as exc:
                 if not _is_http_status(exc, 404):
                     return False
+            except json.JSONDecodeError:
+                pass
         _request_json(f"{base_url}/api/version", timeout=5)
         return True
     except Exception:
@@ -880,6 +882,11 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
                 self._health_endpoint_supported = False
                 return
             raise
+        except json.JSONDecodeError:
+            if self._health_endpoint_supported is not False:
+                logger.info("Xiaoduiyou: health endpoint returned non-JSON; falling back to pending-turn stream readiness")
+            self._health_endpoint_supported = False
+            return
 
         if not isinstance(result, dict) or not result.get("ready"):
             raise RuntimeError(f"Xiaoduiyou health check is not ready: {result}")

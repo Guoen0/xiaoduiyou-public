@@ -163,6 +163,34 @@ class TurnStreamReconnectTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(instance._health_endpoint_supported)
         self.assertFalse(instance.marked_disconnected)
 
+    async def test_non_json_health_response_falls_back_to_pending_stream(self):
+        instance = self._new_adapter(prefer_websocket=True, health_probe=True)
+        calls = []
+
+        def request_json(url, **kwargs):
+            calls.append(url)
+            raise adapter.json.JSONDecodeError("Expecting value", "<!doctype html>", 0)
+
+        async def refresh():
+            return None
+
+        async def stop_after_websocket_open():
+            calls.append("websocket")
+            instance._running = False
+
+        original_request_json = adapter._request_json
+        instance._refresh_channel_directory_if_due = refresh
+        instance._websocket_pending_turn_loop = stop_after_websocket_open
+        adapter._request_json = request_json
+        try:
+            await instance._turn_stream_loop()
+        finally:
+            adapter._request_json = original_request_json
+
+        self.assertEqual(calls, ["https://review.example.test/api/hermes/health", "websocket"])
+        self.assertFalse(instance._health_endpoint_supported)
+        self.assertFalse(instance.marked_disconnected)
+
     async def test_health_auth_failure_stops_stream_before_websocket(self):
         instance = self._new_adapter(prefer_websocket=True, health_probe=True)
         websocket_attempts = 0
