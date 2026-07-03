@@ -31,13 +31,14 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.3.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.4.1"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
 CHANNEL_DIRECTORY_REFRESH_SECONDS = 5.0
 WEBSOCKET_RETRY_SECONDS = 3.0
 WEBSOCKET_IDLE_REFRESH_SECONDS = 15.0
+MAX_RECONNECT_DELAY_SECONDS = 60.0
 
 # Tool calls and adapter.send() run in the same gateway task context, so this
 # lets tools enqueue structured document mutations that send() includes in the
@@ -797,13 +798,16 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         return {"name": f"Xiaoduiyou {chat_id}", "type": "dm"}
 
     async def _turn_stream_loop(self) -> None:
+        recoverable_failures = 0
         while self._running:
             try:
                 await self._refresh_channel_directory_if_due()
                 if self.prefer_websocket:
                     await self._websocket_pending_turn_loop()
+                    recoverable_failures = 0
                     continue
                 await self._http_pending_turn_once()
+                recoverable_failures = 0
             except asyncio.CancelledError:
                 raise
             except XiaoduiyouAuthError as exc:
@@ -812,11 +816,35 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
                 self._mark_disconnected()
                 break
             except XiaoduiyouWebSocketError as exc:
-                logger.warning("Xiaoduiyou websocket turn stream failed; falling back to HTTP claim before retrying: %s", exc)
-                await self._http_pending_turn_once(fallback_delay=max(self.poll_interval_seconds, WEBSOCKET_RETRY_SECONDS))
+                recoverable_failures += 1
+                delay = self._reconnect_delay_seconds(recoverable_failures)
+                logger.warning("Xiaoduiyou websocket turn stream failed; trying one HTTP claim before reconnect in %.1fs: %s", delay, exc)
+                try:
+                    await self._http_pending_turn_once(fallback_delay=delay)
+                    recoverable_failures = 0
+                except XiaoduiyouAuthError as fallback_auth_exc:
+                    logger.error("Xiaoduiyou authentication failed during HTTP fallback; stopping turn stream until the connection token is refreshed: %s", fallback_auth_exc)
+                    self._running = False
+                    self._mark_disconnected()
+                    break
+                except Exception as fallback_exc:
+                    logger.warning("Xiaoduiyou HTTP fallback after websocket failure failed; retrying in %.1fs: %s", delay, fallback_exc)
+                    await asyncio.sleep(delay)
             except Exception as exc:
-                logger.warning("Xiaoduiyou turn stream failed: %s", exc)
-                await asyncio.sleep(max(self.poll_interval_seconds, 3.0))
+                recoverable_failures += 1
+                delay = self._reconnect_delay_seconds(recoverable_failures)
+                logger.warning("Xiaoduiyou turn stream failed; retrying in %.1fs: %s", delay, exc)
+                await asyncio.sleep(delay)
+
+    def _reconnect_delay_seconds(self, failures: int) -> float:
+        failure_count = max(int(failures or 1), 1)
+        base_delay = max(self.poll_interval_seconds, WEBSOCKET_RETRY_SECONDS)
+        delay = min(MAX_RECONNECT_DELAY_SECONDS, base_delay * (2 ** min(failure_count - 1, 5)))
+        jitter_window = min(delay * 0.1, 1.0)
+        if jitter_window <= 0:
+            return delay
+        jitter = secrets.randbelow(1000) / 1000.0 * jitter_window
+        return min(MAX_RECONNECT_DELAY_SECONDS, delay + jitter)
 
     async def _http_pending_turn_once(self, *, fallback_delay: Optional[float] = None) -> None:
         claimed = await asyncio.to_thread(self._claim_pending_turn)
