@@ -14,6 +14,10 @@ export function activeXiaoduiyouToolContext() {
   return context;
 }
 
+export function maybeActiveXiaoduiyouToolContext() {
+  return toolContext.getStore() ?? {};
+}
+
 export function queueXiaoduiyouDocumentAction(action) {
   const context = activeXiaoduiyouToolContext();
   if (!Array.isArray(context.documentActions)) {

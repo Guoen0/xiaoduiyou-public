@@ -3,7 +3,7 @@ import net from "node:net";
 import tls from "node:tls";
 import { once } from "node:events";
 
-export const XIAODUIYOU_CONNECTOR_VERSION = "2026.7.3.1";
+export const XIAODUIYOU_CONNECTOR_VERSION = "2026.7.4.4";
 const WEBSOCKET_RETRY_MS = 3_000;
 const WEBSOCKET_IDLE_TIMEOUT_MS = 15_000;
 
@@ -99,11 +99,15 @@ export async function getXiaoduiyouDocument(account, params = {}) {
   throw new Error("xiaoduiyou_documents_get requires document_id or an active Xiaoduiyou session");
 }
 
-export async function updateXiaoduiyouDocument(account, documentId, payload) {
-  return await requestJson(account, `/api/docs/${encodeURIComponent(documentId)}`, {
-    method: "PATCH",
+export async function applyXiaoduiyouDocumentMutation(account, documentId, payload) {
+  return await requestJson(account, `/api/docs/${encodeURIComponent(documentId)}/mutations`, {
+    method: "POST",
     body: payload,
   });
+}
+
+export async function getXiaoduiyouDocumentMutation(account, documentId, mutationId) {
+  return await requestJson(account, `/api/docs/${encodeURIComponent(documentId)}/mutations/${encodeURIComponent(mutationId)}`);
 }
 
 export async function pollXiaoduiyouTurn(account, signal) {
