@@ -254,6 +254,7 @@ restart_hermes_gateway() {
 
   local hermes_bin
   hermes_bin="$(command -v hermes)"
+  local restart_mode="${XDY_RESTART_HERMES_MODE:-auto}"
 
   if [ "${_HERMES_GATEWAY:-}" = "1" ]; then
     local restart_log="${HERMES_HOME_DIR}/logs/xiaoduiyou-plugin-upgrade-restart.log"
@@ -284,6 +285,15 @@ with open(restart_log, "a", encoding="utf-8") as log:
     )
 PY
     echo "Scheduled Hermes Gateway restart outside the running gateway process in ${restart_delay_seconds}s; log: ${restart_log}"
+    return
+  fi
+
+  if [ "$restart_mode" = "background" ] || { [ "$restart_mode" = "auto" ] && [ "$(uname -s)" = "Linux" ]; }; then
+    local gateway_log="${HERMES_HOME_DIR}/logs/gateway.log"
+    mkdir -p "$(dirname "$gateway_log")"
+    HERMES_HOME="$HERMES_HOME_DIR" "$hermes_bin" gateway stop >/dev/null 2>&1 || true
+    nohup env HERMES_HOME="$HERMES_HOME_DIR" "$hermes_bin" gateway run >>"$gateway_log" 2>&1 &
+    echo "Started Hermes Gateway in background (PID $!); log: ${gateway_log}"
     return
   fi
 
