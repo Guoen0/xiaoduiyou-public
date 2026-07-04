@@ -7,7 +7,7 @@ Mental model:
 ```text
 Xiaoduiyou UI
   → pending Hermes turn in Xiaoduiyou
-  → XiaoduiyouAdapter probes /api/hermes/health, then streams /ws/hermes/turns/pending, falling back to /api/hermes/turns/pending
+  → XiaoduiyouAdapter probes /api/hermes/health, then streams /ws/hermes/turns/pending with WebSocket keepalive, falling back to /api/hermes/turns/pending
   → Hermes Gateway turns it into MessageEvent
   → Hermes Agent runs the task
   → XiaoduiyouAdapter streams /ws/hermes/interactive-requests/:request_id for approval/confirm cards
@@ -33,6 +33,8 @@ fi
 ```
 
 The installer preserves existing `${HERMES_HOME:-~/.hermes}/config.yaml` Xiaoduiyou `base_url` and `connection_token` when they are already configured, installs the platform plugin and runtime skills into the active Hermes home, and restarts the gateway. See the root `README.md` for the full Agent setup prompt.
+
+WebSocket streams send protocol-level keepalive pings every 25 seconds by default and reconnect when a pong is not observed within 10 seconds. Override with `platforms.xiaoduiyou.extra.websocket_ping_interval_seconds` and `platforms.xiaoduiyou.extra.websocket_ping_timeout_seconds` only when a deployment proxy requires a different cadence.
 
 Do not configure `platform_toolsets.xiaoduiyou` as only `["xiaoduiyou"]`: that exposes Xiaoduiyou document tools but removes normal Hermes local tools such as file, terminal, web search, browser, and code execution.
 

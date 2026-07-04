@@ -218,6 +218,8 @@ replace_direct_child(platforms_index, "xiaoduiyou", [
     f"      connection_token: {json.dumps(token, ensure_ascii=False)}",
     "      prefer_websocket: true",
     "      poll_interval_seconds: 1.0",
+    "      websocket_ping_interval_seconds: 25.0",
+    "      websocket_ping_timeout_seconds: 10.0",
     "    home_channel:",
     "      platform: xiaoduiyou",
     "      chat_id: xiaoduiyou",

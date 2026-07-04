@@ -88,6 +88,27 @@ def _load_adapter():
 adapter = _load_adapter()
 
 
+def _server_frame(opcode: int, payload: bytes = b"") -> bytes:
+    first = 0x80 | opcode
+    length = len(payload)
+    if length < 126:
+        return bytes([first, length]) + payload
+    if length < 65536:
+        return bytes([first, 126]) + adapter.struct.pack("!H", length) + payload
+    return bytes([first, 127]) + adapter.struct.pack("!Q", length) + payload
+
+
+class _FakeWriter:
+    def __init__(self) -> None:
+        self.data = bytearray()
+
+    def write(self, data: bytes) -> None:
+        self.data.extend(data)
+
+    async def drain(self) -> None:
+        return None
+
+
 class TurnStreamReconnectTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         os.environ.pop("XIAODUIYOU_BASE_URL", None)
@@ -107,6 +128,60 @@ class TurnStreamReconnectTests(unittest.IsolatedAsyncioTestCase):
         instance = adapter.XiaoduiyouAdapter(config)
         instance._running = True
         return instance
+
+    async def test_websocket_keepalive_defaults_are_enabled(self):
+        instance = self._new_adapter()
+
+        self.assertEqual(instance.websocket_ping_interval_seconds, 25.0)
+        self.assertEqual(instance.websocket_ping_timeout_seconds, 10.0)
+
+    async def test_websocket_keepalive_sends_ping_after_idle(self):
+        reader = adapter.asyncio.StreamReader()
+        writer = _FakeWriter()
+        keepalive = adapter._WebSocketKeepalive(
+            writer,
+            ping_interval_seconds=0.01,
+            ping_timeout_seconds=1.0,
+        )
+        keepalive._last_received_at = adapter.time.monotonic() - 1
+        reader.feed_data(_server_frame(0x1, b'{"turn":null}'))
+
+        message = await keepalive.read_text(reader, max_idle_seconds=1.0)
+
+        self.assertEqual(message, '{"turn":null}')
+        self.assertTrue(writer.data)
+        self.assertEqual(writer.data[0] & 0x0F, 0x9)
+        self.assertIsNone(keepalive._pending_ping_sent_at)
+
+    async def test_websocket_keepalive_replies_to_server_ping(self):
+        reader = adapter.asyncio.StreamReader()
+        writer = _FakeWriter()
+        keepalive = adapter._WebSocketKeepalive(
+            writer,
+            ping_interval_seconds=25.0,
+            ping_timeout_seconds=10.0,
+        )
+        reader.feed_data(_server_frame(0x9, b"server-check"))
+
+        message = await keepalive.read_text(reader, max_idle_seconds=1.0)
+
+        self.assertIsNone(message)
+        self.assertTrue(writer.data)
+        self.assertEqual(writer.data[0] & 0x0F, 0xA)
+
+    async def test_websocket_keepalive_times_out_pending_ping(self):
+        reader = adapter.asyncio.StreamReader()
+        writer = _FakeWriter()
+        keepalive = adapter._WebSocketKeepalive(
+            writer,
+            ping_interval_seconds=25.0,
+            ping_timeout_seconds=0.01,
+        )
+        keepalive._pending_ping_payload = b"stale"
+        keepalive._pending_ping_sent_at = adapter.time.monotonic() - 1
+
+        with self.assertRaisesRegex(adapter.XiaoduiyouWebSocketError, "keepalive ping timed out"):
+            await keepalive.read_text(reader, max_idle_seconds=1.0)
 
     async def test_health_probe_runs_before_websocket_stream(self):
         instance = self._new_adapter(prefer_websocket=True, health_probe=True)

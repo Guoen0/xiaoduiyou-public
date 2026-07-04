@@ -31,13 +31,15 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.4.4"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.4.5"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
 CHANNEL_DIRECTORY_REFRESH_SECONDS = 5.0
 WEBSOCKET_RETRY_SECONDS = 3.0
 WEBSOCKET_IDLE_REFRESH_SECONDS = 15.0
+DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS = 25.0
+DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS = 10.0
 MAX_RECONNECT_DELAY_SECONDS = 60.0
 
 # Tool calls and adapter.send() run in the same gateway task context, so this
@@ -76,6 +78,18 @@ class XiaoduiyouWebSocketError(RuntimeError):
 
 def _is_http_status(exc: BaseException, status: int) -> bool:
     return f"HTTP {status}" in str(exc)
+
+
+def _positive_float(value: Any, default: float, *, minimum: float = 0.001) -> float:
+    if value is None or value == "":
+        return default
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return default
+    if result < minimum:
+        return default
+    return result
 
 
 def _websocket_url_for_pending_turns(base_url: str) -> str:
@@ -157,24 +171,31 @@ async def _open_websocket(url: str, *, token: str, timeout: float) -> tuple[asyn
     return reader, writer
 
 
-async def _read_websocket_text(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, timeout: float) -> Optional[str]:
+async def _read_websocket_frame(reader: asyncio.StreamReader, timeout: float) -> tuple[int, bytes]:
     header = await asyncio.wait_for(reader.readexactly(2), timeout=timeout)
     first, second = header[0], header[1]
     opcode = first & 0x0F
     masked = bool(second & 0x80)
     length = second & 0x7F
     if length == 126:
-        length = struct.unpack("!H", await reader.readexactly(2))[0]
+        length = struct.unpack("!H", await asyncio.wait_for(reader.readexactly(2), timeout=timeout))[0]
     elif length == 127:
-        length = struct.unpack("!Q", await reader.readexactly(8))[0]
-    mask = await reader.readexactly(4) if masked else b""
-    payload = await reader.readexactly(length) if length else b""
+        length = struct.unpack("!Q", await asyncio.wait_for(reader.readexactly(8), timeout=timeout))[0]
+    mask = await asyncio.wait_for(reader.readexactly(4), timeout=timeout) if masked else b""
+    payload = await asyncio.wait_for(reader.readexactly(length), timeout=timeout) if length else b""
     if masked:
         payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+    return opcode, payload
+
+
+async def _read_websocket_text(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, timeout: float) -> Optional[str]:
+    opcode, payload = await _read_websocket_frame(reader, timeout)
     if opcode == 8:
         raise XiaoduiyouWebSocketError("websocket closed by server")
     if opcode == 9:
         await _write_websocket_frame(writer, 0xA, payload)
+        return None
+    if opcode == 0xA:
         return None
     if opcode == 1:
         return payload.decode("utf-8")
@@ -194,6 +215,82 @@ async def _write_websocket_frame(writer: asyncio.StreamWriter, opcode: int, payl
     masked_payload = bytes(byte ^ mask_key[index % 4] for index, byte in enumerate(payload))
     writer.write(header + mask_key + masked_payload)
     await writer.drain()
+
+
+class _WebSocketKeepalive:
+    def __init__(
+        self,
+        writer: asyncio.StreamWriter,
+        *,
+        ping_interval_seconds: float,
+        ping_timeout_seconds: float,
+    ) -> None:
+        self._writer = writer
+        self._ping_interval_seconds = ping_interval_seconds
+        self._ping_timeout_seconds = ping_timeout_seconds
+        self._last_received_at = time.monotonic()
+        self._pending_ping_payload: bytes | None = None
+        self._pending_ping_sent_at: float | None = None
+
+    async def read_text(self, reader: asyncio.StreamReader, *, max_idle_seconds: float) -> Optional[str]:
+        await self._send_ping_if_due()
+        opcode, payload = await _read_websocket_frame(reader, self._next_read_timeout(max_idle_seconds))
+        self._mark_received(opcode, payload)
+        if opcode == 0x8:
+            reason = self._close_reason(payload)
+            raise XiaoduiyouWebSocketError(f"websocket closed by server{reason}")
+        if opcode == 0x9:
+            await _write_websocket_frame(self._writer, 0xA, payload)
+            return None
+        if opcode == 0xA:
+            return None
+        if opcode == 0x1:
+            return payload.decode("utf-8")
+        return None
+
+    async def _send_ping_if_due(self) -> None:
+        now = time.monotonic()
+        if self._pending_ping_sent_at is not None:
+            elapsed = now - self._pending_ping_sent_at
+            if elapsed >= self._ping_timeout_seconds:
+                raise XiaoduiyouWebSocketError(
+                    f"websocket keepalive ping timed out after {elapsed:.1f}s"
+                )
+            return
+        if now - self._last_received_at < self._ping_interval_seconds:
+            return
+        payload = secrets.token_bytes(8)
+        await _write_websocket_frame(self._writer, 0x9, payload)
+        self._pending_ping_payload = payload
+        self._pending_ping_sent_at = now
+        logger.debug("Xiaoduiyou: websocket keepalive ping sent")
+
+    def _next_read_timeout(self, max_idle_seconds: float) -> float:
+        now = time.monotonic()
+        timeout = max(0.1, max_idle_seconds)
+        if self._pending_ping_sent_at is not None:
+            timeout = min(timeout, max(0.1, self._ping_timeout_seconds - (now - self._pending_ping_sent_at)))
+        else:
+            timeout = min(timeout, max(0.1, self._ping_interval_seconds - (now - self._last_received_at)))
+        return timeout
+
+    def _mark_received(self, opcode: int, payload: bytes) -> None:
+        self._last_received_at = time.monotonic()
+        if self._pending_ping_sent_at is None:
+            return
+        if opcode == 0xA and payload != self._pending_ping_payload:
+            logger.debug("Xiaoduiyou: websocket received unrelated pong while keepalive ping is pending")
+            return
+        self._pending_ping_payload = None
+        self._pending_ping_sent_at = None
+
+    @staticmethod
+    def _close_reason(payload: bytes) -> str:
+        if len(payload) < 2:
+            return ""
+        code = struct.unpack("!H", payload[:2])[0]
+        reason = payload[2:].decode("utf-8", errors="replace").strip()
+        return f": {code} {reason}".rstrip()
 
 
 
@@ -769,11 +866,19 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         super().__init__(config=config, platform=Platform("xiaoduiyou"))
         extra = getattr(config, "extra", {}) or {}
         self.base_url = _base_url_from_config(config)
-        self.poll_interval_seconds = float(extra.get("poll_interval_seconds") or DEFAULT_POLL_INTERVAL_SECONDS)
-        self.request_timeout_seconds = float(extra.get("request_timeout_seconds") or DEFAULT_TIMEOUT_SECONDS)
+        self.poll_interval_seconds = _positive_float(extra.get("poll_interval_seconds"), DEFAULT_POLL_INTERVAL_SECONDS)
+        self.request_timeout_seconds = _positive_float(extra.get("request_timeout_seconds"), DEFAULT_TIMEOUT_SECONDS)
         self.connection_token = _connection_token_from_config(config)
         self.prefer_websocket = extra.get("prefer_websocket") is not False
         self.probe_health = extra.get("probe_health") is not False
+        self.websocket_ping_interval_seconds = _positive_float(
+            extra.get("websocket_ping_interval_seconds"),
+            DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS,
+        )
+        self.websocket_ping_timeout_seconds = _positive_float(
+            extra.get("websocket_ping_timeout_seconds"),
+            DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS,
+        )
         self._poll_task: asyncio.Task | None = None
         self._turn_by_session: Dict[str, str] = {}
         self._last_claim_at = 0.0
@@ -926,11 +1031,20 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         writer: asyncio.StreamWriter | None = None
         try:
             reader, writer = await _open_websocket(websocket_url, token=self.connection_token, timeout=self.request_timeout_seconds)
-            logger.info("Xiaoduiyou: websocket turn stream connected")
+            keepalive = _WebSocketKeepalive(
+                writer,
+                ping_interval_seconds=self.websocket_ping_interval_seconds,
+                ping_timeout_seconds=self.websocket_ping_timeout_seconds,
+            )
+            logger.info(
+                "Xiaoduiyou: websocket turn stream connected (keepalive %.1fs/%.1fs)",
+                self.websocket_ping_interval_seconds,
+                self.websocket_ping_timeout_seconds,
+            )
             while self._running:
                 await self._refresh_channel_directory_if_due()
                 try:
-                    message = await _read_websocket_text(reader, writer, WEBSOCKET_IDLE_REFRESH_SECONDS)
+                    message = await keepalive.read_text(reader, max_idle_seconds=WEBSOCKET_IDLE_REFRESH_SECONDS)
                 except asyncio.TimeoutError:
                     continue
                 if not message:
@@ -1230,9 +1344,17 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
                     token=self.connection_token,
                     timeout=self.request_timeout_seconds,
                 )
+                keepalive = _WebSocketKeepalive(
+                    writer,
+                    ping_interval_seconds=self.websocket_ping_interval_seconds,
+                    ping_timeout_seconds=self.websocket_ping_timeout_seconds,
+                )
                 while self._running and time.time() < deadline:
                     try:
-                        message = await _read_websocket_text(reader, writer, max(0.5, min(WEBSOCKET_IDLE_REFRESH_SECONDS, deadline - time.time())))
+                        message = await keepalive.read_text(
+                            reader,
+                            max_idle_seconds=max(0.5, min(WEBSOCKET_IDLE_REFRESH_SECONDS, deadline - time.time())),
+                        )
                     except asyncio.TimeoutError:
                         continue
                     if not message:
