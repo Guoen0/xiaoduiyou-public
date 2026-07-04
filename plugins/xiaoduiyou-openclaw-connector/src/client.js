@@ -3,9 +3,11 @@ import net from "node:net";
 import tls from "node:tls";
 import { once } from "node:events";
 
-export const XIAODUIYOU_CONNECTOR_VERSION = "2026.7.4.4";
+export const XIAODUIYOU_CONNECTOR_VERSION = "2026.7.4.5";
 const WEBSOCKET_RETRY_MS = 3_000;
 const WEBSOCKET_IDLE_TIMEOUT_MS = 15_000;
+const DEFAULT_WEBSOCKET_PING_INTERVAL_MS = 25_000;
+const DEFAULT_WEBSOCKET_PING_TIMEOUT_MS = 10_000;
 
 function sleep(ms, signal) {
   return new Promise((resolve) => {
@@ -146,6 +148,9 @@ class RawWebSocket {
       this.closedError = error;
       this.flushWaiters();
     });
+    this.lastReceivedAt = Date.now();
+    this.pendingPingPayload = null;
+    this.pendingPingSentAt = 0;
   }
 
   flushWaiters() {
@@ -177,23 +182,63 @@ class RawWebSocket {
     return value;
   }
 
-  async readText() {
-    const header = await this.readBytes(2);
+  async readFrame(timeoutMs = WEBSOCKET_IDLE_TIMEOUT_MS) {
+    const header = await this.readBytes(2, timeoutMs);
     const opcode = header[0] & 0x0f;
     let length = header[1] & 0x7f;
-    if (length === 126) length = (await this.readBytes(2)).readUInt16BE(0);
+    if (length === 126) length = (await this.readBytes(2, timeoutMs)).readUInt16BE(0);
     else if (length === 127) {
-      const extended = await this.readBytes(8);
+      const extended = await this.readBytes(8, timeoutMs);
       length = Number(extended.readBigUInt64BE(0));
     }
-    const payload = length ? await this.readBytes(length) : Buffer.alloc(0);
+    const payload = length ? await this.readBytes(length, timeoutMs) : Buffer.alloc(0);
+    return { opcode, payload };
+  }
+
+  async readText({
+    idleTimeoutMs = WEBSOCKET_IDLE_TIMEOUT_MS,
+    pingIntervalMs = DEFAULT_WEBSOCKET_PING_INTERVAL_MS,
+    pingTimeoutMs = DEFAULT_WEBSOCKET_PING_TIMEOUT_MS,
+  } = {}) {
+    this.sendPingIfDue({ pingIntervalMs, pingTimeoutMs });
+    const { opcode, payload } = await this.readFrame(this.nextReadTimeout({ idleTimeoutMs, pingIntervalMs, pingTimeoutMs }));
+    this.markFrameReceived(opcode, payload);
     if (opcode === 8) throw new Error("WEBSOCKET_CLOSED");
     if (opcode === 9) {
       this.writeFrame(0x0a, payload);
       return null;
     }
+    if (opcode === 0x0a) return null;
     if (opcode !== 1) return null;
     return payload.toString("utf8");
+  }
+
+  sendPingIfDue({ pingIntervalMs, pingTimeoutMs }) {
+    const now = Date.now();
+    if (this.pendingPingSentAt) {
+      const elapsed = now - this.pendingPingSentAt;
+      if (elapsed >= pingTimeoutMs) throw new Error(`WEBSOCKET_KEEPALIVE_TIMEOUT after ${elapsed}ms`);
+      return;
+    }
+    if (now - this.lastReceivedAt < pingIntervalMs) return;
+    const payload = crypto.randomBytes(8);
+    this.writeFrame(0x09, payload);
+    this.pendingPingPayload = payload;
+    this.pendingPingSentAt = now;
+  }
+
+  nextReadTimeout({ idleTimeoutMs, pingIntervalMs, pingTimeoutMs }) {
+    const now = Date.now();
+    if (this.pendingPingSentAt) return Math.max(100, Math.min(idleTimeoutMs, pingTimeoutMs - (now - this.pendingPingSentAt)));
+    return Math.max(100, Math.min(idleTimeoutMs, pingIntervalMs - (now - this.lastReceivedAt)));
+  }
+
+  markFrameReceived(opcode, payload) {
+    this.lastReceivedAt = Date.now();
+    if (!this.pendingPingSentAt) return;
+    if (opcode === 0x0a && !payload.equals(this.pendingPingPayload)) return;
+    this.pendingPingPayload = null;
+    this.pendingPingSentAt = 0;
   }
 
   writeFrame(opcode, payload = Buffer.alloc(0)) {
@@ -292,7 +337,10 @@ async function websocketTurnLoop(account, signal, onTurn) {
     while (!signal?.aborted) {
       let raw;
       try {
-        raw = await websocket.readText();
+        raw = await websocket.readText({
+          pingIntervalMs: account.websocketPingIntervalMs,
+          pingTimeoutMs: account.websocketPingTimeoutMs,
+        });
       } catch (error) {
         if (String(error?.message || "") === "WEBSOCKET_READ_TIMEOUT") continue;
         throw error;
@@ -336,6 +384,12 @@ export async function watchXiaoduiyouTurns(account, signal, onTurn) {
 export function isXiaoduiyouAuthError(error) {
   return error?.status === 401 || error?.code === "UNAUTHENTICATED";
 }
+
+export const __xiaoduiyouClientTestHooks = {
+  RawWebSocket,
+  DEFAULT_WEBSOCKET_PING_INTERVAL_MS,
+  DEFAULT_WEBSOCKET_PING_TIMEOUT_MS,
+};
 
 export async function postXiaoduiyouProgress(account, turnId, progress) {
   return await requestJson(account, `/api/agent/turns/${encodeURIComponent(turnId)}/events`, {

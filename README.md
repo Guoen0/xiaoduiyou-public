@@ -126,6 +126,7 @@ XDY_CONNECTION_TOKEN="<由小队友设置页提供>" \
 - 安装脚本会写入 OpenClaw 的 `.openclaw` 数据目录；如果你在 OpenClaw profile 下运行，先确保 `OPENCLAW_HOME` 指向 profile 的父目录。若误设为 `~/.openclaw`，脚本会归一化并清理旧的 `~/.openclaw/.openclaw` 小队友安装路径。
 - OpenClaw skill 只有进入当前 Agent 的 `agents.list[0].skills` allowlist 后才会进入模型上下文；仅安装到 `${OPENCLAW_HOME:-~/.openclaw}/workspace/skills` 不够。
 - OpenClaw tool policy 必须允许插件工具组；脚本会把 `tools.alsoAllow` 合并补上 `group:plugins`。如果 Connected tools 里看不到 `xiaoduiyou_im_send` / `xiaoduiyou_child_get` / `xiaoduiyou_growth_diary_get` / `xiaoduiyou_growth_diary_patch`，先重新执行 `scripts/install-openclaw.sh` 并重启 Gateway。
+- OpenClaw 连接器默认使用 WebSocket 接收 turn，并发送协议级 keepalive ping；安装脚本会写入 25 秒 ping、10 秒超时的默认值。只有部署代理明确要求时才调整 `channels.xiaoduiyou.websocketPingIntervalMs` / `websocketPingTimeoutMs`。
 - 按 README 的 Runtime skill routing 和 Common Agent rules 执行。
 ````
 
@@ -166,6 +167,7 @@ export XDY_CONNECTION_TOKEN="<由小队友设置页提供>"
 - 安装脚本会安装/更新三个 Codex 插件：`xiaoduiyou-runtime-skills`、`xiaoduiyou-codex-platform`、`xiaoduiyou-codex-runner`。
 - `xiaoduiyou-runtime-skills` 会把 `xiaoduiyou-im`、`xiaoduiyou-doc-content-package`、`xiaoduiyou-growth-diary`、`xiaoduiyou-child-profile`、`xiaoduiyou-feedback-issues` 装进 Codex；这些 runtime skills 是 IM、内容包、成长日记、孩子基础信息、public feedback handler 行为的来源。
 - 安装脚本会写入本地连接配置，启动后台 runner，并验证平台连接；Codex 平台工具包括 `xiaoduiyou_im_send` 和 `xiaoduiyou_interactive_request_create` / `xiaoduiyou_interactive_request_wait`，用于发送 Xiaoduiyou 聊天图片卡片和人类授权审批卡片。
+- Codex MCP watch 与后台 runner 的 WebSocket 连接默认发送协议级 keepalive ping，25 秒无数据则 ping，10 秒无响应则重连或回退；一般不需要手动调参。
 - 安装后使用 `xiaoduiyou-codex-runner` skill 检查 runner 状态；使用 `xiaoduiyou-codex-platform` skill 处理需要平台 MCP 工具的任务；按 `xiaoduiyou-im` / `xiaoduiyou-doc-content-package` / `xiaoduiyou-growth-diary` / `xiaoduiyou-child-profile` / `xiaoduiyou-feedback-issues` 执行用户消息，其中 feedback skill 只用于明确的 public feedback handler 或 `session_purpose: feedback` 场景。
 - 不要把连接 token 打印回聊天；只汇报是否安装成功、runner 是否在线、失败时的明确原因。
 - 按 README 的 Runtime skill routing 和 Common Agent rules 执行。

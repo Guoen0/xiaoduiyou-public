@@ -38,6 +38,8 @@
           "preferWebSocket": { "type": "boolean" },
           "pollIntervalMs": { "type": "number" },
           "pollTimeoutMs": { "type": "number" },
+          "websocketPingIntervalMs": { "type": "number" },
+          "websocketPingTimeoutMs": { "type": "number" },
           "botUserId": { "type": "string" },
           "botDisplayName": { "type": "string" }
         }

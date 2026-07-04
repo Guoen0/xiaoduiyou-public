@@ -26,12 +26,14 @@ from typing import Any
 from urllib import error, parse, request
 
 
-RUNNER_VERSION = "2026.7.1.1-codex-runner"
+RUNNER_VERSION = "2026.7.4.5-codex-runner"
 DEFAULT_HOME = Path.home() / ".codex" / "xiaoduiyou-runner"
 DEFAULT_CONFIG = DEFAULT_HOME / "config.json"
 DEFAULT_LOG = DEFAULT_HOME / "runner.log"
 DEFAULT_PID = DEFAULT_HOME / "runner.pid"
 PLATFORM_CONFIG = Path.home() / ".codex" / "xiaoduiyou-connection.json"
+DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS = 25.0
+DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS = 10.0
 
 
 class XiaoduiyouAuthError(RuntimeError):
@@ -40,6 +42,61 @@ class XiaoduiyouAuthError(RuntimeError):
 
 class XiaoduiyouWebSocketError(RuntimeError):
     pass
+
+
+class WebSocketKeepalive:
+    def __init__(self, *, ping_interval_seconds: float, ping_timeout_seconds: float) -> None:
+        self.ping_interval_seconds = ping_interval_seconds
+        self.ping_timeout_seconds = ping_timeout_seconds
+        self.last_received_at = time.monotonic()
+        self.pending_ping_payload: bytes | None = None
+        self.pending_ping_sent_at: float | None = None
+
+    def read_text(self, client: "XiaoduiyouClient", sock: socket.socket, *, max_idle_seconds: float) -> str | None:
+        self._send_ping_if_due(client, sock)
+        sock.settimeout(self._next_read_timeout(max_idle_seconds))
+        opcode, payload = client.websocket_read_frame(sock)
+        self._mark_received(opcode, payload)
+        if opcode == 8:
+            raise XiaoduiyouWebSocketError("websocket closed by server")
+        if opcode == 9:
+            client.websocket_send_frame(sock, 0xA, payload)
+            return None
+        if opcode == 0xA:
+            return None
+        if opcode != 1:
+            return None
+        return payload.decode("utf-8")
+
+    def _send_ping_if_due(self, client: "XiaoduiyouClient", sock: socket.socket) -> None:
+        now_mono = time.monotonic()
+        if self.pending_ping_sent_at is not None:
+            elapsed = now_mono - self.pending_ping_sent_at
+            if elapsed >= self.ping_timeout_seconds:
+                raise XiaoduiyouWebSocketError(f"websocket keepalive ping timed out after {elapsed:.1f}s")
+            return
+        if now_mono - self.last_received_at < self.ping_interval_seconds:
+            return
+        payload = secrets.token_bytes(8)
+        client.websocket_send_frame(sock, 0x9, payload)
+        self.pending_ping_payload = payload
+        self.pending_ping_sent_at = now_mono
+
+    def _next_read_timeout(self, max_idle_seconds: float) -> float:
+        now_mono = time.monotonic()
+        timeout = max(0.1, max_idle_seconds)
+        if self.pending_ping_sent_at is not None:
+            return min(timeout, max(0.1, self.ping_timeout_seconds - (now_mono - self.pending_ping_sent_at)))
+        return min(timeout, max(0.1, self.ping_interval_seconds - (now_mono - self.last_received_at)))
+
+    def _mark_received(self, opcode: int, payload: bytes) -> None:
+        self.last_received_at = time.monotonic()
+        if self.pending_ping_sent_at is None:
+            return
+        if opcode == 0xA and payload != self.pending_ping_payload:
+            return
+        self.pending_ping_payload = None
+        self.pending_ping_sent_at = None
 
 
 def now() -> str:
@@ -83,6 +140,8 @@ def config_from_env() -> dict[str, Any]:
         "poll_interval_seconds": float(os.environ.get("XDY_CODEX_RUNNER_POLL_INTERVAL", "2")),
         "idle_sleep_seconds": float(os.environ.get("XDY_CODEX_RUNNER_IDLE_SLEEP", "2")),
         "prefer_websocket": os.environ.get("XDY_CODEX_RUNNER_PREFER_WEBSOCKET", "1") != "0",
+        "websocket_ping_interval_seconds": float(os.environ.get("XDY_CODEX_RUNNER_WEBSOCKET_PING_INTERVAL_SECONDS", str(DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS))),
+        "websocket_ping_timeout_seconds": float(os.environ.get("XDY_CODEX_RUNNER_WEBSOCKET_PING_TIMEOUT_SECONDS", str(DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS))),
         "codex_model": os.environ.get("XDY_CODEX_MODEL", "").strip(),
         "codex_bin": os.environ.get("XDY_CODEX_BIN", "").strip() or shutil.which("codex") or "codex",
         "codex_workdir": os.environ.get("XDY_CODEX_WORKDIR", str(Path.home())),
@@ -107,6 +166,8 @@ class XiaoduiyouClient:
         self.base_url = str(config["base_url"]).rstrip("/")
         self.token = str(config["connection_token"])
         self.request_timeout_seconds = float(config.get("request_timeout_seconds") or 45)
+        self.websocket_ping_interval_seconds = float(config.get("websocket_ping_interval_seconds") or DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS)
+        self.websocket_ping_timeout_seconds = float(config.get("websocket_ping_timeout_seconds") or DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS)
         self._websocket_buffer = b""
 
     def request_json(self, path: str, *, method: str = "GET", body: Any = None) -> Any:
@@ -226,7 +287,7 @@ class XiaoduiyouClient:
         masked = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
         sock.sendall(header + mask + masked)
 
-    def websocket_read_text(self, sock: socket.socket) -> str | None:
+    def websocket_read_frame(self, sock: socket.socket) -> tuple[int, bytes]:
         header = self.websocket_read_exact(sock, 2)
         opcode = header[0] & 0x0F
         length = header[1] & 0x7F
@@ -235,10 +296,16 @@ class XiaoduiyouClient:
         elif length == 127:
             length = struct.unpack("!Q", self.websocket_read_exact(sock, 8))[0]
         payload = self.websocket_read_exact(sock, length) if length else b""
+        return opcode, payload
+
+    def websocket_read_text(self, sock: socket.socket) -> str | None:
+        opcode, payload = self.websocket_read_frame(sock)
         if opcode == 8:
             raise XiaoduiyouWebSocketError("websocket closed by server")
         if opcode == 9:
             self.websocket_send_frame(sock, 0xA, payload)
+            return None
+        if opcode == 0xA:
             return None
         if opcode != 1:
             return None
@@ -246,11 +313,18 @@ class XiaoduiyouClient:
 
     def watch_claims(self, should_stop) -> Any:
         sock = self.open_websocket()
-        log(f"websocket turn stream connected {self.websocket_url()}")
+        keepalive = WebSocketKeepalive(
+            ping_interval_seconds=self.websocket_ping_interval_seconds,
+            ping_timeout_seconds=self.websocket_ping_timeout_seconds,
+        )
+        log(
+            "websocket turn stream connected "
+            f"{self.websocket_url()} keepalive={self.websocket_ping_interval_seconds:.1f}s/{self.websocket_ping_timeout_seconds:.1f}s"
+        )
         try:
             while not should_stop():
                 try:
-                    raw = self.websocket_read_text(sock)
+                    raw = keepalive.read_text(self, sock, max_idle_seconds=15.0)
                 except socket.timeout:
                     continue
                 if not raw:

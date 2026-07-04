@@ -79,6 +79,8 @@ OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw config set channels.xiaoduiyou.enab
 OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw config set channels.xiaoduiyou.baseUrl "$XDY_BASE_URL"
 OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw config set channels.xiaoduiyou.connectionToken "$XDY_CONNECTION_TOKEN"
 OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw config set channels.xiaoduiyou.allowFrom '["*"]'
+OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw config set channels.xiaoduiyou.websocketPingIntervalMs 25000
+OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw config set channels.xiaoduiyou.websocketPingTimeoutMs 10000
 OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw gateway restart
 
 OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw skills info xiaoduiyou-im >/dev/null

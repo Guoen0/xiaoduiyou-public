@@ -20,8 +20,10 @@ from urllib import error, parse, request
 
 
 VERSION = "0.1.5"
-CONNECTOR_VERSION = "2026.7.4.4-codex"
+CONNECTOR_VERSION = "2026.7.4.5-codex"
 DEFAULT_CONFIG_PATH = Path.home() / ".codex" / "xiaoduiyou-connection.json"
+DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS = 25.0
+DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS = 10.0
 
 
 def _env(name: str, fallback: str) -> str:
@@ -162,7 +164,7 @@ def websocket_read_exact(sock: socket.socket, length: int, buffer: bytearray) ->
     return value
 
 
-def websocket_read_text(sock: socket.socket, buffer: bytearray) -> str | None:
+def websocket_read_frame(sock: socket.socket, buffer: bytearray) -> tuple[int, bytes]:
     header = websocket_read_exact(sock, 2, buffer)
     opcode = header[0] & 0x0F
     length = header[1] & 0x7F
@@ -171,14 +173,81 @@ def websocket_read_text(sock: socket.socket, buffer: bytearray) -> str | None:
     elif length == 127:
         length = struct.unpack("!Q", websocket_read_exact(sock, 8, buffer))[0]
     payload = websocket_read_exact(sock, length, buffer) if length else b""
+    return opcode, payload
+
+
+def websocket_read_text(sock: socket.socket, buffer: bytearray) -> str | None:
+    opcode, payload = websocket_read_frame(sock, buffer)
     if opcode == 8:
         raise XiaoduiyouWebSocketError("websocket closed by server")
     if opcode == 9:
         websocket_send_frame(sock, 0xA, payload)
         return None
+    if opcode == 0xA:
+        return None
     if opcode != 1:
         return None
     return payload.decode("utf-8")
+
+
+class WebSocketKeepalive:
+    def __init__(
+        self,
+        *,
+        ping_interval_seconds: float = DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS,
+        ping_timeout_seconds: float = DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS,
+    ) -> None:
+        self.ping_interval_seconds = ping_interval_seconds
+        self.ping_timeout_seconds = ping_timeout_seconds
+        self.last_received_at = time.monotonic()
+        self.pending_ping_payload: bytes | None = None
+        self.pending_ping_sent_at: float | None = None
+
+    def read_text(self, sock: socket.socket, buffer: bytearray, *, max_idle_seconds: float) -> str | None:
+        self._send_ping_if_due(sock)
+        sock.settimeout(self._next_read_timeout(max_idle_seconds))
+        opcode, payload = websocket_read_frame(sock, buffer)
+        self._mark_received(opcode, payload)
+        if opcode == 8:
+            raise XiaoduiyouWebSocketError("websocket closed by server")
+        if opcode == 9:
+            websocket_send_frame(sock, 0xA, payload)
+            return None
+        if opcode == 0xA:
+            return None
+        if opcode != 1:
+            return None
+        return payload.decode("utf-8")
+
+    def _send_ping_if_due(self, sock: socket.socket) -> None:
+        now = time.monotonic()
+        if self.pending_ping_sent_at is not None:
+            elapsed = now - self.pending_ping_sent_at
+            if elapsed >= self.ping_timeout_seconds:
+                raise XiaoduiyouWebSocketError(f"websocket keepalive ping timed out after {elapsed:.1f}s")
+            return
+        if now - self.last_received_at < self.ping_interval_seconds:
+            return
+        payload = secrets.token_bytes(8)
+        websocket_send_frame(sock, 0x9, payload)
+        self.pending_ping_payload = payload
+        self.pending_ping_sent_at = now
+
+    def _next_read_timeout(self, max_idle_seconds: float) -> float:
+        now = time.monotonic()
+        timeout = max(0.1, max_idle_seconds)
+        if self.pending_ping_sent_at is not None:
+            return min(timeout, max(0.1, self.ping_timeout_seconds - (now - self.pending_ping_sent_at)))
+        return min(timeout, max(0.1, self.ping_interval_seconds - (now - self.last_received_at)))
+
+    def _mark_received(self, opcode: int, payload: bytes) -> None:
+        self.last_received_at = time.monotonic()
+        if self.pending_ping_sent_at is None:
+            return
+        if opcode == 0xA and payload != self.pending_ping_payload:
+            return
+        self.pending_ping_payload = None
+        self.pending_ping_sent_at = None
 
 
 def open_websocket_url(url: str, timeout: float) -> tuple[socket.socket, bytearray]:
@@ -241,12 +310,12 @@ def open_pending_turns_websocket(timeout: float) -> tuple[socket.socket, bytearr
 
 def claim_turn_via_websocket(timeout_seconds: float, *, wait_for_turn: bool = False) -> Any:
     sock, buffer = open_pending_turns_websocket(timeout_seconds)
+    keepalive = WebSocketKeepalive()
     try:
         deadline = time.time() + timeout_seconds
         while time.time() <= deadline:
-            sock.settimeout(max(0.5, min(5.0, deadline - time.time())))
             try:
-                raw = websocket_read_text(sock, buffer)
+                raw = keepalive.read_text(sock, buffer, max_idle_seconds=max(0.5, min(5.0, deadline - time.time())))
             except socket.timeout:
                 continue
             if not raw:
@@ -272,13 +341,13 @@ def claim_turn_via_websocket(timeout_seconds: float, *, wait_for_turn: bool = Fa
 
 def wait_interactive_request_via_websocket(request_id: str, timeout_seconds: float) -> Any:
     sock, buffer = open_websocket_url(interactive_request_websocket_url(request_id), timeout_seconds)
+    keepalive = WebSocketKeepalive()
     try:
         deadline = time.time() + timeout_seconds
         attempts = 0
         while time.time() <= deadline:
-            sock.settimeout(max(0.5, min(5.0, deadline - time.time())))
             try:
-                raw = websocket_read_text(sock, buffer)
+                raw = keepalive.read_text(sock, buffer, max_idle_seconds=max(0.5, min(5.0, deadline - time.time())))
             except socket.timeout:
                 continue
             if not raw:

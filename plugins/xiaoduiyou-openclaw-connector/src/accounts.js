@@ -3,6 +3,13 @@ import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "openclaw/plugin-sdk/acco
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
 const DEFAULT_POLL_TIMEOUT_MS = 30_000;
 const DEFAULT_TURN_CONCURRENCY = 4;
+const DEFAULT_WEBSOCKET_PING_INTERVAL_MS = 25_000;
+const DEFAULT_WEBSOCKET_PING_TIMEOUT_MS = 10_000;
+
+function positiveNumber(value, fallback) {
+  const number = Number(value ?? fallback);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
 
 export function listXiaoduiyouAccountIds(cfg) {
   const section = cfg.channels?.xiaoduiyou;
@@ -34,8 +41,10 @@ export function resolveXiaoduiyouAccount(cfg, accountId) {
     baseUrl,
     connectionToken,
     preferWebSocket: merged.preferWebSocket !== false,
-    pollIntervalMs: Number(merged.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS),
-    pollTimeoutMs: Number(merged.pollTimeoutMs ?? DEFAULT_POLL_TIMEOUT_MS),
+    pollIntervalMs: positiveNumber(merged.pollIntervalMs, DEFAULT_POLL_INTERVAL_MS),
+    pollTimeoutMs: positiveNumber(merged.pollTimeoutMs, DEFAULT_POLL_TIMEOUT_MS),
+    websocketPingIntervalMs: positiveNumber(merged.websocketPingIntervalMs, DEFAULT_WEBSOCKET_PING_INTERVAL_MS),
+    websocketPingTimeoutMs: positiveNumber(merged.websocketPingTimeoutMs, DEFAULT_WEBSOCKET_PING_TIMEOUT_MS),
     turnConcurrency: Math.max(1, Number(merged.turnConcurrency ?? DEFAULT_TURN_CONCURRENCY) || DEFAULT_TURN_CONCURRENCY),
     botUserId: String(merged.botUserId ?? "openclaw"),
     botDisplayName: String(merged.botDisplayName ?? "OpenClaw"),

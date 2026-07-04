@@ -81,7 +81,10 @@ def main() -> None:
     require_text(
         ROOT / "plugins" / "xiaoduiyou-codex-platform" / "scripts" / "xiaoduiyou_mcp.py",
         [
-            "CONNECTOR_VERSION = \"2026.7.4.4-codex\"",
+            "CONNECTOR_VERSION = \"2026.7.4.5-codex\"",
+            "DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS = 25.0",
+            "DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS = 10.0",
+            "WebSocketKeepalive",
             "\"name\": \"xiaoduiyou_im_send\"",
             "\"name\": \"xiaoduiyou_interactive_request_create\"",
             "\"name\": \"xiaoduiyou_interactive_request_wait\"",
@@ -96,11 +99,24 @@ def main() -> None:
         ],
     )
     require_text(
+        ROOT / "plugins" / "xiaoduiyou-codex-runner" / "scripts" / "xiaoduiyou_codex_runner.py",
+        [
+            "RUNNER_VERSION = \"2026.7.4.5-codex-runner\"",
+            "DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS = 25.0",
+            "DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS = 10.0",
+            "WebSocketKeepalive",
+            "XDY_CODEX_RUNNER_WEBSOCKET_PING_INTERVAL_SECONDS",
+            "XDY_CODEX_RUNNER_WEBSOCKET_PING_TIMEOUT_SECONDS",
+        ],
+    )
+    require_text(
         ROOT / "scripts" / "install-openclaw.sh",
         [
             "xiaoduiyou_im_send",
             "openclaw plugins install",
             "OPENCLAW_HOME_ROOT",
+            "channels.xiaoduiyou.websocketPingIntervalMs 25000",
+            "channels.xiaoduiyou.websocketPingTimeoutMs 10000",
             ".openclaw/.openclaw/workspace/skills",
             "could not update agents.list",
         ],
@@ -119,6 +135,8 @@ def main() -> None:
             "xiaoduiyou_interactive_request_wait",
             "channel directory",
             "xiaoduiyou:主对话",
+            "WebSocket",
+            "keepalive",
         ],
     )
     require_text(
