@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.4.5"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.4.6"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -1694,6 +1694,8 @@ def _looks_like_tool_progress(content: str) -> bool:
     stripped = (content or "").strip()
     if not stripped:
         return False
+    if _looks_like_gateway_command_listing(stripped):
+        return False
     tool_markers = (
         "📨 send_message",
         "send_message(",
@@ -1710,6 +1712,18 @@ def _looks_like_tool_progress(content: str) -> bool:
             '📨',
         )
     )
+
+
+def _looks_like_gateway_command_listing(content: str) -> bool:
+    stripped = (content or "").strip()
+    if stripped.startswith("📖 **Hermes Commands**"):
+        return True
+    lines = [line.strip() for line in stripped.splitlines() if line.strip()]
+    command_listing_lines = [
+        line for line in lines[:12]
+        if line.startswith("`/") and "` -- " in line
+    ]
+    return len(command_listing_lines) >= 2
 
 
 def _progress_delta(message_id: str, content: str) -> str:

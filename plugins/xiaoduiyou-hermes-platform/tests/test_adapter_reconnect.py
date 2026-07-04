@@ -109,6 +109,29 @@ class _FakeWriter:
         return None
 
 
+class DeliveryClassificationTests(unittest.TestCase):
+    def test_hermes_help_listing_is_not_tool_progress(self):
+        content = "\n".join([
+            "📖 **Hermes Commands**",
+            "",
+            "`/start` -- Acknowledge platform start pings without a reply",
+            "`/new [name]` -- Start a new session (fresh session ID + history)",
+        ])
+
+        self.assertFalse(adapter._looks_like_tool_progress(content))
+
+    def test_command_listing_without_header_is_not_tool_progress(self):
+        content = "\n".join([
+            "`/usage` -- Show token usage and rate limits for the current session",
+            "`/debug` -- Upload debug report (system info + logs)",
+        ])
+
+        self.assertFalse(adapter._looks_like_tool_progress(content))
+
+    def test_tool_progress_still_uses_icon_heuristic(self):
+        self.assertTrue(adapter._looks_like_tool_progress('📖 read_file: "package.json"'))
+
+
 class TurnStreamReconnectTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         os.environ.pop("XIAODUIYOU_BASE_URL", None)
