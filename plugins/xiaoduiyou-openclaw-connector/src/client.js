@@ -5,7 +5,7 @@ import path from "node:path";
 import tls from "node:tls";
 import { once } from "node:events";
 
-export const XIAODUIYOU_CONNECTOR_VERSION = "2026.7.5.1";
+export const XIAODUIYOU_CONNECTOR_VERSION = "2026.7.5.2";
 const WEBSOCKET_RETRY_MS = 3_000;
 const WEBSOCKET_IDLE_TIMEOUT_MS = 15_000;
 const DEFAULT_WEBSOCKET_PING_INTERVAL_MS = 25_000;
@@ -139,10 +139,6 @@ export async function uploadXiaoduiyouAsset(account, params = {}) {
   formData.set("file", new Blob([bytes], { type: mimeType }), fileName);
   formData.set("source", String(params.source ?? "agent_generated"));
   formData.set("require_remote_storage", params.require_remote_storage === false ? "false" : "true");
-  for (const key of ["session_id", "turn_id", "document_id"]) {
-    const value = String(params[key] ?? "").trim();
-    if (value) formData.set(key, value);
-  }
   return await requestMultipart(account, "/api/assets", formData);
 }
 

@@ -157,9 +157,9 @@ Generic content artifact:
 
 Preferred tool:
 
-`xiaoduiyou_assets_upload(file_path, source?, session_id?, turn_id?, document_id?, require_remote_storage?)`
+`xiaoduiyou_assets_upload(file_path, file_name?, mime_type?, source?, require_remote_storage?)`
 
-The tool inherits active/recent Xiaoduiyou `session_id`/`turn_id` when the connector has that context, and returns `{ url, asset }`.
+The tool returns `{ url, asset }` only. It does not bind the asset to a session, turn, or document; use the returned URL in the next IM, document, diary, or content-package tool call.
 
 Multipart fields:
 

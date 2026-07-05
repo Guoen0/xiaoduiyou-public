@@ -21,7 +21,7 @@ from urllib import error, parse, request
 
 
 VERSION = "0.1.5"
-CONNECTOR_VERSION = "2026.7.5.1-codex"
+CONNECTOR_VERSION = "2026.7.5.2-codex"
 DEFAULT_CONFIG_PATH = Path.home() / ".codex" / "xiaoduiyou-connection.json"
 DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS = 25.0
 DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS = 10.0
@@ -134,10 +134,6 @@ def upload_asset_file(args: dict[str, Any]) -> Any:
         "source": str(args.get("source") or "agent_generated"),
         "require_remote_storage": "false" if args.get("require_remote_storage") is False else "true",
     }
-    for key in ["session_id", "turn_id", "document_id"]:
-        value = str(args.get(key) or "").strip()
-        if value:
-            fields[key] = value
     chunks: list[bytes] = []
     for key, value in fields.items():
         chunks.append(f"--{boundary}\r\n".encode("utf-8"))
@@ -826,16 +822,13 @@ TOOLS = [
     },
     {
         "name": "xiaoduiyou_assets_upload",
-        "description": "Upload a local file through Xiaoduiyou connector auth to durable platform asset storage and return a browser-accessible URL plus asset metadata.",
+        "description": "Upload a local file through Xiaoduiyou connector auth to generic durable platform asset storage and return a browser-accessible URL plus asset metadata. This does not bind the asset to a session, turn, or document; use the returned URL in later IM, document, diary, or other tool calls.",
         "inputSchema": schema({
             "file_path": {"type": "string"},
             "file_name": {"type": "string"},
             "mime_type": {"type": "string"},
             "source": {"type": "string", "enum": ["agent_generated", "external_import", "user_upload"]},
             "require_remote_storage": {"type": "boolean"},
-            "session_id": {"type": "string"},
-            "turn_id": {"type": "string"},
-            "document_id": {"type": "string"},
         }, ["file_path"]),
     },
     {

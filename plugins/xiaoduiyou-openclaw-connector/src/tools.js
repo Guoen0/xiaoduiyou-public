@@ -233,9 +233,6 @@ const AssetUploadSchema = {
     mime_type: { type: "string", description: "Optional MIME type such as image/png. Backend also infers from file_name." },
     source: { type: "string", enum: ["agent_generated", "external_import", "user_upload"], description: "Asset source. Defaults agent_generated." },
     require_remote_storage: { type: "boolean", description: "Require durable remote/TOS storage. Defaults true." },
-    document_id: { type: "string", description: "Optional Xiaoduiyou document id to associate with the asset." },
-    session_id: { type: "string", description: "Optional Xiaoduiyou session id. Defaults to current/recent Xiaoduiyou session when available." },
-    turn_id: { type: "string", description: "Optional Xiaoduiyou turn id. Defaults to current/recent Xiaoduiyou turn when available." },
     account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the current connector account." },
   },
   required: ["file_path"],
@@ -614,28 +611,15 @@ function createAssetUploadTool(config) {
   return {
     name: "xiaoduiyou_assets_upload",
     label: "Xiaoduiyou Assets Upload",
-    description: "Upload a local file through Xiaoduiyou connector auth to durable platform asset storage and return a browser-accessible URL.",
+    description: "Upload a local file through Xiaoduiyou connector auth to generic durable asset storage and return a browser-accessible URL. This tool does not bind the asset to a session, turn, or document; use the returned URL in IM, document, diary, or other tools as needed.",
     parameters: AssetUploadSchema,
     execute: async (_toolCallId, rawParams = {}) => {
-      const context = maybeActiveXiaoduiyouToolContext();
-      const account = resolveToolAccount(config, { ...rawParams, account_id: rawParams.account_id || context.accountId });
-      const payload = {
-        ...rawParams,
-        session_id: rawParams.session_id || context.sessionId || context.session_id,
-        turn_id: rawParams.turn_id || context.turnId || context.turn_id,
-        document_id: rawParams.document_id || context.documentId || context.document_id,
-      };
-      const result = await uploadXiaoduiyouAsset(account, payload);
+      const account = resolveToolAccount(config, rawParams);
+      const result = await uploadXiaoduiyouAsset(account, rawParams);
       return jsonResult({
         ok: true,
         url: result.url ?? result.asset?.public_url,
         asset: result.asset,
-        context: {
-          session_id: payload.session_id || null,
-          turn_id: payload.turn_id || null,
-          document_id: payload.document_id || null,
-          recovered_from_recent_context: Boolean(context.recoveredFromRecentContext),
-        },
       });
     },
   };

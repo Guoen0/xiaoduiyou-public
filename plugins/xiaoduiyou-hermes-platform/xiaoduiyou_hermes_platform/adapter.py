@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.5.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.5.2"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -1973,17 +1973,11 @@ def _tool_assets_upload(args: Dict[str, Any], **_: Any) -> str:
     file_path = str(args.get("file_path") or "").strip()
     if not file_path:
         raise RuntimeError("xiaoduiyou_assets_upload requires file_path")
-    session_id = str(args.get("session_id") or context.get("session_id") or "").strip()
-    turn_id = str(args.get("turn_id") or context.get("turn_id") or "").strip()
-    document_id = str(args.get("document_id") or context.get("document_id") or "").strip()
     source = str(args.get("source") or "agent_generated").strip() or "agent_generated"
     result = _upload_asset_file_result(
         context["base_url"],
         context["token"],
         file_path,
-        session_id=session_id,
-        turn_id=turn_id,
-        document_id=document_id,
         source=source,
         require_remote_storage=bool(args.get("require_remote_storage", True)),
         timeout=DEFAULT_TIMEOUT_SECONDS,
@@ -1994,7 +1988,6 @@ def _tool_assets_upload(args: Dict[str, Any], **_: Any) -> str:
         raise RuntimeError("Xiaoduiyou asset upload did not return a public URL")
     return json.dumps({
         "ok": True,
-        "context": _safe_tool_context({**context, "session_id": session_id, "turn_id": turn_id, "document_id": document_id}),
         "url": url,
         "asset": asset,
     }, ensure_ascii=False)
@@ -2640,20 +2633,17 @@ def register(ctx) -> None:
     ctx.register_tool(
         name="xiaoduiyou_assets_upload",
         toolset=TOOLSET,
-        description="Upload a local file through Xiaoduiyou connector auth to durable platform asset storage and return a browser-accessible URL.",
+        description="Upload a local file through Xiaoduiyou connector auth to generic durable asset storage and return a browser-accessible URL. This tool does not bind the asset to a session, turn, or document; use the returned URL in IM, document, diary, or other tools as needed.",
         emoji="📎",
         schema={
             "name": "xiaoduiyou_assets_upload",
-            "description": "Upload a local file to Xiaoduiyou assets/TOS using connector-owned auth. Returns stable HTTPS url plus asset metadata. Use before writing generated/local files into documents, publish notes, Growth Diary attachments, or IM cards.",
+            "description": "Upload a local file to Xiaoduiyou assets/TOS using connector-owned auth. Returns stable HTTPS url plus asset metadata without binding it to a session, turn, or document. Use the returned URL before writing generated/local files into documents, publish notes, Growth Diary attachments, or IM cards.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "file_path": {"type": "string", "description": "Absolute local file path to upload."},
                     "source": {"type": "string", "enum": ["agent_generated", "external_import", "user_upload"], "description": "Asset source. Defaults agent_generated."},
                     "require_remote_storage": {"type": "boolean", "description": "Require durable remote/TOS storage. Defaults true."},
-                    "session_id": {"type": "string", "description": "Optional Xiaoduiyou session id. Omit inside an active/recent turn."},
-                    "turn_id": {"type": "string", "description": "Optional Xiaoduiyou turn id. Omit inside an active/recent turn."},
-                    "document_id": {"type": "string", "description": "Optional Xiaoduiyou document id. Omit inside a document turn."},
                 },
                 "required": ["file_path"],
             },

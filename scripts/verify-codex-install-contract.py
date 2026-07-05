@@ -81,11 +81,12 @@ def main() -> None:
     require_text(
         ROOT / "plugins" / "xiaoduiyou-codex-platform" / "scripts" / "xiaoduiyou_mcp.py",
         [
-            "CONNECTOR_VERSION = \"2026.7.5.1-codex\"",
+            "CONNECTOR_VERSION = \"2026.7.5.2-codex\"",
             "DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS = 25.0",
             "DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS = 10.0",
             "WebSocketKeepalive",
             "\"name\": \"xiaoduiyou_assets_upload\"",
+            "does not bind the asset to a session, turn, or document",
             "\"name\": \"xiaoduiyou_im_send\"",
             "\"name\": \"xiaoduiyou_interactive_request_create\"",
             "\"name\": \"xiaoduiyou_interactive_request_wait\"",
@@ -160,6 +161,7 @@ def main() -> None:
                 "POST /api/agent/im/send",
                 "xiaoduiyou_im_send",
                 "xiaoduiyou_assets_upload",
+                "does not bind the asset to a session, turn, or document",
                 "default",
                 "主对话",
                 "Do not use it for cron/background/Home delivery.",
