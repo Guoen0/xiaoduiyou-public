@@ -10,7 +10,7 @@ A connected usage Agent may:
 - send progress/tool-progress events;
 - complete a turn with an `xdy.artifact_blocks.v1` content package;
 - create/update/delete process documents only through Xiaoduiyou document actions/tools;
-- upload local/generated images through Xiaoduiyou's asset API before referencing them;
+- upload local/generated images through Xiaoduiyou's asset API before referencing them; public browser-fetchable HTTPS image URLs may be referenced directly;
 - operate 成长日记 through `/api/growth-diary` when the task is a diary/logging task.
 
 A connected usage Agent must not:
@@ -57,6 +57,6 @@ Say clearly that this connected usage Agent can update content artifacts/documen
 - If returning a content package, `ui_templates` selects only templates the user/Agent wants rendered.
 - Each selected template has matching `publish_notes.<template>` result data.
 - Publish tabs contain final copy/images only, not process notes, prompts, references, or research dumps.
-- Every local/generated image has been uploaded through `/api/assets` and URL-verified.
+- Every final image is browser-accessible and URL-verified; local/generated images have been uploaded through `/api/assets` or converted to a supported data URL before use.
 - `source_markdown` / process document preserves enough source, references, visual direction, and decisions for later QA.
 - No credentials or secrets are present in final artifact/document text.

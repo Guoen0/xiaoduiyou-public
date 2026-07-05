@@ -26,15 +26,15 @@ Load this when:
 1. **If the current screen/source is Xiaoduiyou Agent 对话页 and the user asks to generate or return an image, load this skill before final delivery even if the creative prompt itself is handled by an image-generation skill.** The deliverable must be a Xiaoduiyou IM image/card, not a generic Hermes Markdown image.
 2. Prefer the `xiaoduiyou_im_send` tool for visual cards. It accepts OpenAI Responses-style `content[]` parts and the Xiaoduiyou backend uploads images/assets.
 3. Visual cards in Xiaoduiyou render as `image_attachments[]`, not `MEDIA:/...`, Markdown images, browser screenshots, or link-only text.
-4. Local/server-static paths are invalid in final chat cards. Pass HTTPS images or `data:image/...;base64,...` to `xiaoduiyou_im_send`; never pass `/tmp`, `/Users`, `file:`, `blob:`, `localhost`, or private-network URLs.
-5. **Hard lesson from user correction:** If the current source/screen is Xiaoduiyou and the deliverable is an image, do not put `MEDIA:/local/path` in the final answer. Convert the generated/local image to a deliverable Xiaoduiyou image first. Preferred workflow for generated images: QA the local output, remove/crop visible provider watermark if needed, upload the approved local file with `xiaoduiyou_assets_upload`, HEAD-verify the HTTPS URL returns `200 image/*`, then call `xiaoduiyou_im_send` with an `input_image` part and verify `attachment_count >= 1`. If a stable upload is not needed and the model returned a valid HTTPS URL, that URL may be sent directly. Base64 `data:image/<type>;base64,...` is an acceptable fallback for small images.
+4. Local/server-static paths are invalid in final chat cards. Pass public browser-fetchable HTTPS images or `data:image/...;base64,...` to `xiaoduiyou_im_send`; never pass `/tmp`, `/Users`, `file:`, `blob:`, `localhost`, or private-network URLs.
+5. **Hard lesson from user correction:** If the current source/screen is Xiaoduiyou and the deliverable is an image, do not put `MEDIA:/local/path` in the final answer. Convert the generated/local image to a deliverable Xiaoduiyou image first. Preferred workflow for generated/local files: QA the local output, remove/crop visible provider watermark if needed, upload the approved local file with `xiaoduiyou_assets_upload`, HEAD-verify the HTTPS URL returns `200 image/*`, then call `xiaoduiyou_im_send` with an `input_image` part and verify `attachment_count >= 1`. Existing public HTTPS image URLs from search/product sources may be sent directly when they are fetchable without cookies, login, or temporary local state. Base64 `data:image/<type>;base64,...` is an acceptable fallback for small images.
 6. **Send the Xiaoduiyou IM payload inside the same active turn before the final text reply.** Do not first finalize with a local/Markdown path and try to "补发" later; the runtime may close the turn and reject late IM sends.
 7. Verify delivery: response event type, attachment count, and at least one image URL HTTP 200 image content-type.
 7. If Xiaoduiyou IM delivery fails with a platform/runtime error (for example `TURN_ALREADY_CLOSED`, missing attachments despite correct `xiaoduiyou_im_send`, or frontend cannot display supported image payloads), do not keep silently retrying or blame the user. Briefly explain that this looks like a platform issue, encourage the user to keep using the product and to submit feedback when convenient, and provide a concise copy-pasteable bug report with environment/session, repro steps, actual/expected result, and exact error.
 8. For product questions: Xiaohongshu provides lived-experience/reference evidence; Taobao/Tmall provides buyable candidates/parameters.
 9. For document/content-package artifacts, travel plans, publish tabs, or process docs, load `xiaoduiyou-doc-content-package`; do not keep that workflow inside IM.
 10. For Growth Diary records, load `xiaoduiyou-growth-diary`; do not send diary-only data as generic chat cards unless the user asks for a chat preview.
-11. Keep private family context out of skill files. In a local Hermes environment, read or create `${HERMES_HOME:-$HOME/.hermes}/private/xiaoduiyou-family-care-preferences.md` for family-specific names, IDs, childcare preferences, and durable care-history facts. Update that file when the user gives durable private preferences; keep reusable product behavior in this skill. This path is outside `skills/` and `plugins/` so skill upgrades should not overwrite it.
+11. Keep private family context out of skill files. In a local Hermes environment, treat `${HERMES_HOME:-$HOME/.hermes}/private/xiaoduiyou-family-care-preferences.md` as the only durable private-family memory file: read it before using family-specific names, IDs, caregiver labels, Feishu IDs, childcare preferences, or care-history facts; create or update it when the user gives durable private context; and keep only reusable product behavior in this skill. The file lives outside `skills/` and `plugins/`, so skill/plugin upgrades should not overwrite it.
 
 ## Case map owned by IM
 
@@ -44,7 +44,7 @@ Load this when:
 | `淘宝上找一下...给我` / `淘宝上找一下...给我卡片` | `references/product-question-workflow.md` then `references/visual-card-delivery.md` | Product research plus clickable candidate cards. |
 | `小红书找参考帖` / source examples | `references/product-question-workflow.md` and `references/visual-card-delivery.md` | Source/reference cards and links. |
 | Runtime send/message/card payload details | `references/runtime-api-reference.md` | Chat message endpoint and `image_attachments` payloads. |
-| Asset upload/image URL verification for chat cards | `xiaoduiyou_assets_upload` + `references/image-upload-contract.md` | Upload local/generated images before final UI use. |
+| Asset upload/image URL verification for chat cards | `xiaoduiyou_assets_upload` + `references/image-upload-contract.md` | Upload local/generated images before final UI use; public fetchable HTTPS source images can be sent directly. |
 | Runtime turn lifecycle / message stream state | `references/runtime-turn-lifecycle.md` | Debug or reason about Agent 对话页 runtime turns. |
 | Child profile/development: name/birthday/gender/allergy/height/weight/photo/skill nodes | load `xiaoduiyou-child-profile` | Profile and development writes use `xiaoduiyou_child_get` and `xiaoduiyou_child_patch`. |
 | Scheduled Xiaoduiyou message / reminder / cron delivery | `cronjob(action="create")` with `deliver` | Cron runs without `send_message`; delivery target must be encoded in `deliver`. |
@@ -55,9 +55,10 @@ Load this when:
 | User intent in Agent 对话页 | Route |
 |---|---|
 | Visual/clickable image cards | handle here; open `references/visual-card-delivery.md` |
+| Long poster/长图 generation for Xiaoduiyou chat delivery | handle here; open `references/long-image-panel-stitching.md` and deliver via `xiaoduiyou_im_send` |
 | Product questions: XHS + Taobao/Tmall + cards | handle here; open `references/product-question-workflow.md` |
 | Runtime endpoints and message payloads | handle here; open `references/runtime-api-reference.md` |
-| Upload/verify images | use `xiaoduiyou_assets_upload`; open `references/image-upload-contract.md` |
+| Upload/verify images | use `xiaoduiyou_assets_upload` for local/generated files; open `references/image-upload-contract.md` |
 | Scheduled message/reminder to a Xiaoduiyou channel | use `cronjob(action="create")` with `deliver`; do not schedule a future `send_message` call |
 | Baby/toddler parenting guidance without record writes | answer in chat; use the parenting guidance rules below |
 | Child profile or development progress update/query | load `xiaoduiyou-child-profile` |
@@ -69,7 +70,7 @@ Load this when:
 
 Use this section for Xiaoduiyou chat answers about baby/toddler development, parenting decisions, family caregiving patterns, routines, feeding/sleep cooperation, emotion, behavior, discipline, play, and early education when the user is not asking to write records.
 
-- Before relying on family-specific facts such as child nickname, caregiver labels, developmental history, Feishu IDs, or household preferences, check `${HERMES_HOME:-$HOME/.hermes}/private/xiaoduiyou-family-care-preferences.md` when running in local Hermes. If it is missing and the user provides durable private context, create it there instead of adding that data to this skill.
+- Before relying on family-specific facts such as child nickname, caregiver labels, developmental history, Feishu IDs, or household preferences, check `${HERMES_HOME:-$HOME/.hermes}/private/xiaoduiyou-family-care-preferences.md` when running in local Hermes. If it is missing and the user provides durable private context, create it there instead of adding that data to this skill; if it exists and the user corrects a durable preference/fact, update that file rather than repeating private facts in chat-workflow instructions.
 - Give modern, evidence-based, non-stereotyped advice. Do not rely on gender scripts such as "mother = naturally sensitive/caretaking" or "father = naturally strong/decision-maker." Infer only from observed behavior, stated context, and explicit uncertainty.
 - Explain behavior through several lenses together: developmental stage, attachment, learning/routines, cognition, emotion coaching, environment design, caregiver consistency, and family-system fatigue or conflict.
 - Structure substantial advice as: conclusion first, developmental task, what adults should do, what adults should avoid, home implementation, and uncertainty/red flags.
@@ -80,9 +81,9 @@ Use this section for Xiaoduiyou chat answers about baby/toddler development, par
 
 ## Preferred Tool
 
-Call `xiaoduiyou_im_send` with OpenAI Responses-style content parts. In an active/recent Xiaoduiyou turn, omit `session_id` and let the connector inherit the current `session_id`/`turn_id`. For background/default Home delivery, pass `channel: "default"` explicitly. Pass `session_id` only when replying to a specific active session.
+Call `xiaoduiyou_im_send` with OpenAI Responses-style content parts. In an active/recent Xiaoduiyou turn, omit `session_id` and let the connector inherit the current `session_id`/`turn_id`. For background/default Home delivery, pass `channel: "default"` explicitly. Pass `session_id` only when replying to a specific active session. If sending after an async delegation callback or a user reports the image landed in `主对话` instead of the current Agent thread, treat it as a routing-risk case: explicitly pass the current `session_id` and `turn_id` when available, then verify the returned context. If the tool still reports the right session but the frontend shows the attachment in Home/main chat, stop retrying blindly and report a Xiaoduiyou IM routing bug with session_id, returned mode/context, and expected thread.
 
-For image-generation replies in Xiaoduiyou, the safe delivery sequence is: generate → inspect/QA local output → crop or regenerate if watermark/quality is unacceptable → upload the final file with `xiaoduiyou_assets_upload` when a durable HTTPS URL is useful → verify `200 image/*` → send the verified URL as an `input_image` card → only then final-text summarize. Never use `MEDIA:` as the Xiaoduiyou deliverable.
+For image-generation replies in Xiaoduiyou, the safe delivery sequence is: generate → inspect/QA local output → crop or regenerate if watermark/quality is unacceptable → upload the final local file with `xiaoduiyou_assets_upload` when a durable HTTPS URL is useful → verify `200 image/*` → send the verified URL as an `input_image` card → only then final-text summarize. For already-public web images, send the original HTTPS URL directly if it is browser-fetchable and not login/cookie-bound. Never use `MEDIA:` or a local path as the Xiaoduiyou deliverable.
 
 ```json
 {

@@ -23,8 +23,8 @@ Capture for each useful note:
 - `title`
 - `author` when available
 - `note_url`: clean browser-openable note URL
-- `cover_image_url`: durable Xiaoduiyou asset URL if rendered in Xiaoduiyou
-- `raw_cover_url`: temporary source URL only in process notes if useful; never as final rendered image
+- `cover_image_url`: browser-fetchable HTTPS image URL if rendered in Xiaoduiyou; use the original external URL directly when stable/fetchable, or a Xiaoduiyou asset URL after upload when needed
+- `raw_cover_url`: temporary source URL only in process notes if useful; never as final rendered image when it is login-bound, expiring, anti-hotlinking, or not directly fetchable
 - `why_relevant`: one-line reason, e.g. “同车型后排安装参考”, “吐槽点集中在肩带/空间”, “真实使用半年反馈”
 - `source_platform: "xiaohongshu"`
 
@@ -36,7 +36,8 @@ Clean note links before storing/displaying:
 
 Image handling:
 
-- If a Xiaohongshu cover/image is shown in Xiaoduiyou, download it as a temporary staging file, upload through Xiaoduiyou `/api/assets`, and render the returned durable URL.
+- If a Xiaohongshu cover/image URL is public HTTPS and fetchable without cookies/login, it may be rendered directly in Xiaoduiyou.
+- If the source URL is temporary, signed, anti-hotlinking, or only works in the current browser session, download it as a temporary staging file when allowed, upload through Xiaoduiyou `/api/assets`, and render the returned durable URL.
 - The temporary staging file must stay local/ephemeral. Do not place source/replay/reference images under the app server's `public/`, `dist/`, `/official-replay`, `/replay-images`, or any repository/server static path.
 - Keep the source link as `link_url`; do not hotlink temporary XHS image CDN URLs in final UI.
 - If the image cannot be downloaded/uploaded, omit the image card and keep a text source link.
@@ -49,7 +50,7 @@ Capture for each candidate:
 
 - `title`
 - `item_url`: clean clickable item URL
-- `image_url`: durable Xiaoduiyou asset URL if rendered in Xiaoduiyou
+- `image_url`: browser-fetchable HTTPS image URL if rendered in Xiaoduiyou; use the original external URL directly when stable/fetchable, or a Xiaoduiyou asset URL after upload when needed
 - `price` / `price_note` when visible
 - `shop` / `seller` when visible
 - `option` / `sku_note` for the exact variant if the user constraint depends on it
@@ -112,7 +113,7 @@ Use this payload shape on `POST /api/hermes/turns/{turn_id}/events`, final callb
 
 Card rules:
 
-- `image_url` must be a durable Xiaoduiyou/TOS/asset URL verified with HTTP 200 and image content-type.
+- `image_url` must be a browser-fetchable HTTPS image URL verified with HTTP 200 and image content-type. It can be an external source image URL when stable/fetchable, or a Xiaoduiyou/TOS/asset URL after upload.
 - `image_url` must not be a server-local/static URL such as `/official-replay/...`, `/replay-images/...`, `/public/...`, `/tmp/...`, or `/Users/...`.
 - `link_url` must be the clean source/product link that the user can click.
 - Use `badge: "参考帖"` for Xiaohongshu; use `badge: "商品候选"` for Taobao/Tmall.
@@ -175,7 +176,7 @@ Do not overstate scraped information. Prices, stock, promotions, and reviews cha
 - [ ] At least one Xiaohongshu source or a stated reason why none could be used.
 - [ ] At least one Taobao/Tmall candidate or a stated reason why none could be used.
 - [ ] Source links are clean and verified enough to click.
-- [ ] Rendered images are uploaded through `/api/assets`, not hotlinked from temporary XHS/Taobao CDNs.
+- [ ] Rendered images are browser-fetchable HTTPS URLs: stable external image URLs may be used directly; temporary/login-bound/anti-hotlinking source images are uploaded through `/api/assets` or omitted.
 - [ ] Chat payload includes `image_attachments` for high-signal visual sources when images are available.
 - [ ] Xiaohongshu cards are labeled `参考帖`; Taobao/Tmall cards are labeled `商品候选`.
 - [ ] The final answer separates experience evidence from purchase candidates and names uncertainties.

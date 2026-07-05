@@ -31,10 +31,10 @@ If the user asks to log feeding/sleep/stool/symptom events, load `xiaoduiyou-gro
 5. Keep birthday as `YYYY-MM-DD` when possible. If the user gives an ambiguous date, ask one concise clarification before writing.
 6. Store height in `heightCm` and weight in `weightKg` as strings, without unit text inside the value. Example: `80`, `10.5`.
 7. For allergy, write a short factual note. Use empty string only when the user explicitly says to clear allergies.
-8. For photos, pass only an HTTPS `photoUrl` that is already uploaded to Xiaoduiyou/TOS assets. Do not pass local paths, `file:`, `blob:`, localhost, or private-network URLs.
+8. For photos, pass only a browser-fetchable HTTPS `photoUrl`. Public HTTPS photo URLs may be used directly when stable and fetchable without cookies/login; local/generated photos must be uploaded first. Do not pass local paths, `file:`, `blob:`, localhost, or private-network URLs.
 9. For development progress, read `development[].nodes[]` from `xiaoduiyou_child_get`. Patch `skill_node_states` using the exact node `key` returned there, with `true` for lit/unlocked and `false` for unlit/locked. Do not invent keys from memory.
 10. After patching, verify with `xiaoduiyou_child_get` and answer with the changed fields/nodes only.
-11. Keep private family facts out of skill files. In local Hermes, durable household preferences belong in `${HERMES_HOME:-$HOME/.hermes}/private/xiaoduiyou-family-care-preferences.md`, not here.
+11. Keep private family facts out of skill files. In local Hermes, durable household preferences belong in `${HERMES_HOME:-$HOME/.hermes}/private/xiaoduiyou-family-care-preferences.md`, not here. Read that file before using private family names/preferences; create or update it when the user gives durable private context. Because it is outside `skills/` and `plugins/`, skill/plugin upgrades should not overwrite it.
 12. When called from `xiaoduiyou-growth-diary` after a height/weight/allergy diary record, patch only the latest provided `heightCm`, `weightKg`, and/or `allergy`; the diary record remains the historical source of the event.
 
 ## Fields

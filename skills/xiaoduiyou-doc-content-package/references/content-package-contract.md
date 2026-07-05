@@ -115,6 +115,6 @@ When revising which result pages should exist, call `xiaoduiyou_documents_update
 - Xiaohongshu first image is the feed cover.
 - Publish body includes hashtags inline when needed; no separate topic section is required.
 - Moments text is ready to copy and uses images intentionally.
-- Every local/generated image has been uploaded and URL-verified.
+- Every final image is URL-verified and browser-accessible; local/generated images have been uploaded or converted before use, while stable public HTTPS source images may be referenced directly.
 - `source_markdown` / process document preserves enough source, references, visual direction, and decisions for later QA.
 - No credentials or secrets are present in final artifact/document text.
