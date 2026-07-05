@@ -26,7 +26,7 @@ from typing import Any
 from urllib import error, parse, request
 
 
-RUNNER_VERSION = "2026.7.4.5-codex-runner"
+RUNNER_VERSION = "2026.7.5.1-codex-runner"
 DEFAULT_HOME = Path.home() / ".codex" / "xiaoduiyou-runner"
 DEFAULT_CONFIG = DEFAULT_HOME / "config.json"
 DEFAULT_LOG = DEFAULT_HOME / "runner.log"

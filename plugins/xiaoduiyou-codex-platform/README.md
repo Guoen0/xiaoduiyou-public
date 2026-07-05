@@ -29,6 +29,7 @@ stores them in `~/.codex/xiaoduiyou-connection.json`.
 - `xiaoduiyou_agent_channels_list`
 - `xiaoduiyou_agent_channel_message`
 - `xiaoduiyou_im_send`
+- `xiaoduiyou_assets_upload`
 - `xiaoduiyou_interactive_request_create`
 - `xiaoduiyou_interactive_request_get`
 - `xiaoduiyou_interactive_request_wait`

@@ -27,7 +27,7 @@ Load this when:
 2. Prefer the `xiaoduiyou_im_send` tool for visual cards. It accepts OpenAI Responses-style `content[]` parts and the Xiaoduiyou backend uploads images/assets.
 3. Visual cards in Xiaoduiyou render as `image_attachments[]`, not `MEDIA:/...`, Markdown images, browser screenshots, or link-only text.
 4. Local/server-static paths are invalid in final chat cards. Pass HTTPS images or `data:image/...;base64,...` to `xiaoduiyou_im_send`; never pass `/tmp`, `/Users`, `file:`, `blob:`, `localhost`, or private-network URLs.
-5. **Hard lesson from user correction:** If the current source/screen is Xiaoduiyou and the deliverable is an image, do not put `MEDIA:/local/path` in the final answer. Convert the generated/local image to a deliverable Xiaoduiyou image first. Preferred workflow for generated images: QA the local output, remove/crop visible provider watermark if needed, upload the approved local file to Xiaoduiyou TOS (see `xiaoduiyou-tos-upload`), HEAD-verify the HTTPS URL returns `200 image/*`, then call `xiaoduiyou_im_send` with an `input_image` part and verify `attachment_count >= 1`. If a stable TOS upload is not needed and the model returned a valid HTTPS URL, that URL may be sent directly. Base64 `data:image/<type>;base64,...` is an acceptable fallback for small images.
+5. **Hard lesson from user correction:** If the current source/screen is Xiaoduiyou and the deliverable is an image, do not put `MEDIA:/local/path` in the final answer. Convert the generated/local image to a deliverable Xiaoduiyou image first. Preferred workflow for generated images: QA the local output, remove/crop visible provider watermark if needed, upload the approved local file with `xiaoduiyou_assets_upload`, HEAD-verify the HTTPS URL returns `200 image/*`, then call `xiaoduiyou_im_send` with an `input_image` part and verify `attachment_count >= 1`. If a stable upload is not needed and the model returned a valid HTTPS URL, that URL may be sent directly. Base64 `data:image/<type>;base64,...` is an acceptable fallback for small images.
 6. **Send the Xiaoduiyou IM payload inside the same active turn before the final text reply.** Do not first finalize with a local/Markdown path and try to "补发" later; the runtime may close the turn and reject late IM sends.
 7. Verify delivery: response event type, attachment count, and at least one image URL HTTP 200 image content-type.
 7. If Xiaoduiyou IM delivery fails with a platform/runtime error (for example `TURN_ALREADY_CLOSED`, missing attachments despite correct `xiaoduiyou_im_send`, or frontend cannot display supported image payloads), do not keep silently retrying or blame the user. Briefly explain that this looks like a platform issue, encourage the user to keep using the product and to submit feedback when convenient, and provide a concise copy-pasteable bug report with environment/session, repro steps, actual/expected result, and exact error.
@@ -44,7 +44,7 @@ Load this when:
 | `淘宝上找一下...给我` / `淘宝上找一下...给我卡片` | `references/product-question-workflow.md` then `references/visual-card-delivery.md` | Product research plus clickable candidate cards. |
 | `小红书找参考帖` / source examples | `references/product-question-workflow.md` and `references/visual-card-delivery.md` | Source/reference cards and links. |
 | Runtime send/message/card payload details | `references/runtime-api-reference.md` | Chat message endpoint and `image_attachments` payloads. |
-| Asset upload/image URL verification for chat cards | `references/image-upload-contract.md` | Upload local/generated images before final UI use. |
+| Asset upload/image URL verification for chat cards | `xiaoduiyou_assets_upload` + `references/image-upload-contract.md` | Upload local/generated images before final UI use. |
 | Runtime turn lifecycle / message stream state | `references/runtime-turn-lifecycle.md` | Debug or reason about Agent 对话页 runtime turns. |
 | Child profile/development: name/birthday/gender/allergy/height/weight/photo/skill nodes | load `xiaoduiyou-child-profile` | Profile and development writes use `xiaoduiyou_child_get` and `xiaoduiyou_child_patch`. |
 | Scheduled Xiaoduiyou message / reminder / cron delivery | `cronjob(action="create")` with `deliver` | Cron runs without `send_message`; delivery target must be encoded in `deliver`. |
@@ -57,7 +57,7 @@ Load this when:
 | Visual/clickable image cards | handle here; open `references/visual-card-delivery.md` |
 | Product questions: XHS + Taobao/Tmall + cards | handle here; open `references/product-question-workflow.md` |
 | Runtime endpoints and message payloads | handle here; open `references/runtime-api-reference.md` |
-| Upload/verify images | handle here; open `references/image-upload-contract.md` |
+| Upload/verify images | use `xiaoduiyou_assets_upload`; open `references/image-upload-contract.md` |
 | Scheduled message/reminder to a Xiaoduiyou channel | use `cronjob(action="create")` with `deliver`; do not schedule a future `send_message` call |
 | Baby/toddler parenting guidance without record writes | answer in chat; use the parenting guidance rules below |
 | Child profile or development progress update/query | load `xiaoduiyou-child-profile` |
@@ -80,9 +80,9 @@ Use this section for Xiaoduiyou chat answers about baby/toddler development, par
 
 ## Preferred Tool
 
-Call `xiaoduiyou_im_send` with OpenAI Responses-style content parts. Omit `session_id` for background/default delivery; Xiaoduiyou will route it to the stable Home `default` channel, shown to users as `主对话`. Pass `session_id` only when replying to a specific active session.
+Call `xiaoduiyou_im_send` with OpenAI Responses-style content parts. In an active/recent Xiaoduiyou turn, omit `session_id` and let the connector inherit the current `session_id`/`turn_id`. For background/default Home delivery, pass `channel: "default"` explicitly. Pass `session_id` only when replying to a specific active session.
 
-For image-generation replies in Xiaoduiyou, the safe delivery sequence is: generate → inspect/QA local output → crop or regenerate if watermark/quality is unacceptable → upload the final file to TOS with `xiaoduiyou-tos-upload` when a durable HTTPS URL is useful → verify `200 image/*` → send the verified URL as an `input_image` card → only then final-text summarize. Never use `MEDIA:` as the Xiaoduiyou deliverable.
+For image-generation replies in Xiaoduiyou, the safe delivery sequence is: generate → inspect/QA local output → crop or regenerate if watermark/quality is unacceptable → upload the final file with `xiaoduiyou_assets_upload` when a durable HTTPS URL is useful → verify `200 image/*` → send the verified URL as an `input_image` card → only then final-text summarize. Never use `MEDIA:` as the Xiaoduiyou deliverable.
 
 ```json
 {

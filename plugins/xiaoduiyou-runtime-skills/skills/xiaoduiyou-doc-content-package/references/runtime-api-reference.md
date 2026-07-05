@@ -42,7 +42,7 @@ The progress payload may include richer UI fields:
   ],
   "artifact_link": {
     "artifact_id": "artifact_xxx",
-    "label": "过程文档",
+    "label": "文档",
     "title": "产品调研过程"
   }
 }
@@ -87,7 +87,8 @@ Body uses OpenAI Responses-style content parts:
 
 Backend behavior:
 
-- `channel` is optional and defaults to `default` (`主对话`) when `session_id` is omitted;
+- in an active/recent Xiaoduiyou turn, omit `session_id` and let the connector inherit the current `session_id`/`turn_id`;
+- for background/default Home delivery, pass `channel: "default"` explicitly;
 - use `session_id` only for a specific active Xiaoduiyou session;
 - accepts `https://` images and `data:image/png|jpeg|webp|gif;base64,...`;
 - rejects local paths, `file:`, `blob:`, `localhost`, private-network URLs, non-image content-types, and images over 10 MB;
@@ -108,7 +109,8 @@ Headers are the same Agent auth headers as turn polling/callbacks. Minimal body:
 ```
 
 - Hermes/OpenClaw platform `send_message` / outbound text tools may only expose a text field. In that case send the same object as a JSON string; the Xiaoduiyou plugin/connector will parse it and POST the structured payload. This is the fastest path when the user asks to convert an existing answer into visual cards in the current chat.
-- If direct `POST /api/assets` returns `UNAUTHENTICATED` because the agent is outside an active Xiaoduiyou runtime/auth context, do not stall. Prefer the platform `send_message` JSON-string path for chat-only visual cards, clearly using already obtained image URLs. Only claim durable Xiaoduiyou asset upload when `/api/assets` returned and the URL was verified.
+- Use `xiaoduiyou_assets_upload` for local/generated files that need durable Xiaoduiyou asset URLs. It wraps `POST /api/assets` with connector-owned auth and returns top-level `url` plus `asset` metadata.
+- If direct `POST /api/assets` returns `UNAUTHENTICATED` because the agent is outside an active Xiaoduiyou runtime/auth context, do not stall. Prefer `xiaoduiyou_assets_upload` when available; otherwise use the platform `send_message` JSON-string path for chat-only visual cards with already obtained image URLs. Only claim durable Xiaoduiyou asset upload when the asset API/tool returned and the URL was verified.
 - These outbound chat endpoints are for chat bubbles and visual cards. They still do **not** mutate `artifact` or run `document_actions`; use active-turn `events` / `callback` plus document tools for artifacts and document mutations.
 
 ### Complete turn
@@ -152,6 +154,12 @@ Generic content artifact:
 ## Assets
 
 `POST /api/assets`
+
+Preferred tool:
+
+`xiaoduiyou_assets_upload(file_path, source?, session_id?, turn_id?, document_id?, require_remote_storage?)`
+
+The tool inherits active/recent Xiaoduiyou `session_id`/`turn_id` when the connector has that context, and returns `{ url, asset }`.
 
 Multipart fields:
 

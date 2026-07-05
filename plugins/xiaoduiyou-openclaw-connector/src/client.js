@@ -1,9 +1,11 @@
 import crypto from "node:crypto";
+import { readFile } from "node:fs/promises";
 import net from "node:net";
+import path from "node:path";
 import tls from "node:tls";
 import { once } from "node:events";
 
-export const XIAODUIYOU_CONNECTOR_VERSION = "2026.7.4.5";
+export const XIAODUIYOU_CONNECTOR_VERSION = "2026.7.5.1";
 const WEBSOCKET_RETRY_MS = 3_000;
 const WEBSOCKET_IDLE_TIMEOUT_MS = 15_000;
 const DEFAULT_WEBSOCKET_PING_INTERVAL_MS = 25_000;
@@ -52,6 +54,21 @@ async function requestJson(account, path, options = {}) {
     signal: options.signal,
   });
   return await readJsonResponse(response, path);
+}
+
+async function requestMultipart(account, apiPath, formData, options = {}) {
+  const response = await fetch(`${account.baseUrl}${apiPath}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${account.connectionToken}`,
+      "X-XDY-Connector-Version": XIAODUIYOU_CONNECTOR_VERSION,
+      "X-XDY-Connector-Provider": "openclaw",
+      ...(options.headers ?? {}),
+    },
+    body: formData,
+    signal: options.signal,
+  });
+  return await readJsonResponse(response, apiPath);
 }
 
 function compactQuery(params = {}) {
@@ -110,6 +127,23 @@ export async function applyXiaoduiyouDocumentMutation(account, documentId, paylo
 
 export async function getXiaoduiyouDocumentMutation(account, documentId, mutationId) {
   return await requestJson(account, `/api/docs/${encodeURIComponent(documentId)}/mutations/${encodeURIComponent(mutationId)}`);
+}
+
+export async function uploadXiaoduiyouAsset(account, params = {}) {
+  const filePath = String(params.file_path ?? "").trim();
+  if (!filePath) throw new Error("xiaoduiyou_assets_upload requires file_path");
+  const bytes = await readFile(filePath);
+  const fileName = String(params.file_name ?? path.basename(filePath) ?? "asset").trim() || "asset";
+  const mimeType = String(params.mime_type ?? "").trim() || "application/octet-stream";
+  const formData = new FormData();
+  formData.set("file", new Blob([bytes], { type: mimeType }), fileName);
+  formData.set("source", String(params.source ?? "agent_generated"));
+  formData.set("require_remote_storage", params.require_remote_storage === false ? "false" : "true");
+  for (const key of ["session_id", "turn_id", "document_id"]) {
+    const value = String(params[key] ?? "").trim();
+    if (value) formData.set(key, value);
+  }
+  return await requestMultipart(account, "/api/assets", formData);
 }
 
 export async function pollXiaoduiyouTurn(account, signal) {

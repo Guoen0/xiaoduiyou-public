@@ -81,10 +81,11 @@ def main() -> None:
     require_text(
         ROOT / "plugins" / "xiaoduiyou-codex-platform" / "scripts" / "xiaoduiyou_mcp.py",
         [
-            "CONNECTOR_VERSION = \"2026.7.4.5-codex\"",
+            "CONNECTOR_VERSION = \"2026.7.5.1-codex\"",
             "DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS = 25.0",
             "DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS = 10.0",
             "WebSocketKeepalive",
+            "\"name\": \"xiaoduiyou_assets_upload\"",
             "\"name\": \"xiaoduiyou_im_send\"",
             "\"name\": \"xiaoduiyou_interactive_request_create\"",
             "\"name\": \"xiaoduiyou_interactive_request_wait\"",
@@ -101,7 +102,7 @@ def main() -> None:
     require_text(
         ROOT / "plugins" / "xiaoduiyou-codex-runner" / "scripts" / "xiaoduiyou_codex_runner.py",
         [
-            "RUNNER_VERSION = \"2026.7.4.5-codex-runner\"",
+            "RUNNER_VERSION = \"2026.7.5.1-codex-runner\"",
             "DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS = 25.0",
             "DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS = 10.0",
             "WebSocketKeepalive",
@@ -113,6 +114,7 @@ def main() -> None:
         ROOT / "scripts" / "install-openclaw.sh",
         [
             "xiaoduiyou_im_send",
+            "xiaoduiyou_assets_upload",
             "openclaw plugins install",
             "OPENCLAW_HOME_ROOT",
             "channels.xiaoduiyou.websocketPingIntervalMs 25000",
@@ -131,6 +133,7 @@ def main() -> None:
             "xiaoduiyou-child-profile",
             "xiaoduiyou-feedback-issues",
             "xiaoduiyou_im_send",
+            "xiaoduiyou_assets_upload",
             "xiaoduiyou_interactive_request_create",
             "xiaoduiyou_interactive_request_wait",
             "channel directory",
@@ -156,6 +159,7 @@ def main() -> None:
             [
                 "POST /api/agent/im/send",
                 "xiaoduiyou_im_send",
+                "xiaoduiyou_assets_upload",
                 "default",
                 "主对话",
                 "Do not use it for cron/background/Home delivery.",

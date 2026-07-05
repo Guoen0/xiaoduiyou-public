@@ -1,6 +1,6 @@
 # Process document Markdown fidelity
 
-Use this when Xiaoduiyou content packages or ordinary documents preserve original Markdown/Feishu source material under `过程文档`.
+Use this when Xiaoduiyou content packages or ordinary documents preserve original Markdown/Feishu source material under `文档`.
 
 ## Expected behavior
 

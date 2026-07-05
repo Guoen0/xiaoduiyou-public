@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.4.6"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.5.1"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -66,6 +66,9 @@ _ACTIONS_BY_SESSION: Dict[str, List[Dict[str, Any]]] = {}
 _PROGRESS_BY_MESSAGE: Dict[str, str] = {}
 _PROGRESS_COUNTER = 0
 _DOCUMENT_MUTATION_COUNTER = 0
+_RECENT_TOOL_CONTEXT: Dict[str, Any] = {}
+_RECENT_TOOL_CONTEXT_AT = 0.0
+_RECENT_TOOL_CONTEXT_TTL_SECONDS = 30 * 60
 
 
 class XiaoduiyouAuthError(RuntimeError):
@@ -618,6 +621,22 @@ def _queue_action(action: Dict[str, Any]) -> None:
         _ACTIONS_BY_SESSION.setdefault(chat_id, []).append(action)
 
 
+def _remember_tool_context(context: Dict[str, Any]) -> Dict[str, Any]:
+    global _RECENT_TOOL_CONTEXT, _RECENT_TOOL_CONTEXT_AT
+    if any(str(context.get(key) or "").strip() for key in ("session_id", "turn_id", "document_id")):
+        _RECENT_TOOL_CONTEXT = dict(context)
+        _RECENT_TOOL_CONTEXT_AT = time.time()
+    return context
+
+
+def _recent_tool_context() -> Dict[str, Any]:
+    if _RECENT_TOOL_CONTEXT and time.time() - _RECENT_TOOL_CONTEXT_AT <= _RECENT_TOOL_CONTEXT_TTL_SECONDS:
+        context = dict(_RECENT_TOOL_CONTEXT)
+        context["recovered_from_recent_context"] = True
+        return context
+    return {}
+
+
 def _drain_actions(chat_id: str = "") -> List[Dict[str, Any]]:
     actions = list(_PENDING_DOCUMENT_ACTIONS.get() or [])
     _PENDING_DOCUMENT_ACTIONS.set([])
@@ -730,11 +749,11 @@ def _request_json(url: str, *, method: str = "GET", payload: Optional[Dict[str, 
 
 
 
-def _upload_asset_file(base_url: str, token: str, path: str, *, session_id: str = "", turn_id: str = "", document_id: str = "", timeout: float = DEFAULT_TIMEOUT_SECONDS) -> str:
+def _upload_asset_file_result(base_url: str, token: str, path: str, *, session_id: str = "", turn_id: str = "", document_id: str = "", source: str = "agent_generated", require_remote_storage: bool = True, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> Dict[str, Any]:
     boundary = f"----XiaoduiyouHermes{int(time.time() * 1000)}"
     filename = os.path.basename(path) or "image"
     mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-    fields = {"source": "external_import", "require_remote_storage": "true"}
+    fields = {"source": source or "agent_generated", "require_remote_storage": "true" if require_remote_storage else "false"}
     if session_id:
         fields["session_id"] = session_id
     if turn_id:
@@ -764,7 +783,21 @@ def _upload_asset_file(base_url: str, token: str, path: str, *, session_id: str 
         data=b"".join(chunks),
         headers=headers,
     )
-    result = _json_response(req, timeout=timeout)
+    return _json_response(req, timeout=timeout)
+
+
+def _upload_asset_file(base_url: str, token: str, path: str, *, session_id: str = "", turn_id: str = "", document_id: str = "", timeout: float = DEFAULT_TIMEOUT_SECONDS) -> str:
+    result = _upload_asset_file_result(
+        base_url,
+        token,
+        path,
+        session_id=session_id,
+        turn_id=turn_id,
+        document_id=document_id,
+        source="external_import",
+        require_remote_storage=True,
+        timeout=timeout,
+    )
     url = str(result.get("url") or ((result.get("asset") or {}).get("public_url")) or "").strip()
     if not url.startswith(("http://", "https://")):
         raise RuntimeError("Xiaoduiyou asset upload did not return a public URL")
@@ -1094,7 +1127,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             self._turn_by_session[session_id] = turn_id
             _TURN_BY_SESSION[session_id] = turn_id
             _PENDING_DOCUMENT_ACTIONS.set([])
-            _ACTIVE_XIAODUIYOU_TOOL_CONTEXT.set(self._tool_context_for_turn(turn, session_id=session_id, turn_id=turn_id))
+            _ACTIVE_XIAODUIYOU_TOOL_CONTEXT.set(_remember_tool_context(self._tool_context_for_turn(turn, session_id=session_id, turn_id=turn_id)))
             _ACTIONS_BY_SESSION.pop(session_id, None)
             command_text = str(turn.get("command_name") or user_message).strip() or user_message
             if not command_text.startswith("/"):
@@ -1121,7 +1154,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         self._turn_by_session[session_id] = turn_id
         _TURN_BY_SESSION[session_id] = turn_id
         _PENDING_DOCUMENT_ACTIONS.set([])
-        _ACTIVE_XIAODUIYOU_TOOL_CONTEXT.set(self._tool_context_for_turn(turn, session_id=session_id, turn_id=turn_id))
+        _ACTIVE_XIAODUIYOU_TOOL_CONTEXT.set(_remember_tool_context(self._tool_context_for_turn(turn, session_id=session_id, turn_id=turn_id)))
         _ACTIONS_BY_SESSION.pop(session_id, None)
 
         document_tool_note = (
@@ -1910,6 +1943,9 @@ def _tool_im_send(args: Dict[str, Any], **_: Any) -> str:
     content = args.get("content")
     if not isinstance(content, list) or not content:
         raise RuntimeError("xiaoduiyou_im_send requires content[] with input_text/input_image parts")
+    has_image = any(isinstance(part, dict) and str(part.get("type") or "") in {"input_image", "image"} for part in content)
+    if has_image and not session_id and not turn_id:
+        raise RuntimeError("xiaoduiyou_im_send image delivery requires session_id/turn_id or an active/recent Xiaoduiyou turn context")
     result = _request_json(
         f"{context['base_url']}/api/agent/im/send",
         method="POST",
@@ -1932,8 +1968,40 @@ def _tool_im_send(args: Dict[str, Any], **_: Any) -> str:
     }, ensure_ascii=False)
 
 
+def _tool_assets_upload(args: Dict[str, Any], **_: Any) -> str:
+    context = _active_tool_context()
+    file_path = str(args.get("file_path") or "").strip()
+    if not file_path:
+        raise RuntimeError("xiaoduiyou_assets_upload requires file_path")
+    session_id = str(args.get("session_id") or context.get("session_id") or "").strip()
+    turn_id = str(args.get("turn_id") or context.get("turn_id") or "").strip()
+    document_id = str(args.get("document_id") or context.get("document_id") or "").strip()
+    source = str(args.get("source") or "agent_generated").strip() or "agent_generated"
+    result = _upload_asset_file_result(
+        context["base_url"],
+        context["token"],
+        file_path,
+        session_id=session_id,
+        turn_id=turn_id,
+        document_id=document_id,
+        source=source,
+        require_remote_storage=bool(args.get("require_remote_storage", True)),
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+    )
+    asset = result.get("asset") if isinstance(result.get("asset"), dict) else {}
+    url = str(result.get("url") or asset.get("public_url") or "").strip()
+    if not url.startswith(("http://", "https://")):
+        raise RuntimeError("Xiaoduiyou asset upload did not return a public URL")
+    return json.dumps({
+        "ok": True,
+        "context": _safe_tool_context({**context, "session_id": session_id, "turn_id": turn_id, "document_id": document_id}),
+        "url": url,
+        "asset": asset,
+    }, ensure_ascii=False)
+
+
 def _active_tool_context() -> Dict[str, Any]:
-    context = _ACTIVE_XIAODUIYOU_TOOL_CONTEXT.get() or {}
+    context = _ACTIVE_XIAODUIYOU_TOOL_CONTEXT.get() or _recent_tool_context()
     base_url = str(context.get("base_url") or _base_url_from_config() or "").rstrip("/")
     token = str(context.get("token") or _connection_token_from_config() or "").strip()
     if not base_url:
@@ -2570,9 +2638,34 @@ def register(ctx) -> None:
         check_fn=check_requirements,
     )
     ctx.register_tool(
+        name="xiaoduiyou_assets_upload",
+        toolset=TOOLSET,
+        description="Upload a local file through Xiaoduiyou connector auth to durable platform asset storage and return a browser-accessible URL.",
+        emoji="📎",
+        schema={
+            "name": "xiaoduiyou_assets_upload",
+            "description": "Upload a local file to Xiaoduiyou assets/TOS using connector-owned auth. Returns stable HTTPS url plus asset metadata. Use before writing generated/local files into documents, publish notes, Growth Diary attachments, or IM cards.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string", "description": "Absolute local file path to upload."},
+                    "source": {"type": "string", "enum": ["agent_generated", "external_import", "user_upload"], "description": "Asset source. Defaults agent_generated."},
+                    "require_remote_storage": {"type": "boolean", "description": "Require durable remote/TOS storage. Defaults true."},
+                    "session_id": {"type": "string", "description": "Optional Xiaoduiyou session id. Omit inside an active/recent turn."},
+                    "turn_id": {"type": "string", "description": "Optional Xiaoduiyou turn id. Omit inside an active/recent turn."},
+                    "document_id": {"type": "string", "description": "Optional Xiaoduiyou document id. Omit inside a document turn."},
+                },
+                "required": ["file_path"],
+            },
+        },
+        handler=_tool_assets_upload,
+        check_fn=check_requirements,
+    )
+
+    ctx.register_tool(
         name="xiaoduiyou_im_send",
         toolset=TOOLSET,
-        description="Send Xiaoduiyou chat image cards using OpenAI Responses-style content parts. Use input_text and input_image; backend uploads images and creates image_attachments.",
+        description="Send Xiaoduiyou chat image cards using OpenAI Responses-style content parts. In or shortly after a Xiaoduiyou turn, omitted session_id inherits the current/recent session; pass explicit channel only for Home/background delivery.",
         emoji="🖼️",
         schema={
             "name": "xiaoduiyou_im_send",

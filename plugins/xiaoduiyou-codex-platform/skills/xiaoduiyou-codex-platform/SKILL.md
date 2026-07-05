@@ -73,7 +73,7 @@ Use `updates` for existing cells and `deletions` for deletes. Never send `values
 
 ## IM Cards
 
-For Xiaoduiyou chat visual cards, call `xiaoduiyou_im_send` instead of uploading images yourself. The tool accepts OpenAI Responses-style `content[]` parts:
+For Xiaoduiyou chat visual cards, call `xiaoduiyou_im_send`. For local/generated files that need durable URLs before being written into documents, diary photos, publish notes, or cards, call `xiaoduiyou_assets_upload` first. The IM tool accepts OpenAI Responses-style `content[]` parts:
 
 ```json
 {

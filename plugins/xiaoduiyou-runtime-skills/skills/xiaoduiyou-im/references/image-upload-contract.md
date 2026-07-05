@@ -19,7 +19,9 @@ Official replay/reference/product images must not be stored in the app server re
 
 For chat-only visual cards, prefer `xiaoduiyou_im_send` and pass `https://` or `data:image/...;base64,...`; Xiaoduiyou backend uploads the image and emits `image_attachments`.
 
-For document artifacts or legacy connectors without `xiaoduiyou_im_send`:
+For local/generated files that need durable URLs, use the first-class connector tool `xiaoduiyou_assets_upload` when available. It accepts `file_path`, optional `file_name`/`mime_type`, `source`, `session_id`, `turn_id`, `document_id`, and `require_remote_storage`, then returns top-level `url` plus `asset` metadata.
+
+For document artifacts or connectors without `xiaoduiyou_assets_upload`:
 
 1. Generate or obtain the final image file.
 2. Upload it to Xiaoduiyou:

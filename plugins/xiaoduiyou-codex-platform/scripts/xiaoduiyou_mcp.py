@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 import os
 import base64
 import hashlib
@@ -20,7 +21,7 @@ from urllib import error, parse, request
 
 
 VERSION = "0.1.5"
-CONNECTOR_VERSION = "2026.7.4.5-codex"
+CONNECTOR_VERSION = "2026.7.5.1-codex"
 DEFAULT_CONFIG_PATH = Path.home() / ".codex" / "xiaoduiyou-connection.json"
 DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS = 25.0
 DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS = 10.0
@@ -119,6 +120,47 @@ def request_json(path: str, *, method: str = "GET", body: Any = None, headers: d
         setattr(err, "status", exc.code)
         setattr(err, "payload", payload)
         raise err
+
+
+def upload_asset_file(args: dict[str, Any]) -> Any:
+    account = configured_account()
+    file_path = Path(required(args, "file_path")).expanduser()
+    if not file_path.is_file():
+        raise ValueError(f"file_path is not a file: {file_path}")
+    boundary = f"----XiaoduiyouCodex{int(time.time() * 1000)}"
+    file_name = str(args.get("file_name") or file_path.name or "asset")
+    mime_type = str(args.get("mime_type") or mimetypes.guess_type(file_name)[0] or "application/octet-stream")
+    fields: dict[str, str] = {
+        "source": str(args.get("source") or "agent_generated"),
+        "require_remote_storage": "false" if args.get("require_remote_storage") is False else "true",
+    }
+    for key in ["session_id", "turn_id", "document_id"]:
+        value = str(args.get(key) or "").strip()
+        if value:
+            fields[key] = value
+    chunks: list[bytes] = []
+    for key, value in fields.items():
+        chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+        chunks.append(f'Content-Disposition: form-data; name="{key}"\r\n\r\n{value}\r\n'.encode("utf-8"))
+    chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+    chunks.append(f'Content-Disposition: form-data; name="file"; filename="{file_name}"\r\n'.encode("utf-8"))
+    chunks.append(f"Content-Type: {mime_type}\r\n\r\n".encode("utf-8"))
+    chunks.append(file_path.read_bytes())
+    chunks.append(f"\r\n--{boundary}--\r\n".encode("utf-8"))
+    req = request.Request(
+        f"{account['base_url']}/api/assets",
+        method="POST",
+        data=b"".join(chunks),
+        headers={
+            "authorization": f"Bearer {account['connection_token']}",
+            "content-type": f"multipart/form-data; boundary={boundary}",
+            "x-xdy-connector-version": CONNECTOR_VERSION,
+            "x-xdy-connector-provider": "codex",
+        },
+    )
+    with request.urlopen(req, timeout=30) as resp:
+        raw = resp.read().decode("utf-8")
+        return json.loads(raw) if raw else {}
 
 
 class XiaoduiyouWebSocketError(RuntimeError):
@@ -523,13 +565,17 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
 
     if name == "xiaoduiyou_im_send":
         session_id = str(args.get("session_id") or "").strip()
-        channel = str(args.get("channel") or "default").strip()
+        channel = str(args.get("channel") or "").strip()
+        turn_id = str(args.get("turn_id") or "").strip()
         content = args.get("content")
         text = str(args.get("text") or "").strip()
         tool_progress = str(args.get("tool_progress") or "").strip()
         message_type = str(args.get("message_type") or "").strip()
         if (not isinstance(content, list) or not content) and not text and not tool_progress:
             raise ValueError("content[], text, or tool_progress is required")
+        has_image = isinstance(content, list) and any(isinstance(part, dict) and str(part.get("type") or "") in {"input_image", "image"} for part in content)
+        if has_image and not session_id and not turn_id and not channel:
+            raise ValueError("xiaoduiyou_im_send image delivery requires session_id/turn_id, an active/recent Xiaoduiyou turn context, or an explicit channel")
         payload: dict[str, Any] = {}
         if isinstance(content, list) and content:
             payload["content"] = content
@@ -541,12 +587,16 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             payload["message_type"] = message_type
         if session_id:
             payload["session_id"] = session_id
-        else:
-            payload["channel"] = channel or "default"
-        turn_id = str(args.get("turn_id") or "").strip()
+        elif channel:
+            payload["channel"] = channel
+        elif not turn_id:
+            payload["channel"] = "default"
         if turn_id:
             payload["turn_id"] = turn_id
         return text_result(request_json("/api/agent/im/send", method="POST", body=payload))
+
+    if name == "xiaoduiyou_assets_upload":
+        return text_result(upload_asset_file(args))
 
     if name == "xiaoduiyou_interactive_request_create":
         session_id = required(args, "session_id")
@@ -739,9 +789,9 @@ TOOLS = [
     },
     {
         "name": "xiaoduiyou_im_send",
-        "description": "Send Xiaoduiyou chat text, tool-progress, or image cards to the Home default channel (主对话) or a specific session. Omit session_id for background/default delivery. Use input_text and input_image for cards; pass HTTPS or data:image/... base64 in image_url. Xiaoduiyou backend uploads images/assets. Never pass local paths, file:, blob:, localhost, or private-network URLs.",
+        "description": "Send Xiaoduiyou chat text, tool-progress, or image cards to the active turn/session or an explicit Home default channel (主对话). Use input_text and input_image for cards; pass HTTPS or data:image/... base64 in image_url. Xiaoduiyou backend uploads images/assets. Never pass local paths, file:, blob:, localhost, or private-network URLs.",
         "inputSchema": schema({
-            "channel": {"type": "string", "description": "Stable Xiaoduiyou Home channel key. Defaults to default/主对话 when session_id is omitted."},
+            "channel": {"type": "string", "description": "Stable Xiaoduiyou Home channel key. Pass default explicitly only for background/Home delivery."},
             "session_id": {"type": "string"},
             "turn_id": {"type": "string"},
             "text": {"type": "string"},
@@ -773,6 +823,20 @@ TOOLS = [
                 },
             },
         }, ["content"]),
+    },
+    {
+        "name": "xiaoduiyou_assets_upload",
+        "description": "Upload a local file through Xiaoduiyou connector auth to durable platform asset storage and return a browser-accessible URL plus asset metadata.",
+        "inputSchema": schema({
+            "file_path": {"type": "string"},
+            "file_name": {"type": "string"},
+            "mime_type": {"type": "string"},
+            "source": {"type": "string", "enum": ["agent_generated", "external_import", "user_upload"]},
+            "require_remote_storage": {"type": "boolean"},
+            "session_id": {"type": "string"},
+            "turn_id": {"type": "string"},
+            "document_id": {"type": "string"},
+        }, ["file_path"]),
     },
     {
         "name": "xiaoduiyou_interactive_request_create",

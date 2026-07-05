@@ -90,8 +90,10 @@ OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw skills info xiaoduiyou-child-profil
 OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw plugins list | grep -i xiaoduiyou >/dev/null
 OPENCLAW_HOME="$OPENCLAW_HOME_ROOT" openclaw config get tools.alsoAllow | grep -F 'group:plugins' >/dev/null
 grep -F 'xiaoduiyou_im_send' "$repo_dir/plugins/xiaoduiyou-openclaw-connector/openclaw.plugin.json" >/dev/null
+grep -F 'xiaoduiyou_assets_upload' "$repo_dir/plugins/xiaoduiyou-openclaw-connector/openclaw.plugin.json" >/dev/null
 grep -F 'xiaoduiyou_child_get' "$repo_dir/plugins/xiaoduiyou-openclaw-connector/openclaw.plugin.json" >/dev/null
 grep -F 'xiaoduiyou_im_send' "$repo_dir/plugins/xiaoduiyou-openclaw-connector/src/tools.js" >/dev/null
+grep -F 'xiaoduiyou_assets_upload' "$repo_dir/plugins/xiaoduiyou-openclaw-connector/src/tools.js" >/dev/null
 grep -F 'xiaoduiyou_child_patch' "$repo_dir/plugins/xiaoduiyou-openclaw-connector/src/tools.js" >/dev/null
 
 echo "Xiaoduiyou OpenClaw connector and skills are installed in ${OPENCLAW_HOME_ROOT}/.openclaw."

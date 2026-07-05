@@ -1,5 +1,5 @@
 import { resolveXiaoduiyouAccount } from "./accounts.js";
-import { applyXiaoduiyouDocumentMutation, getXiaoduiyouChild, getXiaoduiyouDocument, getXiaoduiyouGrowthDiary, patchXiaoduiyouChild, patchXiaoduiyouGrowthDiary, sendXiaoduiyouImMessage } from "./client.js";
+import { applyXiaoduiyouDocumentMutation, getXiaoduiyouChild, getXiaoduiyouDocument, getXiaoduiyouGrowthDiary, patchXiaoduiyouChild, patchXiaoduiyouGrowthDiary, sendXiaoduiyouImMessage, uploadXiaoduiyouAsset } from "./client.js";
 import { summarizeGrowthDiaryPatchResult } from "./growth-diary-summary.js";
 import { activeXiaoduiyouToolContext, maybeActiveXiaoduiyouToolContext, queueXiaoduiyouDocumentAction } from "./tool-context.js";
 
@@ -224,6 +224,23 @@ const ImSendSchema = {
   },
 };
 
+const AssetUploadSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    file_path: { type: "string", description: "Absolute local file path to upload. Do not pass file:, blob:, localhost, or already-public URLs." },
+    file_name: { type: "string", description: "Optional uploaded file name. Defaults to basename(file_path)." },
+    mime_type: { type: "string", description: "Optional MIME type such as image/png. Backend also infers from file_name." },
+    source: { type: "string", enum: ["agent_generated", "external_import", "user_upload"], description: "Asset source. Defaults agent_generated." },
+    require_remote_storage: { type: "boolean", description: "Require durable remote/TOS storage. Defaults true." },
+    document_id: { type: "string", description: "Optional Xiaoduiyou document id to associate with the asset." },
+    session_id: { type: "string", description: "Optional Xiaoduiyou session id. Defaults to current/recent Xiaoduiyou session when available." },
+    turn_id: { type: "string", description: "Optional Xiaoduiyou turn id. Defaults to current/recent Xiaoduiyou turn when available." },
+    account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the current connector account." },
+  },
+  required: ["file_path"],
+};
+
 function textBlock(text, type = "paragraph", props = undefined) {
   return {
     type,
@@ -278,6 +295,10 @@ function queuedResult(operation, action) {
     will_apply_on: "final_callback",
     next_step: "This update is not persisted yet. Do not tell the user the backend has been updated. Say only that the update has been queued; after the final callback or in a later turn, verify with xiaoduiyou_documents_get and compare the live revision/fields/blocks.",
   });
+}
+
+function hasImageContent(rawParams = {}) {
+  return Array.isArray(rawParams.content) && rawParams.content.some((part) => part && typeof part === "object" && (part.type === "input_image" || part.type === "image"));
 }
 
 function growthDiaryPatchFailureResult(error) {
@@ -552,14 +573,20 @@ function createImSendTool(config) {
   return {
     name: "xiaoduiyou_im_send",
     label: "Xiaoduiyou IM Send",
-    description: "Send Xiaoduiyou chat text/tool-progress/image cards to the Home default channel (主对话) or a specific session. Use input_text/input_image for cards; pass HTTPS or data:image/... base64 in image_url. Do not upload assets yourself and never pass local file paths.",
+    description: "Send Xiaoduiyou chat text/tool-progress/image cards. Inside or shortly after a Xiaoduiyou turn, omitted session_id inherits the current/recent session; pass channel explicitly only for Home/background delivery.",
     parameters: ImSendSchema,
     execute: async (_toolCallId, rawParams = {}) => {
-      const context = activeXiaoduiyouToolContext();
+      const context = maybeActiveXiaoduiyouToolContext();
       const account = resolveToolAccount(config, { ...rawParams, account_id: rawParams.account_id || context.accountId });
+      const sessionId = String(rawParams.session_id || context.sessionId || context.session_id || "").trim();
+      const turnId = String(rawParams.turn_id || context.turnId || context.turn_id || "").trim();
+      const channel = rawParams.channel === undefined ? "" : String(rawParams.channel || "").trim();
+      if (!sessionId && !turnId && !channel && hasImageContent(rawParams)) {
+        throw new Error("xiaoduiyou_im_send image delivery requires session_id/turn_id, an active/recent Xiaoduiyou turn context, or an explicit channel");
+      }
       const payload = {
-        ...(rawParams.session_id || context.sessionId ? { session_id: rawParams.session_id || context.sessionId } : { channel: rawParams.channel || "default" }),
-        ...(rawParams.turn_id || context.turnId ? { turn_id: rawParams.turn_id || context.turnId } : {}),
+        ...(sessionId ? { session_id: sessionId } : channel ? { channel } : {}),
+        ...(turnId ? { turn_id: turnId } : {}),
         ...(rawParams.content ? { content: rawParams.content } : {}),
         ...(rawParams.text ? { text: rawParams.text } : {}),
         ...(rawParams.message_type ? { message_type: rawParams.message_type } : {}),
@@ -570,8 +597,45 @@ function createImSendTool(config) {
         ok: true,
         status: result.status,
         mode: result.mode,
+        target: result.target,
+        context: {
+          session_id: sessionId || result.target?.session_id || result.target?.channel?.current_session_id || result.event?.session_id || null,
+          turn_id: turnId || null,
+          recovered_from_recent_context: Boolean(context.recoveredFromRecentContext),
+        },
         message_id: result.message_id,
         attachment_count: Array.isArray(result.image_attachments) ? result.image_attachments.length : 0,
+      });
+    },
+  };
+}
+
+function createAssetUploadTool(config) {
+  return {
+    name: "xiaoduiyou_assets_upload",
+    label: "Xiaoduiyou Assets Upload",
+    description: "Upload a local file through Xiaoduiyou connector auth to durable platform asset storage and return a browser-accessible URL.",
+    parameters: AssetUploadSchema,
+    execute: async (_toolCallId, rawParams = {}) => {
+      const context = maybeActiveXiaoduiyouToolContext();
+      const account = resolveToolAccount(config, { ...rawParams, account_id: rawParams.account_id || context.accountId });
+      const payload = {
+        ...rawParams,
+        session_id: rawParams.session_id || context.sessionId || context.session_id,
+        turn_id: rawParams.turn_id || context.turnId || context.turn_id,
+        document_id: rawParams.document_id || context.documentId || context.document_id,
+      };
+      const result = await uploadXiaoduiyouAsset(account, payload);
+      return jsonResult({
+        ok: true,
+        url: result.url ?? result.asset?.public_url,
+        asset: result.asset,
+        context: {
+          session_id: payload.session_id || null,
+          turn_id: payload.turn_id || null,
+          document_id: payload.document_id || null,
+          recovered_from_recent_context: Boolean(context.recoveredFromRecentContext),
+        },
       });
     },
   };
@@ -586,5 +650,6 @@ export function registerXiaoduiyouTools(api) {
   api.registerTool(createDocumentCreateTool(), { name: "xiaoduiyou_documents_create" });
   api.registerTool(createDocumentUpdateTool(api.config), { name: "xiaoduiyou_documents_update" });
   api.registerTool(createDocumentDeleteTool(), { name: "xiaoduiyou_documents_delete" });
+  api.registerTool(createAssetUploadTool(api.config), { name: "xiaoduiyou_assets_upload" });
   api.registerTool(createImSendTool(api.config), { name: "xiaoduiyou_im_send" });
 }

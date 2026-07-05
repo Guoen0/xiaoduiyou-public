@@ -11,7 +11,7 @@ This skill owns Xiaoduiyou document artifacts and content packages. It is separa
 
 Load this when the user asks for:
 
-- `内容包`, `文档`, `文档产物`, `过程文档`, `旅游规划`, `旅行规划`, `行程规划`, `发布稿`, `小红书发布稿`, `朋友圈发布稿`.
+- `内容包`, `文档`, `文档产物`, `文档`, `旅游规划`, `旅行规划`, `行程规划`, `发布稿`, `小红书发布稿`, `朋友圈发布稿`.
 - Create/update/delete a Xiaoduiyou document.
 - A result that should render as `ui_templates` / `publish_notes` tabs, including `travel_plan`.
 - Process/evidence material that should be preserved as `source_markdown` or document body.
