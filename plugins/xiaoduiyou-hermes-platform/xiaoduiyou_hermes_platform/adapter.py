@@ -749,10 +749,10 @@ def _request_json(url: str, *, method: str = "GET", payload: Optional[Dict[str, 
 
 
 
-def _upload_asset_file_result(base_url: str, token: str, path: str, *, session_id: str = "", turn_id: str = "", document_id: str = "", source: str = "agent_generated", require_remote_storage: bool = True, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> Dict[str, Any]:
+def _upload_asset_file_result(base_url: str, token: str, path: str, *, session_id: str = "", turn_id: str = "", document_id: str = "", source: str = "agent_generated", require_remote_storage: bool = True, file_name: str = "", mime_type: str = "", timeout: float = DEFAULT_TIMEOUT_SECONDS) -> Dict[str, Any]:
     boundary = f"----XiaoduiyouHermes{int(time.time() * 1000)}"
-    filename = os.path.basename(path) or "image"
-    mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    filename = file_name or os.path.basename(path) or "image"
+    upload_mime_type = mime_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
     fields = {"source": source or "agent_generated", "require_remote_storage": "true" if require_remote_storage else "false"}
     if session_id:
         fields["session_id"] = session_id
@@ -766,7 +766,7 @@ def _upload_asset_file_result(base_url: str, token: str, path: str, *, session_i
         chunks.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode("utf-8"))
     chunks.append(f"--{boundary}\r\n".encode("utf-8"))
     chunks.append(f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode("utf-8"))
-    chunks.append(f"Content-Type: {mime_type}\r\n\r\n".encode("utf-8"))
+    chunks.append(f"Content-Type: {upload_mime_type}\r\n\r\n".encode("utf-8"))
     with open(path, "rb") as f:
         chunks.append(f.read())
     chunks.append(f"\r\n--{boundary}--\r\n".encode("utf-8"))
@@ -1727,6 +1727,8 @@ def _looks_like_tool_progress(content: str) -> bool:
     stripped = (content or "").strip()
     if not stripped:
         return False
+    if stripped.startswith("📎 xiaoduiyou_assets_upload") or stripped.startswith("xiaoduiyou_assets_upload") or stripped.startswith("📎 xiaoduiyouassetsupload") or stripped.startswith("xiaoduiyouassetsupload"):
+        return True
     if _looks_like_gateway_command_listing(stripped):
         return False
     tool_markers = (
@@ -1742,7 +1744,7 @@ def _looks_like_tool_progress(content: str) -> bool:
         stripped.startswith(prefix) for prefix in (
             '🔍', '🔎', '📖', '📚', '🛠', '⚙', '✅', '💻', '🌐', '📝', '📁', '🔧',
             '📋', '🐍', '🎨', '👁', '🧠', '⏰', '🍼', '👶', '🧸', '📄', '✏️', '🗑️', '🖼️',
-            '📨',
+            '📎', '📨',
         )
     )
 
@@ -1968,28 +1970,76 @@ def _tool_im_send(args: Dict[str, Any], **_: Any) -> str:
     }, ensure_ascii=False)
 
 
+def _bool_arg(value: Any, default: bool = True) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() not in {"false", "0", "no", "off"}
+    return bool(value)
+
+
+def _asset_upload_items(args: Dict[str, Any]) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+
+    def add_item(raw_item: Any, defaults: Dict[str, Any]) -> None:
+        item = raw_item if isinstance(raw_item, dict) else {"file_path": raw_item}
+        file_path = str(item.get("file_path") or item.get("path") or "").strip()
+        if not file_path:
+            return
+        items.append({
+            "file_path": file_path,
+            "file_name": str(item.get("file_name") or defaults.get("file_name") or "").strip(),
+            "mime_type": str(item.get("mime_type") or defaults.get("mime_type") or "").strip(),
+            "source": str(item.get("source") or defaults.get("source") or "agent_generated").strip() or "agent_generated",
+            "require_remote_storage": _bool_arg(item.get("require_remote_storage", defaults.get("require_remote_storage")), True),
+        })
+
+    files = args.get("files")
+    if isinstance(files, list):
+        for item in files:
+            add_item(item, args)
+    file_paths = args.get("file_paths")
+    if isinstance(file_paths, list):
+        for file_path in file_paths:
+            add_item(file_path, args)
+    if "file_path" in args:
+        add_item(args, args)
+    return items
+
+
 def _tool_assets_upload(args: Dict[str, Any], **_: Any) -> str:
     context = _active_tool_context()
-    file_path = str(args.get("file_path") or "").strip()
-    if not file_path:
-        raise RuntimeError("xiaoduiyou_assets_upload requires file_path")
-    source = str(args.get("source") or "agent_generated").strip() or "agent_generated"
-    result = _upload_asset_file_result(
-        context["base_url"],
-        context["token"],
-        file_path,
-        source=source,
-        require_remote_storage=bool(args.get("require_remote_storage", True)),
-        timeout=DEFAULT_TIMEOUT_SECONDS,
-    )
-    asset = result.get("asset") if isinstance(result.get("asset"), dict) else {}
-    url = str(result.get("url") or asset.get("public_url") or "").strip()
-    if not url.startswith(("http://", "https://")):
-        raise RuntimeError("Xiaoduiyou asset upload did not return a public URL")
+    items = _asset_upload_items(args or {})
+    if not items:
+        raise RuntimeError("xiaoduiyou_assets_upload requires file_path, file_paths, or files")
+    uploads: List[Dict[str, Any]] = []
+    for item in items:
+        result = _upload_asset_file_result(
+            context["base_url"],
+            context["token"],
+            item["file_path"],
+            source=item["source"],
+            require_remote_storage=item["require_remote_storage"],
+            file_name=item["file_name"],
+            mime_type=item["mime_type"],
+            timeout=DEFAULT_TIMEOUT_SECONDS,
+        )
+        asset = result.get("asset") if isinstance(result.get("asset"), dict) else {}
+        url = str(result.get("url") or asset.get("public_url") or "").strip()
+        if not url.startswith(("http://", "https://")):
+            raise RuntimeError("Xiaoduiyou asset upload did not return a public URL")
+        uploads.append({"url": url, "asset": asset})
+    first = uploads[0]
     return json.dumps({
         "ok": True,
-        "url": url,
-        "asset": asset,
+        "url": first["url"],
+        "asset": first["asset"],
+        "urls": [upload["url"] for upload in uploads],
+        "assets": [upload["asset"] for upload in uploads],
+        "uploads": uploads,
+        "uploaded_count": len(uploads),
     }, ensure_ascii=False)
 
 
@@ -2642,10 +2692,35 @@ def register(ctx) -> None:
                 "type": "object",
                 "properties": {
                     "file_path": {"type": "string", "description": "Absolute local file path to upload."},
+                    "file_paths": {
+                        "type": "array",
+                        "description": "Batch upload multiple absolute local file paths in one tool call.",
+                        "items": {"type": "string"},
+                        "minItems": 1,
+                        "maxItems": 20,
+                    },
+                    "files": {
+                        "type": "array",
+                        "description": "Batch upload multiple local files with optional per-file names or MIME types.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "file_path": {"type": "string", "description": "Absolute local file path to upload."},
+                                "file_name": {"type": "string", "description": "Optional uploaded file name for this file."},
+                                "mime_type": {"type": "string", "description": "Optional MIME type for this file, such as image/png."},
+                                "source": {"type": "string", "enum": ["agent_generated", "external_import", "user_upload"], "description": "Optional source override for this file."},
+                                "require_remote_storage": {"type": "boolean", "description": "Optional storage override for this file."},
+                            },
+                            "required": ["file_path"],
+                        },
+                        "minItems": 1,
+                        "maxItems": 20,
+                    },
+                    "file_name": {"type": "string", "description": "Optional uploaded file name. Defaults to basename(file_path)."},
+                    "mime_type": {"type": "string", "description": "Optional MIME type such as image/png."},
                     "source": {"type": "string", "enum": ["agent_generated", "external_import", "user_upload"], "description": "Asset source. Defaults agent_generated."},
                     "require_remote_storage": {"type": "boolean", "description": "Require durable remote/TOS storage. Defaults true."},
                 },
-                "required": ["file_path"],
             },
         },
         handler=_tool_assets_upload,

@@ -129,17 +129,67 @@ export async function getXiaoduiyouDocumentMutation(account, documentId, mutatio
   return await requestJson(account, `/api/docs/${encodeURIComponent(documentId)}/mutations/${encodeURIComponent(mutationId)}`);
 }
 
-export async function uploadXiaoduiyouAsset(account, params = {}) {
-  const filePath = String(params.file_path ?? "").trim();
-  if (!filePath) throw new Error("xiaoduiyou_assets_upload requires file_path");
-  const bytes = await readFile(filePath);
-  const fileName = String(params.file_name ?? path.basename(filePath) ?? "asset").trim() || "asset";
-  const mimeType = String(params.mime_type ?? "").trim() || "application/octet-stream";
+function normalizeAssetUploadItems(params = {}) {
+  const items = [];
+  const boolArg = (value, defaultValue = true) => {
+    if (value === undefined || value === null) return defaultValue;
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string") return !["false", "0", "no", "off"].includes(value.trim().toLowerCase());
+    return Boolean(value);
+  };
+  const addItem = (rawItem, defaults = {}) => {
+    const item = rawItem && typeof rawItem === "object" && !Array.isArray(rawItem) ? rawItem : { file_path: rawItem };
+    const filePath = String(item.file_path ?? item.path ?? "").trim();
+    if (!filePath) return;
+    items.push({
+      filePath,
+      fileName: String(item.file_name ?? defaults.file_name ?? path.basename(filePath) ?? "asset").trim() || "asset",
+      mimeType: String(item.mime_type ?? defaults.mime_type ?? "").trim() || "application/octet-stream",
+      source: String(item.source ?? defaults.source ?? "agent_generated").trim() || "agent_generated",
+      requireRemoteStorage: boolArg(item.require_remote_storage ?? defaults.require_remote_storage, true),
+    });
+  };
+
+  if (Array.isArray(params.files)) {
+    for (const item of params.files) addItem(item, params);
+  }
+  if (Array.isArray(params.file_paths)) {
+    for (const filePath of params.file_paths) addItem(filePath, params);
+  }
+  if (params.file_path !== undefined) addItem(params, params);
+  return items;
+}
+
+async function uploadSingleXiaoduiyouAsset(account, item) {
+  const bytes = await readFile(item.filePath);
   const formData = new FormData();
-  formData.set("file", new Blob([bytes], { type: mimeType }), fileName);
-  formData.set("source", String(params.source ?? "agent_generated"));
-  formData.set("require_remote_storage", params.require_remote_storage === false ? "false" : "true");
+  formData.set("file", new Blob([bytes], { type: item.mimeType }), item.fileName);
+  formData.set("source", item.source);
+  formData.set("require_remote_storage", item.requireRemoteStorage ? "true" : "false");
   return await requestMultipart(account, "/api/assets", formData);
+}
+
+export async function uploadXiaoduiyouAsset(account, params = {}) {
+  const items = normalizeAssetUploadItems(params);
+  if (!items.length) throw new Error("xiaoduiyou_assets_upload requires file_path, file_paths, or files");
+  const uploads = [];
+  for (const item of items) {
+    uploads.push(await uploadSingleXiaoduiyouAsset(account, item));
+  }
+  const first = uploads[0] ?? {};
+  const urls = uploads
+    .map((upload) => upload.url ?? upload.asset?.public_url)
+    .filter((url) => typeof url === "string" && url.trim());
+  const assets = uploads.map((upload) => upload.asset).filter(Boolean);
+  return {
+    ...first,
+    url: first.url ?? first.asset?.public_url,
+    asset: first.asset,
+    urls,
+    assets,
+    uploads,
+    uploaded_count: uploads.length,
+  };
 }
 
 export async function pollXiaoduiyouTurn(account, signal) {
@@ -463,12 +513,13 @@ export async function getXiaoduiyouInteractiveRequest(account, requestId) {
 function looksLikeToolProgress(content) {
   const stripped = String(content ?? "").trim();
   if (!stripped) return false;
+  if (/^(?:📎\s*)?(?:xiaoduiyou_assets_upload|xiaoduiyouassetsupload)\b/.test(stripped)) return true;
   if (["📨 send_message", "send_message(", "send_message:", "Tool\n", "Tool\r\n"].some((marker) => stripped.includes(marker))) return true;
   const hasToolShape = [': "', "...", "(", "×"].some((marker) => stripped.includes(marker));
   if (!hasToolShape) return false;
   return [
     "🔍", "🔎", "📖", "📚", "🛠", "⚙", "✅", "💻", "🌐", "📝", "📁", "🔧",
-    "📋", "🐍", "🎨", "👁", "🧠", "📨",
+    "📋", "🐍", "🎨", "👁", "🧠", "📎", "📨",
   ].some((prefix) => stripped.startsWith(prefix));
 }
 

@@ -186,9 +186,9 @@ Generic content artifact:
 
 Preferred tool:
 
-`xiaoduiyou_assets_upload(file_path, file_name?, mime_type?, source?, require_remote_storage?)`
+`xiaoduiyou_assets_upload(file_path? | file_paths? | files?, file_name?, mime_type?, source?, require_remote_storage?)`
 
-The tool returns `{ url, asset }` only. It does not bind the asset to a session, turn, or document; use the returned URL in the next IM, document, diary, or content-package tool call.
+The tool returns backward-compatible first-upload `{ url, asset }` fields plus batch `{ urls, assets, uploaded_count }` fields. It does not bind the asset to a session, turn, or document; use the returned URL(s) in the next IM, document, diary, or content-package tool call.
 
 Multipart fields:
 

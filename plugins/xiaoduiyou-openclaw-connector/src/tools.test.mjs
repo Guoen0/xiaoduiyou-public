@@ -11,6 +11,13 @@ test("send_message tool output is sent as tool progress", () => {
   });
 });
 
+test("asset upload tool output is sent as tool progress", () => {
+  assert.deepEqual(sessionMessagePayloadFromText('📎 xiaoduiyou_assets_upload(file_path="/tmp/card.png")'), {
+    message_type: "tool_progress",
+    tool_progress: '📎 xiaoduiyou_assets_upload(file_path="/tmp/card.png")',
+  });
+});
+
 test("growth diary patch result is summarized without the full base", () => {
   const payload = {
     records: [{ table_id: "tbl_growth_events", source: "agent", values: { title: "喝奶 150ml" } }],

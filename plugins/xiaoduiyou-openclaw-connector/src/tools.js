@@ -229,13 +229,37 @@ const AssetUploadSchema = {
   additionalProperties: false,
   properties: {
     file_path: { type: "string", description: "Absolute local file path to upload. Do not pass file:, blob:, localhost, or already-public URLs." },
+    file_paths: {
+      type: "array",
+      description: "Batch upload multiple absolute local file paths in one tool call. Use this when all files can share file_name inference, mime_type, source, and storage options.",
+      items: { type: "string" },
+      minItems: 1,
+      maxItems: 20,
+    },
+    files: {
+      type: "array",
+      description: "Batch upload multiple local files with optional per-file names or MIME types.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          file_path: { type: "string", description: "Absolute local file path to upload." },
+          file_name: { type: "string", description: "Optional uploaded file name for this file. Defaults to basename(file_path)." },
+          mime_type: { type: "string", description: "Optional MIME type for this file, such as image/png." },
+          source: { type: "string", enum: ["agent_generated", "external_import", "user_upload"], description: "Optional source override for this file." },
+          require_remote_storage: { type: "boolean", description: "Optional storage override for this file." },
+        },
+        required: ["file_path"],
+      },
+      minItems: 1,
+      maxItems: 20,
+    },
     file_name: { type: "string", description: "Optional uploaded file name. Defaults to basename(file_path)." },
     mime_type: { type: "string", description: "Optional MIME type such as image/png. Backend also infers from file_name." },
     source: { type: "string", enum: ["agent_generated", "external_import", "user_upload"], description: "Asset source. Defaults agent_generated." },
     require_remote_storage: { type: "boolean", description: "Require durable remote/TOS storage. Defaults true." },
     account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the current connector account." },
   },
-  required: ["file_path"],
 };
 
 function textBlock(text, type = "paragraph", props = undefined) {
@@ -620,6 +644,9 @@ function createAssetUploadTool(config) {
         ok: true,
         url: result.url ?? result.asset?.public_url,
         asset: result.asset,
+        urls: result.urls ?? [],
+        assets: result.assets ?? [],
+        uploaded_count: result.uploaded_count ?? 0,
       });
     },
   };

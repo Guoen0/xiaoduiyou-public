@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 import types
@@ -130,6 +131,48 @@ class DeliveryClassificationTests(unittest.TestCase):
 
     def test_tool_progress_still_uses_icon_heuristic(self):
         self.assertTrue(adapter._looks_like_tool_progress('📖 read_file: "package.json"'))
+
+    def test_asset_upload_tool_progress_uses_attachment_icon(self):
+        self.assertTrue(adapter._looks_like_tool_progress('📎 xiaoduiyou_assets_upload(file_path="/tmp/card.png")'))
+
+
+class AssetUploadToolTests(unittest.TestCase):
+    def test_upload_tool_accepts_multiple_files(self):
+        calls = []
+        old_active_tool_context = adapter._active_tool_context
+        old_upload_asset_file_result = adapter._upload_asset_file_result
+
+        def fake_context():
+            return {"base_url": "https://review.example.test", "token": "token"}
+
+        def fake_upload(base_url, token, path, **kwargs):
+            calls.append({"base_url": base_url, "token": token, "path": path, **kwargs})
+            index = len(calls)
+            return {
+                "url": f"https://assets.example.com/{index}.png",
+                "asset": {"public_url": f"https://assets.example.com/{index}.png", "object_key": f"accounts/acct/uploads/{index}.png"},
+            }
+
+        adapter._active_tool_context = fake_context
+        adapter._upload_asset_file_result = fake_upload
+        try:
+            result = json.loads(adapter._tool_assets_upload({
+                "files": [
+                    {"file_path": "/tmp/first.png", "file_name": "first.png", "mime_type": "image/png"},
+                    {"file_path": "/tmp/second.jpg", "file_name": "second.jpg", "mime_type": "image/jpeg"},
+                ],
+                "source": "agent_generated",
+            }))
+        finally:
+            adapter._active_tool_context = old_active_tool_context
+            adapter._upload_asset_file_result = old_upload_asset_file_result
+
+        self.assertEqual(result["uploaded_count"], 2)
+        self.assertEqual(result["url"], "https://assets.example.com/1.png")
+        self.assertEqual(result["urls"], ["https://assets.example.com/1.png", "https://assets.example.com/2.png"])
+        self.assertEqual([call["path"] for call in calls], ["/tmp/first.png", "/tmp/second.jpg"])
+        self.assertEqual([call["file_name"] for call in calls], ["first.png", "second.jpg"])
+        self.assertEqual([call["mime_type"] for call in calls], ["image/png", "image/jpeg"])
 
 
 class TurnStreamReconnectTests(unittest.IsolatedAsyncioTestCase):
