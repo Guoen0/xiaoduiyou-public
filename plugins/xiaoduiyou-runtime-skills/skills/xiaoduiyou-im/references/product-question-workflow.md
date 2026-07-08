@@ -86,7 +86,7 @@ python "$HERMES_SKILL_HOME/skills/xiaoduiyou/xiaoduiyou-im/scripts/send_visual_c
   --cards-json '[{"image_path":"/tmp/card.png","title":"龙柳参考","link_url":"https://www.xiaohongshu.com/explore/...","badge":"参考帖"}]'
 ```
 
-Use this payload shape on `POST /api/hermes/turns/{turn_id}/events`, final callback progress-equivalent payload, or `POST /api/agent/im/send` with `channel: "default"` when sending outside an active turn:
+Use this payload shape on `POST /api/agent/turns/{turn_id}/events`, final callback progress-equivalent payload, or `POST /api/agent/im/send` with `channel: "default"` when sending outside an active turn:
 
 ```json
 {

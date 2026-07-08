@@ -7,10 +7,10 @@ Mental model:
 ```text
 Xiaoduiyou UI
   → pending Hermes turn in Xiaoduiyou
-  → XiaoduiyouAdapter probes /api/hermes/health, then streams /ws/hermes/turns/pending with WebSocket keepalive, falling back to /api/hermes/turns/pending
+  → XiaoduiyouAdapter probes /api/agent/health, then streams /ws/agent/turns/pending with WebSocket keepalive, falling back to /api/agent/turns/pending
   → Hermes Gateway turns it into MessageEvent
   → Hermes Agent runs the task
-  → XiaoduiyouAdapter streams /ws/hermes/interactive-requests/:request_id for approval/confirm cards
+  → XiaoduiyouAdapter streams /ws/agent/interactive-requests/:request_id for approval/confirm cards
   → XiaoduiyouAdapter sends progress/final callbacks
   → Xiaoduiyou event log + WebSocket update
 ```

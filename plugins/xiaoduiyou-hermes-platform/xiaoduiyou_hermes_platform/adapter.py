@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.8.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.9.1"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -89,14 +89,14 @@ def _websocket_url_for_pending_turns(base_url: str) -> str:
     parsed = parse.urlparse(base_url.rstrip("/"))
     scheme = "wss" if parsed.scheme == "https" else "ws"
     netloc = parsed.netloc or parsed.path
-    return f"{scheme}://{netloc}/ws/hermes/turns/pending"
+    return f"{scheme}://{netloc}/ws/agent/turns/pending"
 
 
 def _websocket_url_for_interactive_request(base_url: str, request_id: str) -> str:
     parsed = parse.urlparse(base_url.rstrip("/"))
     scheme = "wss" if parsed.scheme == "https" else "ws"
     netloc = parsed.netloc or parsed.path
-    return f"{scheme}://{netloc}/ws/hermes/interactive-requests/{parse.quote(request_id, safe='')}"
+    return f"{scheme}://{netloc}/ws/agent/interactive-requests/{parse.quote(request_id, safe='')}"
 
 
 def _websocket_headers(base_url: str, websocket_key: str, token: str) -> bytes:
@@ -824,7 +824,7 @@ def is_connected() -> bool:
     try:
         if token:
             try:
-                result = _request_json(f"{base_url}/api/hermes/health", timeout=5, token=token)
+                result = _request_json(f"{base_url}/api/agent/health", timeout=5, token=token)
                 return bool(isinstance(result, dict) and result.get("ready"))
             except RuntimeError as exc:
                 if not _is_http_status(exc, 404):
@@ -953,7 +953,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         await asyncio.to_thread(self._probe_health)
 
     def _probe_health(self) -> None:
-        url = f"{self.base_url}/api/hermes/health"
+        url = f"{self.base_url}/api/agent/health"
         try:
             result = _request_json(url, timeout=self.request_timeout_seconds, token=self.connection_token)
         except RuntimeError as exc:
@@ -988,7 +988,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         await asyncio.sleep(fallback_delay if fallback_delay is not None else self.poll_interval_seconds)
 
     def _claim_pending_turn(self) -> Optional[Dict[str, Any]]:
-        url = f"{self.base_url}/api/hermes/turns/pending"
+        url = f"{self.base_url}/api/agent/turns/pending"
         try:
             result = _request_json(url, timeout=self.request_timeout_seconds, token=self.connection_token)
             self._last_claim_at = time.time()
@@ -1170,7 +1170,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
     async def _post_turn_event(self, turn_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         return await asyncio.to_thread(
             _request_json,
-            f"{self.base_url}/api/hermes/turns/{turn_id}/events",
+            f"{self.base_url}/api/agent/turns/{turn_id}/events",
             method="POST",
             payload=payload,
             timeout=self.request_timeout_seconds,
@@ -1292,7 +1292,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
     async def _post_interactive_request(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         return await asyncio.to_thread(
             _request_json,
-            f"{self.base_url}/api/hermes/interactive-requests",
+            f"{self.base_url}/api/agent/interactive-requests",
             method="POST",
             payload=payload,
             timeout=self.request_timeout_seconds,
@@ -1302,7 +1302,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
     async def _get_interactive_request(self, request_id: str) -> Dict[str, Any]:
         return await asyncio.to_thread(
             _request_json,
-            f"{self.base_url}/api/hermes/interactive-requests/{request_id}",
+            f"{self.base_url}/api/agent/interactive-requests/{request_id}",
             timeout=self.request_timeout_seconds,
             token=self.connection_token,
         )
@@ -1406,7 +1406,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         try:
             result = await asyncio.to_thread(
                 _request_json,
-                f"{self.base_url}/api/hermes/sessions/{chat_key}/turns/active",
+                f"{self.base_url}/api/agent/sessions/{chat_key}/turns/active",
                 timeout=self.request_timeout_seconds,
                 token=self.connection_token,
             )
@@ -1537,7 +1537,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         try:
             result = await asyncio.to_thread(
                 _request_json,
-                f"{self.base_url}/api/hermes/turns/{turn_id}/callback",
+                f"{self.base_url}/api/agent/turns/{turn_id}/callback",
                 method="POST",
                 payload=payload,
                 timeout=self.request_timeout_seconds,
@@ -1584,7 +1584,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             try:
                 result = await asyncio.to_thread(
                     _request_json,
-                    f"{self.base_url}/api/hermes/turns/{turn_id}/callback",
+                    f"{self.base_url}/api/agent/turns/{turn_id}/callback",
                     method="POST",
                     payload=payload,
                     timeout=self.request_timeout_seconds,

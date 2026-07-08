@@ -273,7 +273,7 @@ class TurnStreamReconnectTests(unittest.IsolatedAsyncioTestCase):
         finally:
             adapter._request_json = original_request_json
 
-        self.assertEqual(calls, ["https://review.example.test/api/hermes/health", "websocket"])
+        self.assertEqual(calls, ["https://review.example.test/api/agent/health", "websocket"])
         self.assertTrue(instance._health_endpoint_supported)
 
     async def test_missing_health_endpoint_falls_back_to_pending_stream(self):
@@ -300,7 +300,7 @@ class TurnStreamReconnectTests(unittest.IsolatedAsyncioTestCase):
         finally:
             adapter._request_json = original_request_json
 
-        self.assertEqual(calls, ["https://review.example.test/api/hermes/health", "websocket"])
+        self.assertEqual(calls, ["https://review.example.test/api/agent/health", "websocket"])
         self.assertFalse(instance._health_endpoint_supported)
         self.assertFalse(instance.marked_disconnected)
 
@@ -328,7 +328,7 @@ class TurnStreamReconnectTests(unittest.IsolatedAsyncioTestCase):
         finally:
             adapter._request_json = original_request_json
 
-        self.assertEqual(calls, ["https://review.example.test/api/hermes/health", "websocket"])
+        self.assertEqual(calls, ["https://review.example.test/api/agent/health", "websocket"])
         self.assertFalse(instance._health_endpoint_supported)
         self.assertFalse(instance.marked_disconnected)
 

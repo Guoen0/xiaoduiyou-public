@@ -24,13 +24,13 @@ A connected usage Agent must not:
 Use the Xiaoduiyou origin and auth context supplied by the active connection prompt/runtime context.
 
 1. Poll pending work:
-   - `GET /api/hermes/turns/pending`
+   - `GET /api/agent/turns/pending`
    - `200 {"turn": null}` means healthy idle state.
 2. Send incremental progress:
-   - `POST /api/hermes/turns/{turn_id}/events`
+   - `POST /api/agent/turns/{turn_id}/events`
    - body may include `progress` or `tool_progress`.
 3. Complete the turn:
-   - `POST /api/hermes/turns/{turn_id}/callback`
+   - `POST /api/agent/turns/{turn_id}/callback`
    - include a user-facing `progress` message.
    - include `artifact` only for generated/revised content packages.
    - for document/process-draft-only operations, call direct document tools before callback, then complete with progress only.

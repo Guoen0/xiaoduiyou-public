@@ -28,14 +28,14 @@ Use `origin`/`base_url` plus connector-owned auth for `/api/growth-diary`, `/api
 
 ### Poll pending turn
 
-`GET /api/hermes/turns/pending`
+`GET /api/agent/turns/pending`
 
 - `200`: a turn payload is available. Use the returned `turn_id`, user message/context, session/document identifiers, and any auth/session metadata supplied by the runtime.
 - `200 {"turn": null}`: healthy idle state; do not treat as failure.
 
 ### Send progress / tool progress
 
-`POST /api/hermes/turns/{turn_id}/events`
+`POST /api/agent/turns/{turn_id}/events`
 
 Common payload:
 
@@ -137,7 +137,7 @@ Headers are the same Agent auth headers as turn polling/callbacks. Minimal body:
 
 ### Complete turn
 
-`POST /api/hermes/turns/{turn_id}/callback`
+`POST /api/agent/turns/{turn_id}/callback`
 
 Include a user-facing final `progress`/message. Add `artifact` only for generated/revised content packages. For document/process-only operations, call the direct document tools first, then complete with progress only.
 
