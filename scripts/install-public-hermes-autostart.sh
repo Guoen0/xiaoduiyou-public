@@ -27,6 +27,39 @@ run_as_root() {
   fi
 }
 
+harden_startup_script() {
+  local startup="$1"
+  local tmp
+  tmp="/tmp/xdy-public-hermes-startup-harden.$$"
+  python3 - "$startup" > "$tmp" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+
+text = text.replace(
+    '    echo "${SEALOS_DEVBOX_NAME}">/etc/hostname',
+    '    { echo "${SEALOS_DEVBOX_NAME}" >/etc/hostname; } 2>/dev/null || true',
+)
+text = text.replace(
+    'echo "${SEALOS_DEVBOX_POD_UID}">/usr/start/pod_id',
+    'mkdir -p /usr/start 2>/dev/null || true\n{ echo "${SEALOS_DEVBOX_POD_UID:-}" >/usr/start/pod_id; } 2>/dev/null || true',
+)
+text = text.replace(
+    '# Start the SSH daemon\n/usr/sbin/sshd',
+    '# Start the SSH daemon\nif command -v /usr/sbin/sshd >/dev/null 2>&1; then\n    mkdir -p /run/sshd 2>/dev/null || true\n    pgrep -x sshd >/dev/null 2>&1 || /usr/sbin/sshd 2>/dev/null || true\nfi',
+)
+text = text.replace(
+    '/usr/sbin/sshd\nsleep infinity',
+    'if command -v /usr/sbin/sshd >/dev/null 2>&1; then\n    mkdir -p /run/sshd 2>/dev/null || true\n    pgrep -x sshd >/dev/null 2>&1 || /usr/sbin/sshd 2>/dev/null || true\nfi\nsleep infinity',
+)
+print(text, end="")
+PY
+  run_as_root install -m 0755 "$tmp" "$startup"
+  rm -f "$tmp"
+}
+
 case "${1:-}" in
   -h|--help|help)
     usage
@@ -50,11 +83,15 @@ if ! run_as_root test -f "$STARTUP_TARGET"; then
 #!/bin/bash
 
 if [ ! -z "${SEALOS_DEVBOX_NAME}" ]; then
-    echo "${SEALOS_DEVBOX_NAME}">/etc/hostname
+    { echo "${SEALOS_DEVBOX_NAME}" >/etc/hostname; } 2>/dev/null || true
 fi
 
-echo "${SEALOS_DEVBOX_POD_UID}">/usr/start/pod_id
-/usr/sbin/sshd
+mkdir -p /usr/start 2>/dev/null || true
+{ echo "${SEALOS_DEVBOX_POD_UID:-}" >/usr/start/pod_id; } 2>/dev/null || true
+if command -v /usr/sbin/sshd >/dev/null 2>&1; then
+    mkdir -p /run/sshd 2>/dev/null || true
+    pgrep -x sshd >/dev/null 2>&1 || /usr/sbin/sshd 2>/dev/null || true
+fi
 sleep infinity
 SCRIPT
   run_as_root install -m 0755 /tmp/xdy-public-hermes-startup.$$ "$STARTUP_TARGET"
@@ -88,6 +125,7 @@ if ! run_as_root grep -q 'start-public-agent-gateway.sh' "$STARTUP_TARGET"; then
   echo "backup=$backup"
 fi
 
+harden_startup_script "$STARTUP_TARGET"
 run_as_root bash -n "$STARTUP_TARGET"
 echo "installed_gateway_script=$TARGET_SCRIPT"
 echo "installed_startup=$STARTUP_TARGET"

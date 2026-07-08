@@ -10,6 +10,7 @@ LOG_FILE="${XDY_PUBLIC_HERMES_GATEWAY_LOG:-$HERMES_HOME/logs/gateway-public-agen
 WATCHDOG_LOG_FILE="${XDY_PUBLIC_HERMES_WATCHDOG_LOG:-$HERMES_HOME/logs/gateway-public-agent-watchdog.log}"
 WATCHDOG_INTERVAL_SECONDS="${XDY_PUBLIC_HERMES_WATCHDOG_INTERVAL_SECONDS:-60}"
 WATCHDOG_PID_FILE="$HERMES_HOME/gateway-public-agent-watchdog.pid"
+GATEWAY_PID_FILE="$HERMES_HOME/gateway-public-agent.pid"
 
 mkdir -p "$HERMES_HOME/logs" "$HERMES_HOME/scripts"
 
@@ -24,11 +25,39 @@ log_watchdog() {
   echo "$(date -Is) $*" >>"$WATCHDOG_LOG_FILE"
 }
 
+hermes_cmd() {
+  command -v hermes 2>/dev/null || true
+}
+
+pid_is_gateway() {
+  local pid="$1"
+  [ -n "$pid" ] || return 1
+  kill -0 "$pid" >/dev/null 2>&1 || return 1
+  ps -p "$pid" -o command= 2>/dev/null | grep -E 'hermes.*gateway run|hermes-agent.*gateway run' >/dev/null 2>&1
+}
+
+gateway_pid_running() {
+  local pid_file pid
+  for pid_file in "$GATEWAY_PID_FILE" "$HERMES_HOME/gateway.pid"; do
+    [ -f "$pid_file" ] || continue
+    pid="$(tr -dc '0-9' < "$pid_file")"
+    pid_is_gateway "$pid" && return 0
+  done
+  return 1
+}
+
+gateway_process_running() {
+  ps -eo command | grep -E 'hermes.*gateway run|hermes-agent.*gateway run' | grep -v grep >/dev/null 2>&1
+}
+
 gateway_running() {
-  local status
-  status="$(hermes gateway status 2>&1 || true)"
-  printf '%s' "$status" | grep -q 'Gateway is running' || return 1
-  ps -eo command | grep -E 'hermes gateway run' | grep -v grep >/dev/null 2>&1
+  local bin status
+  gateway_pid_running && return 0
+  gateway_process_running && return 0
+  bin="$(hermes_cmd)"
+  [ -n "$bin" ] || return 1
+  status="$("$bin" gateway status 2>&1 || true)"
+  printf '%s' "$status" | grep -Eq 'Gateway is running|already running'
 }
 
 start_gateway() {
@@ -37,9 +66,16 @@ start_gateway() {
     return 0
   fi
 
+  local bin
+  bin="$(hermes_cmd)"
+  if [ -z "$bin" ]; then
+    log_watchdog "gateway start failed: hermes command not found"
+    return 1
+  fi
+
   nohup env HOME="$HOME" HERMES_HOME="$HERMES_HOME" PATH="$PATH" HERMES_ACCEPT_HOOKS="$HERMES_ACCEPT_HOOKS" \
-    hermes gateway run >>"$LOG_FILE" 2>&1 &
-  echo "$!" >"$HERMES_HOME/gateway-public-agent.pid"
+    "$bin" gateway run >>"$LOG_FILE" 2>&1 &
+  echo "$!" >"$GATEWAY_PID_FILE"
   log_watchdog "gateway started pid=$!"
 }
 
