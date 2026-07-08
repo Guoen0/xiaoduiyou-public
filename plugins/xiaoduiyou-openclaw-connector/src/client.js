@@ -5,7 +5,7 @@ import path from "node:path";
 import tls from "node:tls";
 import { once } from "node:events";
 
-export const XIAODUIYOU_CONNECTOR_VERSION = "2026.7.7.1";
+export const XIAODUIYOU_CONNECTOR_VERSION = "2026.7.8.1";
 const WEBSOCKET_RETRY_MS = 3_000;
 const WEBSOCKET_IDLE_TIMEOUT_MS = 15_000;
 const DEFAULT_WEBSOCKET_PING_INTERVAL_MS = 25_000;
@@ -118,10 +118,23 @@ export async function getXiaoduiyouDocument(account, params = {}) {
   throw new Error("xiaoduiyou_documents_get requires document_id or an active Xiaoduiyou session");
 }
 
-export async function applyXiaoduiyouDocumentMutation(account, documentId, payload) {
-  return await requestJson(account, `/api/docs/${encodeURIComponent(documentId)}/mutations`, {
+export async function createXiaoduiyouDocument(account, payload) {
+  return await requestJson(account, "/api/docs", {
     method: "POST",
     body: payload,
+  });
+}
+
+export async function applyXiaoduiyouDocumentMutation(account, documentId, payload, scope = {}) {
+  return await requestJson(account, `/api/docs/${encodeURIComponent(documentId)}/mutations${compactQuery(scope)}`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function deleteXiaoduiyouDocument(account, documentId, scope = {}) {
+  return await requestJson(account, `/api/drive/files/${encodeURIComponent(documentId)}${compactQuery(scope)}`, {
+    method: "DELETE",
   });
 }
 

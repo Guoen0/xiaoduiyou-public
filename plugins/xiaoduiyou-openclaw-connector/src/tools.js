@@ -1,17 +1,10 @@
 import { resolveXiaoduiyouAccount } from "./accounts.js";
-import { applyXiaoduiyouDocumentMutation, getXiaoduiyouChild, getXiaoduiyouDocument, getXiaoduiyouGrowthDiary, patchXiaoduiyouChild, patchXiaoduiyouGrowthDiary, sendXiaoduiyouImMessage, uploadXiaoduiyouAsset } from "./client.js";
+import { applyXiaoduiyouDocumentMutation, createXiaoduiyouDocument, deleteXiaoduiyouDocument, getXiaoduiyouChild, getXiaoduiyouDocument, getXiaoduiyouGrowthDiary, patchXiaoduiyouChild, patchXiaoduiyouGrowthDiary, sendXiaoduiyouImMessage, uploadXiaoduiyouAsset } from "./client.js";
 import { summarizeGrowthDiaryPatchResult } from "./growth-diary-summary.js";
-import { activeXiaoduiyouToolContext, maybeActiveXiaoduiyouToolContext, queueXiaoduiyouDocumentAction } from "./tool-context.js";
+import { activeXiaoduiyouToolContext, maybeActiveXiaoduiyouToolContext } from "./tool-context.js";
 
 function jsonResult(value) {
   return JSON.stringify(value, null, 2);
-}
-
-let documentMutationSeq = 0;
-
-function nextDocumentMutationId(operation) {
-  documentMutationSeq += 1;
-  return `mut_${operation}_${Date.now().toString(36)}_${documentMutationSeq}`;
 }
 
 function resolveToolAccount(config, rawParams) {
@@ -123,6 +116,7 @@ const DocumentCreateSchema = {
     },
     fields: { type: "object", description: "Optional metadata fields.", additionalProperties: true },
     attach_to_session: { type: "boolean", description: "Attach as the current session document. Defaults true." },
+    account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the current connector account." },
   },
   required: ["title"],
 };
@@ -158,6 +152,7 @@ const DocumentUpdateSchema = {
     sync_process_doc: { type: "boolean", description: "For replace_publish_image: also update the document image_grid. Defaults true." },
     images: { type: "array", description: "For upsert_image_grid: image URLs or objects with url/caption.", items: { anyOf: [{ type: "string" }, { type: "object", additionalProperties: true }] } },
     columns: { type: "integer", description: "For image_grid commands: 2 or 3 columns.", minimum: 2, maximum: 3 },
+    account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the current connector account." },
   },
 };
 
@@ -166,6 +161,7 @@ const DocumentDeleteSchema = {
   additionalProperties: false,
   properties: {
     document_id: { type: "string", description: "Optional document id. If omitted, Xiaoduiyou deletes the current screen document/content package, then falls back to the current session document." },
+    account_id: { type: "string", description: "Optional OpenClaw Xiaoduiyou channel account id. Omit for the current connector account." },
   },
 };
 
@@ -299,27 +295,19 @@ function mergeUiTemplatesIntoFields(rawParams, fields) {
   return next;
 }
 
-function queuedResult(operation, action) {
-  const target = action.document_id ? { document_id: action.document_id } : { current_session_document: true };
-  return jsonResult({
-    ok: true,
-    accepted: true,
-    queued: true,
-    applied: false,
-    persisted: false,
-    state: "queued_for_final_callback",
-    operation,
-    mutation_id: action.mutation_id,
-    command: action.input?.command,
-    ...target,
-    attach_to_session: action.operation === "create" ? Boolean(action.attach_to_session ?? true) : undefined,
-    will_apply_on: "final_callback",
-    next_step: "This update is not persisted yet. Do not tell the user the backend has been updated. Say only that the update has been queued; after the final callback or in a later turn, verify with xiaoduiyou_documents_get and compare the live revision/fields/blocks.",
-  });
-}
-
 function hasImageContent(rawParams = {}) {
   return Array.isArray(rawParams.content) && rawParams.content.some((part) => part && typeof part === "object" && (part.type === "input_image" || part.type === "image"));
+}
+
+function xiaoduiyouScopeFromContext(context = {}) {
+  const scope = {};
+  const sessionId = String(context.sessionId ?? context.session_id ?? "").trim();
+  const turnId = String(context.turnId ?? context.turn_id ?? "").trim();
+  const documentId = String(context.documentId ?? context.document_id ?? "").trim();
+  if (sessionId) scope.session_id = sessionId;
+  if (turnId) scope.turn_id = turnId;
+  if (documentId) scope.document_id = documentId;
+  return scope;
 }
 
 function growthDiaryPatchFailureResult(error) {
@@ -458,7 +446,7 @@ function createDocumentGetTool(config) {
   };
 }
 
-function createDocumentCreateTool() {
+function createDocumentCreateTool(config) {
   return {
     name: "xiaoduiyou_documents_create",
     label: "Xiaoduiyou Documents Create",
@@ -474,14 +462,25 @@ function createDocumentCreateTool() {
       };
       const fields = mergeUiTemplatesIntoFields(rawParams, rawParams.fields);
       if (Object.keys(fields).length > 0) input.fields = fields;
-      const action = {
-        operation: "create",
-        mutation_id: nextDocumentMutationId("create"),
+      const context = maybeActiveXiaoduiyouToolContext();
+      const account = resolveToolAccount(config, { account_id: rawParams.account_id ?? context.accountId });
+      const result = await createXiaoduiyouDocument(account, {
+        ...xiaoduiyouScopeFromContext(context),
+        ...input,
         attach_to_session: Boolean(rawParams.attach_to_session ?? true),
-        input,
-      };
-      queueXiaoduiyouDocumentAction(action);
-      return queuedResult("create", action);
+      });
+      const document = result.document ?? result;
+      return jsonResult({
+        ok: true,
+        accepted: true,
+        queued: false,
+        applied: true,
+        persisted: true,
+        state: "persisted",
+        operation: "create",
+        document_id: document?.document_id,
+        document,
+      });
     },
   };
 }
@@ -549,13 +548,13 @@ function createDocumentUpdateTool(config) {
       if (rawParams.allow_overwrite_after_patch !== undefined) input.allow_overwrite_after_patch = Boolean(rawParams.allow_overwrite_after_patch);
       const context = maybeActiveXiaoduiyouToolContext();
       const documentId = String(rawParams.document_id ?? "").trim();
-      const targetDocumentId = documentId || String(context.documentId ?? context.document_id ?? "").trim();
-      if (!targetDocumentId) throw new Error("xiaoduiyou_documents_update requires document_id or active screen document_id");
+      const targetDocumentId = documentId || String(context.documentId ?? context.document_id ?? "").trim() || "current";
       const account = resolveToolAccount(config, { account_id: rawParams.account_id ?? context.accountId });
       const payload = { ...input };
       if (rawParams.idempotency_key) payload.idempotency_key = String(rawParams.idempotency_key);
-      const result = await applyXiaoduiyouDocumentMutation(account, targetDocumentId, payload);
+      const result = await applyXiaoduiyouDocumentMutation(account, targetDocumentId, payload, targetDocumentId === "current" ? xiaoduiyouScopeFromContext(context) : {});
       const mutation = result.mutation ?? {};
+      const document = result.document ?? mutation.document;
       return jsonResult({
         ok: result.ok ?? mutation.ok ?? true,
         accepted: result.accepted ?? mutation.accepted ?? true,
@@ -565,27 +564,39 @@ function createDocumentUpdateTool(config) {
         state: result.state ?? mutation.state ?? "persisted",
         operation: "update",
         command: input.command,
-        document_id: targetDocumentId,
+        document_id: document?.document_id ?? mutation.target_document_id ?? targetDocumentId,
         mutation_id: mutation.mutation_id,
         mutation,
-        document: result.document ?? mutation.document,
+        document,
       });
     },
   };
 }
 
-function createDocumentDeleteTool() {
+function createDocumentDeleteTool(config) {
   return {
     name: "xiaoduiyou_documents_delete",
     label: "Xiaoduiyou Documents Delete",
     description: "Delete a Xiaoduiyou document only when the user explicitly asks to delete a document. Omit document_id to target the current screen document/content package; Xiaoduiyou falls back to the current session document.",
     parameters: DocumentDeleteSchema,
     execute: async (_toolCallId, rawParams = {}) => {
+      const context = maybeActiveXiaoduiyouToolContext();
       const documentId = String(rawParams.document_id ?? "").trim();
-      const action = { operation: "delete", mutation_id: nextDocumentMutationId("delete") };
-      if (documentId) action.document_id = documentId;
-      queueXiaoduiyouDocumentAction(action);
-      return queuedResult("delete", action);
+      const targetDocumentId = documentId || "current";
+      const account = resolveToolAccount(config, { account_id: rawParams.account_id ?? context.accountId });
+      const result = await deleteXiaoduiyouDocument(account, targetDocumentId, documentId ? {} : xiaoduiyouScopeFromContext(context));
+      const document = result.document ?? result;
+      return jsonResult({
+        ok: true,
+        accepted: true,
+        queued: false,
+        applied: true,
+        persisted: true,
+        state: "persisted",
+        operation: "delete",
+        document_id: document?.document_id ?? targetDocumentId,
+        document,
+      });
     },
   };
 }
@@ -658,9 +669,9 @@ export function registerXiaoduiyouTools(api) {
   api.registerTool(createGrowthDiaryGetTool(api.config), { name: "xiaoduiyou_growth_diary_get" });
   api.registerTool(createGrowthDiaryPatchTool(api.config), { name: "xiaoduiyou_growth_diary_patch" });
   api.registerTool(createDocumentGetTool(api.config), { name: "xiaoduiyou_documents_get" });
-  api.registerTool(createDocumentCreateTool(), { name: "xiaoduiyou_documents_create" });
+  api.registerTool(createDocumentCreateTool(api.config), { name: "xiaoduiyou_documents_create" });
   api.registerTool(createDocumentUpdateTool(api.config), { name: "xiaoduiyou_documents_update" });
-  api.registerTool(createDocumentDeleteTool(), { name: "xiaoduiyou_documents_delete" });
+  api.registerTool(createDocumentDeleteTool(api.config), { name: "xiaoduiyou_documents_delete" });
   api.registerTool(createAssetUploadTool(api.config), { name: "xiaoduiyou_assets_upload" });
   api.registerTool(createImSendTool(api.config), { name: "xiaoduiyou_im_send" });
 }

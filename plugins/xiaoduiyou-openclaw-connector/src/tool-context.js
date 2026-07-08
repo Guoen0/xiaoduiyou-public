@@ -32,12 +32,3 @@ export function maybeActiveXiaoduiyouToolContext() {
   if (recentContext && Date.now() - recentContextAt <= RECENT_CONTEXT_TTL_MS) return { ...recentContext, recoveredFromRecentContext: true };
   return {};
 }
-
-export function queueXiaoduiyouDocumentAction(action) {
-  const context = activeXiaoduiyouToolContext();
-  if (!Array.isArray(context.documentActions)) {
-    throw new Error("Xiaoduiyou document action queue is unavailable");
-  }
-  context.documentActions.push(action);
-  return action;
-}

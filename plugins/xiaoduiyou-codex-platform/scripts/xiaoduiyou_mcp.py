@@ -441,6 +441,10 @@ def normalize_document_input(args: dict[str, Any], *, create: bool) -> dict[str,
     return payload
 
 
+def document_scope(args: dict[str, Any]) -> dict[str, Any]:
+    return {key: args.get(key) for key in ("session_id", "turn_id", "document_id") if args.get(key) not in (None, "")}
+
+
 def growth_diary_patch_failure(error_value: Exception) -> dict[str, Any]:
     return {
         "ok": False,
@@ -539,8 +543,6 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         body = {"progress": args.get("progress") or "Codex has completed this Xiaoduiyou turn."}
         if args.get("artifact") is not None:
             body["artifact"] = args["artifact"]
-        if isinstance(args.get("document_actions"), list):
-            body["document_actions"] = args["document_actions"]
         return text_result(request_json(f"/api/agent/turns/{parse.quote(turn_id)}/callback", method="POST", body=body))
 
     if name == "xiaoduiyou_agent_turn_fail":
@@ -683,14 +685,16 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
 
     if name == "xiaoduiyou_documents_create":
         payload = normalize_document_input(args, create=True)
-        payload["created_by"] = args.get("created_by") or "codex"
+        payload.update(document_scope(args))
+        payload["attach_to_session"] = bool(args.get("attach_to_session", True))
+        payload["created_by"] = args.get("created_by") or "agent"
         return text_result(request_json("/api/docs", method="POST", body=payload))
 
     if name == "xiaoduiyou_documents_update":
-        document_id = required(args, "document_id")
+        document_id = str(args.get("document_id") or "current").strip() or "current"
         payload = normalize_document_input(args, create=False)
         payload["command"] = args.get("command") or "overwrite"
-        payload["updated_by"] = args.get("updated_by") or "codex"
+        payload["updated_by"] = args.get("updated_by") or "agent"
         if args.get("base_revision") is not None:
             payload["base_revision"] = int(args.get("base_revision") or 0)
         if args.get("allow_overwrite_after_patch") is not None:
@@ -702,11 +706,13 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
                 payload[key] = args[key]
         if args.get("idempotency_key"):
             payload["idempotency_key"] = str(args.get("idempotency_key"))
-        return text_result(request_json(f"/api/docs/{parse.quote(document_id)}/mutations", method="POST", body=payload))
+        scope = document_scope(args) if document_id == "current" else {}
+        return text_result(request_json(f"/api/docs/{parse.quote(document_id)}/mutations{compact_query(scope)}", method="POST", body=payload))
 
     if name == "xiaoduiyou_documents_delete":
-        document_id = required(args, "document_id")
-        return text_result(request_json(f"/api/drive/files/{parse.quote(document_id)}", method="DELETE"))
+        document_id = str(args.get("document_id") or "current").strip() or "current"
+        scope = document_scope(args) if document_id == "current" else {}
+        return text_result(request_json(f"/api/drive/files/{parse.quote(document_id)}{compact_query(scope)}", method="DELETE"))
 
     if name == "xiaoduiyou_documents_export":
         document_id = required(args, "document_id")
@@ -765,8 +771,8 @@ TOOLS = [
     },
     {
         "name": "xiaoduiyou_agent_turn_complete",
-        "description": "Complete a Xiaoduiyou Agent turn. Include document_actions only when the user explicitly requested document mutation.",
-        "inputSchema": schema({"turn_id": {"type": "string"}, "progress": {"type": "string"}, "artifact": {"type": "object", "additionalProperties": True}, "document_actions": {"type": "array", "items": {"type": "object", "additionalProperties": True}}}, ["turn_id"]),
+        "description": "Complete a Xiaoduiyou Agent turn. Use direct document tools before completing when the user explicitly requested document mutation.",
+        "inputSchema": schema({"turn_id": {"type": "string"}, "progress": {"type": "string"}, "artifact": {"type": "object", "additionalProperties": True}}, ["turn_id"]),
     },
     {
         "name": "xiaoduiyou_agent_turn_fail",
@@ -914,17 +920,17 @@ TOOLS = [
     {
         "name": "xiaoduiyou_documents_create",
         "description": "Create a Xiaoduiyou document only when the user explicitly asks for a document artifact.",
-        "inputSchema": schema({"title": {"type": "string"}, "body": {"type": "string"}, "markdown": {"type": "string"}, "block_json": {"type": "object", "additionalProperties": True}, "fields": {"type": "object", "additionalProperties": True}, "ui_templates": {"type": "array", "items": {"type": "string", "enum": ["xiaohongshu", "moments"]}}}, ["title"]),
+        "inputSchema": schema({"title": {"type": "string"}, "body": {"type": "string"}, "markdown": {"type": "string"}, "block_json": {"type": "object", "additionalProperties": True}, "fields": {"type": "object", "additionalProperties": True}, "ui_templates": {"type": "array", "items": {"type": "string", "enum": ["xiaohongshu", "moments"]}}, "attach_to_session": {"type": "boolean"}, "session_id": {"type": "string"}, "turn_id": {"type": "string"}, "document_id": {"type": "string"}}, ["title"]),
     },
     {
         "name": "xiaoduiyou_documents_update",
-        "description": "Update a Xiaoduiyou document by document_id.",
-        "inputSchema": schema({"document_id": {"type": "string"}, "command": {"type": "string", "enum": ["overwrite", "append_blocks", "patch_fields", "replace_publish_image", "upsert_image_grid", "sync_publish_images_to_document"]}, "idempotency_key": {"type": "string"}, "base_revision": {"type": "integer"}, "allow_overwrite_after_patch": {"type": "boolean"}, "title": {"type": "string"}, "body": {"type": "string"}, "markdown": {"type": "string"}, "block_json": {"type": "object", "additionalProperties": True}, "blocks": {"type": "array", "items": {"type": "object", "additionalProperties": True}}, "fields": {"type": "object", "additionalProperties": True}, "ui_templates": {"type": "array", "items": {"type": "string", "enum": ["xiaohongshu", "moments"]}}, "platform": {"type": "string"}, "index": {"type": "integer"}, "image_url": {"type": "string"}, "caption": {"type": "string"}, "history_caption": {"type": "string"}, "sync_process_doc": {"type": "boolean"}, "images": {"type": "array", "items": {"type": "object", "additionalProperties": True}}, "columns": {"type": "integer"}}, ["document_id"]),
+        "description": "Update a Xiaoduiyou document by document_id, or omit document_id with turn_id/session_id to target the current screen/session document.",
+        "inputSchema": schema({"document_id": {"type": "string"}, "session_id": {"type": "string"}, "turn_id": {"type": "string"}, "command": {"type": "string", "enum": ["overwrite", "append_blocks", "patch_fields", "replace_publish_image", "upsert_image_grid", "sync_publish_images_to_document"]}, "idempotency_key": {"type": "string"}, "base_revision": {"type": "integer"}, "allow_overwrite_after_patch": {"type": "boolean"}, "title": {"type": "string"}, "body": {"type": "string"}, "markdown": {"type": "string"}, "block_json": {"type": "object", "additionalProperties": True}, "blocks": {"type": "array", "items": {"type": "object", "additionalProperties": True}}, "fields": {"type": "object", "additionalProperties": True}, "ui_templates": {"type": "array", "items": {"type": "string", "enum": ["xiaohongshu", "moments"]}}, "platform": {"type": "string"}, "index": {"type": "integer"}, "image_url": {"type": "string"}, "caption": {"type": "string"}, "history_caption": {"type": "string"}, "sync_process_doc": {"type": "boolean"}, "images": {"type": "array", "items": {"type": "object", "additionalProperties": True}}, "columns": {"type": "integer"}}),
     },
     {
         "name": "xiaoduiyou_documents_delete",
-        "description": "Delete a Xiaoduiyou document by document_id.",
-        "inputSchema": schema({"document_id": {"type": "string"}}, ["document_id"]),
+        "description": "Delete a Xiaoduiyou document by document_id, or omit document_id with turn_id/session_id to target the current screen/session document.",
+        "inputSchema": schema({"document_id": {"type": "string"}, "session_id": {"type": "string"}, "turn_id": {"type": "string"}}),
     },
     {
         "name": "xiaoduiyou_documents_export",

@@ -25,8 +25,9 @@ Use the values supplied by the Xiaoduiyou settings page for the active connectio
 4. To wait for new platform messages in an active Codex thread, call `xiaoduiyou_agent_turn_watch`.
 5. Use `xiaoduiyou_agent_turn_progress` for visible progress.
 6. When a Codex action needs human authorization or a slash/control confirmation, create a Xiaoduiyou card with `xiaoduiyou_interactive_request_create`, then use `xiaoduiyou_interactive_request_wait` or `xiaoduiyou_interactive_request_get` before continuing.
-7. Complete with `xiaoduiyou_agent_turn_complete`, including `document_actions` only when the user explicitly asked for document creation, update, or deletion.
-8. Use `xiaoduiyou_agent_turn_fail` only when the turn cannot be completed.
+7. For explicit document creation, update, or deletion, call the direct `xiaoduiyou_documents_*` tool before completing the turn.
+8. Complete with `xiaoduiyou_agent_turn_complete` after direct document tools and progress are done.
+9. Use `xiaoduiyou_agent_turn_fail` only when the turn cannot be completed.
 
 Codex does not run a hidden background receiver after the thread goes idle. For Hermes-like background connectivity, install and start `xiaoduiyou-codex-runner`. Use `xiaoduiyou_agent_turn_watch` only for active-thread diagnosis or manual handling.
 

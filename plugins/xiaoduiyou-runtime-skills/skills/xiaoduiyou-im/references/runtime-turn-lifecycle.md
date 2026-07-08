@@ -31,9 +31,9 @@ Use the Xiaoduiyou origin and auth context supplied by the active connection pro
    - body may include `progress` or `tool_progress`.
 3. Complete the turn:
    - `POST /api/hermes/turns/{turn_id}/callback`
-   - include a user-facing `progress` message and either:
-     - `artifact` for generated/revised content packages, or
-     - `document_actions` for document/process-draft-only operations.
+   - include a user-facing `progress` message.
+   - include `artifact` only for generated/revised content packages.
+   - for document/process-draft-only operations, call direct document tools before callback, then complete with progress only.
 
 For platform-originated outbound messages without an active pending turn, send a chat message to the stable Home channel (`default`, shown to users as `主对话`):
 

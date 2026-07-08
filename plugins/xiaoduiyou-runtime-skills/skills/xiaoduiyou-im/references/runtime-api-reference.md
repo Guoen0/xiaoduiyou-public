@@ -140,16 +140,13 @@ Compatibility notes:
 - Hermes/OpenClaw platform `send_message` / outbound text tools may only expose a text field. Prefer `xiaoduiyou_im_send`; if it is unavailable, send the same object as a JSON string so the Xiaoduiyou plugin/connector can parse it and POST the structured payload.
 - Use `xiaoduiyou_assets_upload` for local/generated files that need durable Xiaoduiyou asset URLs. It wraps `POST /api/assets` with connector-owned auth and returns top-level `url` plus `asset` metadata.
 - If direct `POST /api/assets` returns `UNAUTHENTICATED` because the agent is outside an active Xiaoduiyou runtime/auth context, do not stall. Prefer `xiaoduiyou_assets_upload` when available; otherwise use the platform `send_message` JSON-string path for chat-only visual cards with already obtained image URLs. Only claim durable Xiaoduiyou asset upload when the asset API/tool returned and the URL was verified.
-- The active-channel session endpoint is for chat bubbles and visual cards in one existing session. It still does **not** mutate `artifact` or run `document_actions`; use active-turn `events` / `callback` plus document tools for artifacts and document mutations.
+- The active-channel session endpoint is for chat bubbles and visual cards in one existing session. It still does **not** mutate `artifact`; use direct document tools before the final callback for document mutations.
 
 ### Complete turn
 
 `POST /api/hermes/turns/{turn_id}/callback`
 
-Include a user-facing final `progress`/message plus either:
-
-- `artifact` for generated/revised content packages; or
-- `document_actions` for document/process-only operations.
+Include a user-facing final `progress`/message. Add `artifact` only for generated/revised content packages. For document/process-only operations, call the direct document tools first, then complete with progress only.
 
 Generic content artifact:
 

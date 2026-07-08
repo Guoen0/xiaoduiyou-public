@@ -102,12 +102,6 @@ function finalFallbackText(dispatchState) {
     .trim();
 }
 
-function completePayloadWithDocumentActions(payload, dispatchState) {
-  if (!Array.isArray(dispatchState.documentActions) || dispatchState.documentActions.length === 0) return payload;
-  const actions = dispatchState.documentActions.splice(0);
-  return { ...payload, document_actions: actions };
-}
-
 function isXiaoduiyouCommandTurn(turn) {
   return turn?.input_type === "command" || String(turn?.user_message ?? "").trim().startsWith("/");
 }
@@ -134,7 +128,7 @@ async function deliverXiaoduiyouDispatchPayload(account, turnId, payload, info, 
   }
   if (deliveryKind === "final") {
     dispatchState.finalCompleted = true;
-    await completeXiaoduiyouTurn(account, turnId, completePayloadWithDocumentActions({ progress: text }, dispatchState));
+    await completeXiaoduiyouTurn(account, turnId, { progress: text });
     return;
   }
 
@@ -229,7 +223,7 @@ export async function handleXiaoduiyouTurn({ account, config, turn, runtime }) {
     userMessage,
   ].filter(Boolean).join("\n\n");
   const imageUrls = normalizeImageUrls(turn.image_urls, turn.content_parts);
-  const dispatchState = { finalCompleted: false, fallbackBlocks: [], documentActions: [] };
+  const dispatchState = { finalCompleted: false, fallbackBlocks: [] };
   const commandTurn = isXiaoduiyouCommandTurn(turn);
   const commandName = commandNameFromTurn(turn);
   const commandOwnerAllowFrom = commandTurn ? [senderId] : undefined;
@@ -302,7 +296,10 @@ export async function handleXiaoduiyouTurn({ account, config, turn, runtime }) {
       accountId: routeAccountId,
       sessionId,
       turnId,
-      documentActions: dispatchState.documentActions,
+      documentId: String(turn.screen_context?.document_id ?? ""),
+      document_id: String(turn.screen_context?.document_id ?? ""),
+      session_id: sessionId,
+      turn_id: turnId,
     }, async () => {
       await runPreparedInboundReplyTurn({
         channel: "xiaoduiyou",
@@ -338,12 +335,12 @@ export async function handleXiaoduiyouTurn({ account, config, turn, runtime }) {
       const fallbackText = finalFallbackText(dispatchState);
       if (fallbackText) {
         dispatchState.finalCompleted = true;
-        await completeXiaoduiyouTurn(account, turnId, completePayloadWithDocumentActions({ progress: fallbackText }, dispatchState));
+        await completeXiaoduiyouTurn(account, turnId, { progress: fallbackText });
       }
     }
     if (!dispatchState.finalCompleted && commandTurn) {
       dispatchState.finalCompleted = true;
-      await completeXiaoduiyouTurn(account, turnId, completePayloadWithDocumentActions({ progress: commandNoReplyFallbackText(turn) }, dispatchState));
+      await completeXiaoduiyouTurn(account, turnId, { progress: commandNoReplyFallbackText(turn) });
     }
   } catch (error) {
     await failXiaoduiyouTurn(account, turnId, error);

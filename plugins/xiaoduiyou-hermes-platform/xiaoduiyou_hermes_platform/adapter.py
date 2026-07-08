@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.7.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.8.1"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -41,14 +41,6 @@ WEBSOCKET_IDLE_REFRESH_SECONDS = 15.0
 DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS = 25.0
 DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS = 10.0
 MAX_RECONNECT_DELAY_SECONDS = 60.0
-
-# Tool calls and adapter.send() run in the same gateway task context, so this
-# lets tools enqueue structured document mutations that send() includes in the
-# final Xiaoduiyou callback. The app then creates tool.call.completed events.
-_PENDING_DOCUMENT_ACTIONS: ContextVar[List[Dict[str, Any]] | None] = ContextVar(
-    "XIAODUIYOU_PENDING_DOCUMENT_ACTIONS",
-    default=None,
-)
 
 # First-class Xiaoduiyou tools (Growth Diary, assets, etc.) must use the
 # connector-owned origin/token for the active turn. The model should never have
@@ -62,10 +54,8 @@ _ACTIVE_XIAODUIYOU_TOOL_CONTEXT: ContextVar[Dict[str, Any] | None] = ContextVar(
 # the exact object that claimed the turn, so keep a module-level fallback map in
 # addition to per-adapter state. This is intentionally tiny and drained on send.
 _TURN_BY_SESSION: Dict[str, str] = {}
-_ACTIONS_BY_SESSION: Dict[str, List[Dict[str, Any]]] = {}
 _PROGRESS_BY_MESSAGE: Dict[str, str] = {}
 _PROGRESS_COUNTER = 0
-_DOCUMENT_MUTATION_COUNTER = 0
 _RECENT_TOOL_CONTEXT: Dict[str, Any] = {}
 _RECENT_TOOL_CONTEXT_AT = 0.0
 _RECENT_TOOL_CONTEXT_TTL_SECONDS = 30 * 60
@@ -606,21 +596,6 @@ def _download_image_attachments(image_urls: List[str], timeout: float = DEFAULT_
             logger.warning("Xiaoduiyou image attachment download failed for %s: %s", url, exc)
     return media_paths, media_types
 
-def _active_actions() -> List[Dict[str, Any]]:
-    actions = _PENDING_DOCUMENT_ACTIONS.get()
-    if actions is None:
-        actions = []
-        _PENDING_DOCUMENT_ACTIONS.set(actions)
-    return actions
-
-
-def _queue_action(action: Dict[str, Any]) -> None:
-    _active_actions().append(action)
-    chat_id = _get_session_chat_id()
-    if chat_id:
-        _ACTIONS_BY_SESSION.setdefault(chat_id, []).append(action)
-
-
 def _remember_tool_context(context: Dict[str, Any]) -> Dict[str, Any]:
     global _RECENT_TOOL_CONTEXT, _RECENT_TOOL_CONTEXT_AT
     if any(str(context.get(key) or "").strip() for key in ("session_id", "turn_id", "document_id")):
@@ -635,28 +610,6 @@ def _recent_tool_context() -> Dict[str, Any]:
         context["recovered_from_recent_context"] = True
         return context
     return {}
-
-
-def _drain_actions(chat_id: str = "") -> List[Dict[str, Any]]:
-    actions = list(_PENDING_DOCUMENT_ACTIONS.get() or [])
-    _PENDING_DOCUMENT_ACTIONS.set([])
-    if chat_id:
-        session_actions = _ACTIONS_BY_SESSION.pop(str(chat_id), [])
-        if session_actions and not actions:
-            actions = session_actions
-        elif session_actions:
-            seen = {json.dumps(action, sort_keys=True, ensure_ascii=False) for action in actions}
-            actions.extend(
-                action for action in session_actions
-                if json.dumps(action, sort_keys=True, ensure_ascii=False) not in seen
-            )
-    return actions
-
-
-def _next_document_mutation_id(operation: str) -> str:
-    global _DOCUMENT_MUTATION_COUNTER
-    _DOCUMENT_MUTATION_COUNTER += 1
-    return f"mut_{operation}_{int(time.time() * 1000):x}_{_DOCUMENT_MUTATION_COUNTER}"
 
 
 def _block(text: str, block_type: str = "paragraph") -> Dict[str, Any]:
@@ -834,14 +787,6 @@ def _assetize_visual_card_payload(base_url: str, token: str, session_id: str, pa
         if "image_urls" not in next_payload:
             next_payload["image_urls"] = [str(item.get("image_url") or "") for item in next_attachments if isinstance(item, dict) and str(item.get("image_url") or "").startswith(("http://", "https://"))]
     return next_payload
-
-def _get_session_chat_id() -> str:
-    try:
-        from gateway.session_context import get_session_env
-        return get_session_env("HERMES_SESSION_CHAT_ID", "") or ""
-    except Exception:
-        return os.getenv("HERMES_SESSION_CHAT_ID", "") or ""
-
 
 def _base_url_from_config(config: PlatformConfig | None = None) -> str:
     if os.getenv("XIAODUIYOU_BASE_URL"):
@@ -1126,9 +1071,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         if str(turn.get("input_type") or "") == "command":
             self._turn_by_session[session_id] = turn_id
             _TURN_BY_SESSION[session_id] = turn_id
-            _PENDING_DOCUMENT_ACTIONS.set([])
             _ACTIVE_XIAODUIYOU_TOOL_CONTEXT.set(_remember_tool_context(self._tool_context_for_turn(turn, session_id=session_id, turn_id=turn_id)))
-            _ACTIONS_BY_SESSION.pop(session_id, None)
             command_text = str(turn.get("command_name") or user_message).strip() or user_message
             if not command_text.startswith("/"):
                 command_text = f"/{command_text}"
@@ -1153,9 +1096,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
 
         self._turn_by_session[session_id] = turn_id
         _TURN_BY_SESSION[session_id] = turn_id
-        _PENDING_DOCUMENT_ACTIONS.set([])
         _ACTIVE_XIAODUIYOU_TOOL_CONTEXT.set(_remember_tool_context(self._tool_context_for_turn(turn, session_id=session_id, turn_id=turn_id)))
-        _ACTIONS_BY_SESSION.pop(session_id, None)
 
         document_tool_note = (
             "Xiaoduiyou connector tools are available. "
@@ -1592,10 +1533,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         if "▉" in (content or ""):
             return SendResult(success=False, error="Xiaoduiyou does not stream assistant text; final reply is delivered through callback")
 
-        actions = _drain_actions(chat_key)
         payload: Dict[str, Any] = {"progress": content or "完成。"}
-        if actions:
-            payload["document_actions"] = actions
         try:
             result = await asyncio.to_thread(
                 _request_json,
@@ -1642,10 +1580,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
                 return SendResult(success=False, error=str(exc))
 
         if finalize:
-            actions = _drain_actions(chat_key)
             payload: Dict[str, Any] = {"progress": clean_content or "完成。"}
-            if actions:
-                payload["document_actions"] = actions
             try:
                 result = await asyncio.to_thread(
                     _request_json,
@@ -1663,29 +1598,6 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
                 return SendResult(success=False, error=str(exc))
 
         return SendResult(success=False, error="Xiaoduiyou ignores intermediate assistant text streaming; final reply is delivered through callback")
-
-
-def _queued_result(operation: str, action: Dict[str, Any]) -> str:
-    payload: Dict[str, Any] = {
-        "ok": True,
-        "accepted": True,
-        "queued": True,
-        "applied": False,
-        "persisted": False,
-        "state": "queued_for_final_callback",
-        "operation": operation,
-        "mutation_id": action.get("mutation_id"),
-        "command": (action.get("input") or {}).get("command") if isinstance(action.get("input"), dict) else None,
-        "will_apply_on": "final_callback",
-        "next_step": "This update is not persisted yet. Do not tell the user the backend has been updated. Say only that the update has been queued; after the final callback or in a later turn, verify with xiaoduiyou_documents_get and compare the live revision/fields/blocks.",
-    }
-    if action.get("document_id"):
-        payload["document_id"] = action.get("document_id")
-    else:
-        payload["current_session_document"] = True
-    if operation == "create":
-        payload["attach_to_session"] = bool(action.get("attach_to_session", True))
-    return json.dumps(payload, ensure_ascii=False)
 
 
 def _next_progress_message_id(chat_id: str, kind: str = "progress") -> str:
@@ -1774,26 +1686,55 @@ def _progress_delta(message_id: str, content: str) -> str:
     return current if current != previous else ""
 
 
+def _document_scope_payload(context: Dict[str, Any]) -> Dict[str, str]:
+    payload: Dict[str, str] = {}
+    for key in ("turn_id", "session_id", "document_id"):
+        value = str(context.get(key) or "").strip()
+        if value:
+            payload[key] = value
+    return payload
+
+
+def _document_scope_query(context: Dict[str, Any]) -> str:
+    payload = _document_scope_payload(context)
+    return f"?{parse.urlencode(payload)}" if payload else ""
+
+
 def _tool_create_document(args: Dict[str, Any], **_: Any) -> str:
+    context = _active_tool_context()
     title = str(args.get("title") or "Untitled").strip() or "Untitled"
     body = str(args.get("body") or args.get("markdown") or "")
     block_json = _normalize_block_json(args.get("block_json"), title=title, body=body)
-    action = {
-        "operation": "create",
-        "mutation_id": _next_document_mutation_id("create"),
-        "attach_to_session": bool(args.get("attach_to_session", True)),
-        "input": {
-            "title": title,
-            "block_json": block_json,
-            "created_by": "agent",
-        },
+    payload: Dict[str, Any] = {
+        **_document_scope_payload(context),
+        "title": title,
+        "block_json": block_json,
+        "created_by": "agent",
+        "attach_to_session": _bool_arg(args.get("attach_to_session"), True),
     }
     fields = args.get("fields") if isinstance(args.get("fields"), dict) else {}
     fields = _merge_ui_templates_into_fields(args, fields)
     if fields:
-        action["input"]["fields"] = fields
-    _queue_action(action)
-    return _queued_result("create", action)
+        payload["fields"] = fields
+    result = _request_json(
+        f"{context['base_url']}/api/docs",
+        method="POST",
+        payload=payload,
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+        token=context["token"],
+    )
+    document = result.get("document") if isinstance(result, dict) else result
+    return json.dumps({
+        "ok": True,
+        "accepted": True,
+        "queued": False,
+        "applied": True,
+        "persisted": True,
+        "state": "persisted",
+        "operation": "create",
+        "document_id": document.get("document_id") if isinstance(document, dict) else None,
+        "document": document,
+    }, ensure_ascii=False)
 
 
 def _tool_update_document(args: Dict[str, Any], **_: Any) -> str:
@@ -1869,19 +1810,20 @@ def _tool_update_document(args: Dict[str, Any], **_: Any) -> str:
     if args.get("allow_overwrite_after_patch") is not None:
         input_payload["allow_overwrite_after_patch"] = bool(args.get("allow_overwrite_after_patch"))
     context = _active_tool_context()
-    target_document_id = document_id or str(context.get("document_id") or "").strip()
-    if not target_document_id:
-        raise RuntimeError("xiaoduiyou_documents_update requires document_id or active screen document_id")
+    target_document_id = document_id or str(context.get("document_id") or "").strip() or "current"
+    query_string = _document_scope_query(context) if target_document_id == "current" else ""
     if args.get("idempotency_key"):
         input_payload["idempotency_key"] = str(args.get("idempotency_key"))
     result = _request_json(
-        f"{context['base_url']}/api/docs/{parse.quote(target_document_id, safe='')}/mutations",
+        f"{context['base_url']}/api/docs/{parse.quote(target_document_id, safe='')}/mutations{query_string}",
         method="POST",
         payload=input_payload,
         timeout=DEFAULT_TIMEOUT_SECONDS,
         token=context["token"],
     )
     mutation = result.get("mutation") if isinstance(result, dict) and isinstance(result.get("mutation"), dict) else {}
+    document = result.get("document") if isinstance(result, dict) and isinstance(result.get("document"), dict) else {}
+    resolved_document_id = str(document.get("document_id") or mutation.get("target_document_id") or target_document_id)
     return json.dumps({
         "ok": result.get("ok", mutation.get("ok", True)) if isinstance(result, dict) else True,
         "accepted": result.get("accepted", mutation.get("accepted", True)) if isinstance(result, dict) else True,
@@ -1891,7 +1833,7 @@ def _tool_update_document(args: Dict[str, Any], **_: Any) -> str:
         "state": result.get("state", mutation.get("state", "persisted")) if isinstance(result, dict) else "persisted",
         "operation": "update",
         "command": input_payload.get("command"),
-        "document_id": target_document_id,
+        "document_id": resolved_document_id,
         "mutation_id": mutation.get("mutation_id"),
         "mutation": mutation,
         "document": result.get("document", mutation.get("document")) if isinstance(result, dict) else result,
@@ -1899,12 +1841,28 @@ def _tool_update_document(args: Dict[str, Any], **_: Any) -> str:
 
 
 def _tool_delete_document(args: Dict[str, Any], **_: Any) -> str:
+    context = _active_tool_context()
     document_id = str(args.get("document_id") or "").strip()
-    action: Dict[str, Any] = {"operation": "delete", "mutation_id": _next_document_mutation_id("delete")}
-    if document_id:
-        action["document_id"] = document_id
-    _queue_action(action)
-    return _queued_result("delete", action)
+    target_document_id = document_id or "current"
+    query_string = "" if document_id else _document_scope_query(context)
+    result = _request_json(
+        f"{context['base_url']}/api/drive/files/{parse.quote(target_document_id, safe='')}{query_string}",
+        method="DELETE",
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+        token=context["token"],
+    )
+    document = result.get("document") if isinstance(result, dict) else result
+    return json.dumps({
+        "ok": True,
+        "accepted": True,
+        "queued": False,
+        "applied": True,
+        "persisted": True,
+        "state": "persisted",
+        "operation": "delete",
+        "document_id": document.get("document_id") if isinstance(document, dict) else target_document_id,
+        "document": document,
+    }, ensure_ascii=False)
 
 
 def _tool_get_document(args: Dict[str, Any], **_: Any) -> str:
