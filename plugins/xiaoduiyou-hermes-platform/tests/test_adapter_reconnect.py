@@ -135,6 +135,38 @@ class DeliveryClassificationTests(unittest.TestCase):
     def test_asset_upload_tool_progress_uses_attachment_icon(self):
         self.assertTrue(adapter._looks_like_tool_progress('📎 xiaoduiyou_assets_upload(file_path="/tmp/card.png")'))
 
+    def test_all_hermes_friendly_tool_labels_are_tool_progress(self):
+        messages = (
+            "🔍 Searching the web for Hermes tool labels",
+            "🌐 Reading https://example.com/docs",
+            "🌐 Browsing https://example.com",
+            "👆 Clicking Submit",
+            "⌨️ Typing hello",
+            "📖 Reading README.md",
+            "📄 Writing report.md",
+            "✏️ Editing src/app.ts",
+            "🔎 Searching files for actionInProgress",
+            "💻 Running pnpm test",
+            "🐍 Running code print('ok')",
+            "🎨 Generating image a family portrait",
+            "🎬 Generating video a short clip",
+            "🔊 Generating speech hello",
+            "👁️ Looking at the image screenshot.png",
+            "🔎 Searching past sessions",
+            "📚 Reading skill diagnose",
+            "📚 Listing skills",
+            "📚 Updating skill diagnose",
+            "👥 Delegating inspect the adapter",
+            "⏰ Scheduling daily report",
+            "❓ Asking for confirmation",
+            "🧠 Updating memory preferences",
+            "📋 Updating tasks",
+        )
+
+        for message in messages:
+            with self.subTest(message=message):
+                self.assertTrue(adapter._looks_like_tool_progress(message))
+
 
 class AssetUploadToolTests(unittest.TestCase):
     def test_upload_tool_accepts_multiple_files(self):

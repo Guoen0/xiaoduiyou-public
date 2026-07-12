@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.9.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.12.1"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -1643,6 +1643,34 @@ def _looks_like_tool_progress(content: str) -> bool:
         return True
     if _looks_like_gateway_command_listing(stripped):
         return False
+    first_line = stripped.splitlines()[0].strip()
+    label = first_line.split(maxsplit=1)[1] if " " in first_line else first_line
+    friendly_tool_verbs = (
+        "Searching the web",
+        "Reading",
+        "Browsing",
+        "Clicking",
+        "Typing",
+        "Writing",
+        "Editing",
+        "Searching files",
+        "Running",
+        "Generating image",
+        "Generating video",
+        "Generating speech",
+        "Looking at the image",
+        "Searching past sessions",
+        "Reading skill",
+        "Listing skills",
+        "Updating skill",
+        "Delegating",
+        "Scheduling",
+        "Asking",
+        "Updating memory",
+        "Updating tasks",
+    )
+    if label.startswith(friendly_tool_verbs):
+        return True
     tool_markers = (
         "📨 send_message",
         "send_message(",
