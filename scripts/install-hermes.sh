@@ -244,6 +244,22 @@ install_hermes_runtime_skills() {
   rmdir "$legacy_skills_dir" >/dev/null 2>&1 || true
 }
 
+install_hermes_search_skill() {
+  local source_dir="${repo_dir}/hermes-skills/xiaoduiyou-search"
+  local target_dir="${HERMES_HOME_DIR}/skills/_private/xiaoduiyou-search"
+  if [ ! -f "${source_dir}/SKILL.md" ]; then
+    echo "Missing Hermes search skill: ${source_dir}/SKILL.md" >&2
+    exit 2
+  fi
+  mkdir -p "$(dirname "$target_dir")"
+  rsync -a --delete \
+    --exclude '.env' \
+    --exclude '.tikhub_env' \
+    --exclude '__pycache__/' \
+    --exclude '*.pyc' \
+    "$source_dir/" "$target_dir/"
+}
+
 restart_hermes_gateway() {
   local restart_requested="${XDY_RESTART_HERMES:-1}"
 
@@ -311,6 +327,7 @@ fi
 mkdir -p "${HERMES_HOME_DIR}/plugins/xiaoduiyou_hermes_platform"
 rsync -a --delete "$repo_dir/plugins/xiaoduiyou-hermes-platform/xiaoduiyou_hermes_platform/" "${HERMES_HOME_DIR}/plugins/xiaoduiyou_hermes_platform/"
 install_hermes_runtime_skills
+install_hermes_search_skill
 
 clear_legacy_hermes_env_overrides
 

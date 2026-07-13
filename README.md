@@ -75,8 +75,9 @@ XDY_CONNECTION_TOKEN="<由小队友设置页提供>" \
 ```
 
 运行规则：
-- Hermes 安装脚本会安装/更新小队友 platform 插件，以及 `xiaoduiyou-im`、`xiaoduiyou-doc-content-package`、`xiaoduiyou-growth-diary`、`xiaoduiyou-child-profile`、`xiaoduiyou-feedback-issues` 五个 runtime skills。
-- 安装脚本会写入 `${HERMES_HOME:-~/.hermes}/config.yaml`，并把五个 runtime skills 安装到同一目录下的 `skills/xiaoduiyou/`；如果你在 Hermes profile 下运行，先确保 `HERMES_HOME` 指向该 profile 目录。
+- Hermes 安装脚本会安装/更新小队友 platform 插件、五个 runtime skills，以及 `xiaoduiyou-search` Hermes 搜索 skill。
+- 安装脚本会写入 `${HERMES_HOME:-~/.hermes}/config.yaml`，把五个 runtime skills 安装到 `skills/xiaoduiyou/`，并把搜索 skill 安装到 `skills/_private/xiaoduiyou-search/`；如果你在 Hermes profile 下运行，先确保 `HERMES_HOME` 指向该 profile 目录。
+- `xiaoduiyou-search` 的版本源是仓库中的 `hermes-skills/xiaoduiyou-search/`。TikHub 密钥只允许保存在各运行环境的 `~/.hermes/.tikhub_env`，不得进入仓库；从本地 default Hermes 更新版本源时运行 `scripts/sync-hermes-search-skill.sh`。
 - 如果安装脚本是在 Hermes Agent 自己的 gateway turn 内运行，脚本会安排延迟重启并先返回成功，让 Agent 能完成当前回复；不要在安装命令后继续做长时间验证。
 - Hermes default 和 profile 是相互隔离的连接实例：生产 default 使用生产设置页提供的 `XDY_BASE_URL` / `XDY_CONNECTION_TOKEN`，review/test profile 使用 review/test 设置页提供的 `XDY_BASE_URL` / `XDY_CONNECTION_TOKEN`。不要从 default 复制 token 到 profile，也不要跨环境复用 token。
 - Xiaoduiyou Hermes 插件会维护 Hermes 可读的 channel directory：`send_message(action="list")` 应能看到 `xiaoduiyou:主对话`、`xiaoduiyou:<频道名>`，家庭群频道类型应为 `group`。如果看不到这些频道，重新执行安装/更新提示词并重启对应 Hermes profile。
