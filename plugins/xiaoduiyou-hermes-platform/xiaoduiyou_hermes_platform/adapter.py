@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.12.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.23.1"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -1430,9 +1430,18 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         session_key: str,
         description: str = "dangerous command",
         metadata: Optional[Dict[str, Any]] = None,
+        allow_permanent: bool = True,
+        allow_session: bool = True,
+        smart_denied: bool = False,
     ) -> SendResult:
         session_id = str(chat_id or "").strip()
         turn_id = await self._resolve_turn_id(session_id, metadata)
+        actions = ["once"]
+        if not smart_denied and allow_session:
+            actions.append("session")
+            if allow_permanent:
+                actions.append("always")
+        actions.append("deny")
         payload = {
             "session_id": session_id,
             "turn_id": turn_id,
@@ -1442,7 +1451,7 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             "command": command or "",
             "reason": description or "",
             "session_key": session_key,
-            "actions": ["once", "session", "always", "deny"],
+            "actions": actions,
             "timeout_seconds": 300,
         }
         try:

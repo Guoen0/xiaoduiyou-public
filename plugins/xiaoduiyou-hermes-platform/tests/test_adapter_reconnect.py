@@ -207,6 +207,53 @@ class AssetUploadToolTests(unittest.TestCase):
         self.assertEqual([call["mime_type"] for call in calls], ["image/png", "image/jpeg"])
 
 
+class ExecApprovalTests(unittest.IsolatedAsyncioTestCase):
+    async def _approval_actions(self, **capabilities):
+        config = adapter.PlatformConfig(
+            extra={
+                "base_url": "https://review.example.test",
+                "connection_token": "token",
+            }
+        )
+        instance = adapter.XiaoduiyouAdapter(config)
+        posted_payloads = []
+
+        async def resolve_turn_id(chat_id, metadata=None):
+            return "turn-1"
+
+        async def post_interactive_request(payload):
+            posted_payloads.append(payload)
+            return {"request": {"request_id": ""}}
+
+        instance._resolve_turn_id = resolve_turn_id
+        instance._post_interactive_request = post_interactive_request
+
+        result = await instance.send_exec_approval(
+            chat_id="session-1",
+            command="echo hello",
+            session_key="gateway-session-1",
+            **capabilities,
+        )
+
+        self.assertTrue(result.success)
+        return posted_payloads[0]["actions"]
+
+    async def test_exec_approval_hides_permanent_action_when_disallowed(self):
+        actions = await self._approval_actions(allow_permanent=False)
+
+        self.assertEqual(actions, ["once", "session", "deny"])
+
+    async def test_exec_approval_hides_persistent_actions_when_session_is_disallowed(self):
+        actions = await self._approval_actions(allow_session=False)
+
+        self.assertEqual(actions, ["once", "deny"])
+
+    async def test_exec_approval_smart_deny_only_offers_once_or_deny(self):
+        actions = await self._approval_actions(smart_denied=True)
+
+        self.assertEqual(actions, ["once", "deny"])
+
+
 class TurnStreamReconnectTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         os.environ.pop("XIAODUIYOU_BASE_URL", None)
