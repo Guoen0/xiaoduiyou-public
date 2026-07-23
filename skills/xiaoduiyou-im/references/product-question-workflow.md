@@ -14,6 +14,29 @@ When the task is about a real product, prefer evidence collection over generic a
 4. Cross-check the claims: treat Xiaohongshu as experience/reference evidence and Taobao as purchase/parameter candidates.
 5. Return a concise recommendation with clickable cards/images, not only a text paragraph.
 
+## Recommendation grounding and novelty
+
+Before searching or recommending gifts, style-sensitive products, or repeat purchases, build four short buckets:
+
+- **Explicit preference:** the person directly said they like/want it.
+- **Inferred signal:** an aesthetic or functional preference inferred from prior choices; label it as inference.
+- **Already used / already purchased:** exclude by default. A successful past gift is evidence about taste, not permission to recommend the same gift again.
+- **Unknown:** size, material, brand, budget, wearing habits, or other facts that cannot be recovered.
+
+Do not force a recommendation when the evidence only supports a mood or aesthetic. Translate the signal into new categories, then verify real products. If an AI/search source returns precise-sounding product names without stable listing URLs, treat them as unverified leads and do not repeat them to the user. A recommendation must distinguish exact matches from partial matches, especially for material claims such as solid 18K gold versus gold vermeil, plated silver, brass, or generic “18K color.”
+
+For follow-up requests like “换一些词再找”, vary search vocabulary by independent dimensions such as form, surface, material, and intended use instead of cycling through superficial synonyms. Choose terms from the user's current request rather than carrying preferences over from an unrelated purchase. Then filter out misleading material titles, imitation listings, implausible price/material combinations, poor return terms, and low-evidence sellers before presenting candidates.
+
+### Jewelry and ring-size verification
+
+- Treat price and material as separate axes. A high-priced designer ring may still use a base metal; explain whether the buyer is paying for design/craft or precious-metal value.
+- Open the exact SKU page before stating material. A precious-metal color name in a variant label does not prove that the underlying material is that metal; verify the material field and seller description.
+- Read the available size options from the live SKU panel. A numeric range may resemble a familiar sizing system, but do not assert the standard unless the page or seller confirms it.
+- Use inner diameter in millimetres as the cross-system reference. Measure an existing ring from the intended finger, inner edge to inner edge; do not infer the intended size from another person's measurement or a remembered conversion shortcut.
+- Wide, heavy, and multi-band rings fit tighter than thin bands. If between sizes, ask whether half sizes or resizing are available rather than blindly rounding down.
+- When the system is unstated, give a concrete seller message such as: `请确认页面圈号采用什么标准；该尺码成品内径是多少毫米；现有戒指内径XXmm应选哪号，是否支持改圈？`
+- If the user remembers only a vague historical ring number, recover the exact old order/SKU or measure a ring. Do not invent a conversion: mainstream regional sizing systems can assign very different numbers to the same inner diameter.
+
 ## Xiaohongshu sourcing
 
 Use Xiaohongshu for real-user context and visual/installation references.
@@ -67,6 +90,19 @@ Clean item links before storing/displaying:
 - Strip tracking params such as `spm`, `scm`, `abbucket`, `utparam`, `ns`, `xxc`, `pvid`, `ali_refid`, `ali_trackid`, `utm_*`.
 - Expand share/short/redirect links first, then canonicalize.
 - Verify the clean link is still browser-openable. If login is required, label it as “可能需要登录淘宝”.
+
+### Taobao visual-card fallback
+
+Taobao search output may provide title, price, shop, item ID, and URL but no stable main-image URL. When the user asks to see pictures:
+
+1. Shortlist 2–6 candidates from search results before opening pages; do not screenshot every result.
+2. Open each canonical item URL in the authenticated OpenCLI browser and verify that the product title, material claim, visible price, return terms, and main image agree with the search row.
+3. Take a local screenshot, then crop to the main product-photo area. Do not use a giant full-page screenshot as the card thumbnail when a clean crop is possible.
+4. QA the crop for the actual product and remove account-identifying chrome or unrelated UI.
+5. Upload the crop through `xiaoduiyou_assets_upload`, use the durable HTTPS URL as `image_url`, keep the canonical Taobao URL as `display.link_url`, and send in the same turn through `xiaoduiyou_im_send`.
+6. Verify `attachment_count` equals the number of promised cards before claiming delivery.
+
+Card subtitles should state the actual material and visible price compactly, and call out critical uncertainty such as “镀金而非实金”, “开口可调”, “预售30天”, “不支持七天无理由”, or “价格以打开页面为准”.
 
 ## UI insertion: message cards first
 
