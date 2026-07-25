@@ -30,12 +30,14 @@ If the user asks to log feeding/sleep/stool/symptom events, load `xiaoduiyou-gro
 4. Patch only fields or skill nodes the user explicitly provided. Do not overwrite unknown profile fields or unrelated skill-node states with defaults from examples.
 5. Keep birthday as `YYYY-MM-DD` when possible. If the user gives an ambiguous date, ask one concise clarification before writing.
 6. Store height in `heightCm` and weight in `weightKg` as strings, without unit text inside the value. Example: `80`, `10.5`.
-7. For allergy, write a short factual note. Use empty string only when the user explicitly says to clear allergies.
-8. For photos, pass only a browser-fetchable HTTPS `photoUrl`. Public HTTPS photo URLs may be used directly when stable and fetchable without cookies/login; local/generated photos must be uploaded first. Do not pass local paths, `file:`, `blob:`, localhost, or private-network URLs.
-9. For development progress, read `development[].nodes[]` from `xiaoduiyou_child_get`. Patch `skill_node_states` using the exact node `key` returned there, with `true` for lit/unlocked and `false` for unlit/locked. Do not invent keys from memory.
-10. After patching, verify with `xiaoduiyou_child_get` and answer with the changed fields/nodes only.
-11. Keep private family facts out of skill files. In local Hermes, durable household preferences belong in `${HERMES_HOME:-$HOME/.hermes}/private/xiaoduiyou-family-care-preferences.md`, not here. Read that file before using private family names/preferences; create or update it when the user gives durable private context. Because it is outside `skills/` and `plugins/`, skill/plugin upgrades should not overwrite it.
-12. When called from `xiaoduiyou-growth-diary` after a height/weight/allergy diary record, patch only the latest provided `heightCm`, `weightKg`, and/or `allergy`; the diary record remains the historical source of the event.
+7. For allergy, write a short factual note. Use empty string only when the user explicitly says to clear allergies. Allergy corrections are safety-critical profile updates: when a caregiver states or corrects an allergy, read the live profile, merge the new fact without dropping existing allergy/avoidance entries, patch immediately, and verify by re-reading.
+8. Distinguish confirmed allergy from precautionary avoidance in stored wording. Preserve caregiver certainty (`过敏` versus `暂按过敏处理` / `先回避`) instead of upgrading uncertainty into a diagnosis. A category-wide statement must remain broad enough to govern future recommendations; examples may clarify scope but must not narrow it.
+9. If an allergy statement is genuinely ambiguous about which foods are implicated, ask one concise clarification before patching. Once clarified, persist it; do not leave the correction only in chat.
+10. For photos, pass only a browser-fetchable HTTPS `photoUrl`. Public HTTPS photo URLs may be used directly when stable and fetchable without cookies/login; local/generated photos must be uploaded first. Do not pass local paths, `file:`, `blob:`, localhost, or private-network URLs.
+11. For development progress, read `development[].nodes[]` from `xiaoduiyou_child_get`. Patch `skill_node_states` using the exact node `key` returned there, with `true` for lit/unlocked and `false` for unlit/locked. Do not invent keys from memory.
+12. After patching, verify with `xiaoduiyou_child_get` and answer with the changed fields/nodes only.
+13. Keep private family facts out of skill files. In local Hermes, durable household preferences belong in `${HERMES_HOME:-$HOME/.hermes}/private/xiaoduiyou-family-care-preferences.md`, not here. Read that file before using private family names/preferences; create or update it when the user gives durable private context. Because it is outside `skills/` and `plugins/`, skill/plugin upgrades should not overwrite it.
+14. When called from `xiaoduiyou-growth-diary` after a height/weight/allergy diary record, patch only the latest provided `heightCm`, `weightKg`, and/or `allergy`; the diary record remains the historical source of the event.
 
 ## Fields
 

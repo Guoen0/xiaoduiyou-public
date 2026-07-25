@@ -27,6 +27,20 @@ Use this when a Xiaoduiyou travel-plan case needs realistic destination/referenc
 - Do not use generic lake/hotel/Unsplash/Wikimedia photos when the plan claims to be based on Xiaohongshu references.
 - Do not paste search URLs or links with `xsec_token` into user-facing documents.
 - If the itinerary names a concrete POI such as `月光码头` or `诚品书店`, include reference images for those named stops or explicitly state that you could not obtain them.
+- A public image-search query containing `site:xiaohongshu.com` does **not** prove that the returned image came from a specific Xiaohongshu note. Search providers may strip the source page and return only a cached/signed image URL. Never invent a note ID, author, interaction count, or `image_links` entry from that result.
+
+## Degraded fallback when Xiaohongshu provenance is unavailable
+
+If Xiaohongshu search cannot return a verifiable note URL:
+
+1. Continue only if the user still benefits from seeing location imagery now.
+2. Use location-specific public-web images, visually QA that each image matches its POI, then upload them to Xiaoduiyou assets/TOS.
+3. Label the section `地点实景参考` or `公开网页实景参考`, not `小红书参考图`.
+4. Omit `destination.image_links` entirely unless every link is a real clean note/share URL matching the image order.
+5. In the process document, state briefly that Xiaohongshu note provenance could not be verified and that no note links were fabricated.
+6. Keep the content package useful: images, crowd evidence, route decisions, toddler fit, and fallback rules may still ship while Xiaohongshu provenance remains an explicit gap.
+
+This fallback preserves visual usefulness without misrepresenting public-search thumbnails as Xiaohongshu evidence.
 
 ## Provenance row template
 
