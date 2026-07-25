@@ -81,7 +81,7 @@ def main() -> None:
     require_text(
         ROOT / "plugins" / "xiaoduiyou-codex-platform" / "scripts" / "xiaoduiyou_mcp.py",
         [
-            "CONNECTOR_VERSION = \"2026.7.5.2-codex\"",
+            "CONNECTOR_VERSION = \"2026.7.25.1-codex\"",
             "DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS = 25.0",
             "DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS = 10.0",
             "WebSocketKeepalive",
@@ -92,6 +92,8 @@ def main() -> None:
             "\"name\": \"xiaoduiyou_interactive_request_wait\"",
             "\"name\": \"xiaoduiyou_child_get\"",
             "\"name\": \"xiaoduiyou_child_patch\"",
+            "\"interactive_html\"",
+            "\"travel_plan\"",
             "\"/api/agent/im/send\"",
             "\"/api/agent/interactive-requests\"",
             "/ws/agent/interactive-requests/",

@@ -20,7 +20,7 @@ Load this when the user asks for:
 
 1. Only call Xiaoduiyou document tools when the user explicitly asks for a document artifact or mutation.
 2. Distinguish **plain documents** from **content packages**. If the user says `只写文档`, `只要文档`, `普通文档`, or does not ask for publish tabs/templates, call `xiaoduiyou_documents_create` with only `title` + `body`/`block_json`; **omit** `ui_templates`, `fields.ui_templates`, and `fields.publish_notes` entirely. Do not create empty publish fields “just in case.”
-3. Visible result tabs render from `ui_templates` + `fields.publish_notes`; process/evidence material stays in `source_markdown`, `body`, or process blocks.
+3. Visible result tabs render from `ui_templates` plus matching `fields.publish_notes` or `fields.ui_payloads`; process/evidence material stays in `source_markdown`, `body`, or process blocks.
 4. Images referenced by publish tabs must be durable browser-accessible URLs. Use existing public HTTPS image URLs directly when they are fetchable without cookies/login and stable enough for the artifact; upload local/generated files or unstable source images with `xiaoduiyou_assets_upload` or connector-supported `/api/assets` tooling first.
 5. Keep the final publish tabs clean: final copy/images only, no process notes, no raw evidence dumps, no secrets.
 6. For chat visual cards only, use `xiaoduiyou-im`; do not create a document unless explicitly requested.
@@ -33,7 +33,7 @@ Load this when the user asks for:
 |---|---|---|
 | `旅游规划` / `旅行规划` / itinerary artifact | `references/travel-plan-planning-workflow.md` then `references/travel-plan-result-template.md` | Travel planning is a document/content artifact with process evidence and structured `travel_plan` UI data. |
 | Travel plan Xiaohongshu reference images | `references/travel-plan-xhs-reference-workflow.md` | Travel artifacts need durable uploaded reference images and clean provenance. |
-| `做成内容包` / `创建文档` / `文档产物` | `references/content-package-contract.md` | Document artifact / `ui_templates` / `publish_notes` contract. |
+| `做成内容包` / `创建文档` / `文档产物` / `互动网页` | `references/content-package-contract.md` | Document artifact / `ui_templates` / result-payload contract. |
 | `小红书发布稿` / `朋友圈发布稿` / publish tabs | `references/social-publish-result-template.md` | Platform-specific publish tab shape. |
 | Process/evidence doc Markdown fidelity | `references/process-document-markdown.md` | Keep process material separate and well-formed. |
 | Validate a content-package JSON before callback/document update | Prefer the first-class document tools' payload schema; optional local lint only if the script is present | Catch local paths, mismatched templates, process/result mixing. |
@@ -56,7 +56,7 @@ Load this when the user asks for:
 ## Validation
 
 - Prefer the first-class document tools for read/create/update/delete: `xiaoduiyou_documents_get`, `xiaoduiyou_documents_create`, `xiaoduiyou_documents_update`, `xiaoduiyou_documents_delete`.
-- Before calling them, manually validate: `ui_templates` matches `fields.publish_notes`, visible publish tabs contain only final material, and all images are browser-accessible `http(s)` URLs.
+- Before calling them, manually validate: every selected template has matching `fields.publish_notes` or `fields.ui_payloads`, visible result tabs contain only final material, and all publish images are browser-accessible `http(s)` URLs.
 - A local validator script may exist in some Hermes installs as an optional lint aid, but public Xiaoduiyou usage skills must not depend on scripts being available.
 
 ## Tool use

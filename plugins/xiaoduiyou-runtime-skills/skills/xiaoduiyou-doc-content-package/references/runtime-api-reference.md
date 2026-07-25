@@ -193,7 +193,7 @@ Supported update commands:
 
 Document updates write immediately through Xiaoduiyou document mutations and return a persisted receipt with `mutation_id`, `state`, and `current_revision`. Use `idempotency_key` for retries and `base_revision` from `xiaoduiyou_documents_get` for overwrites or high-risk image edits so stale payloads are rejected instead of silently replacing newer data.
 
-Use `fields.ui_templates` / top-level `ui_templates` and `fields.publish_notes` for visible result tabs. Use `body`, `block_json`, and `fields.source_markdown` for process/evidence material.
+Use `fields.ui_templates` / top-level `ui_templates` with `fields.publish_notes` for publish/travel result tabs. For `interactive_html`, use `fields.ui_payloads.interactive_html` with schema `xdy.interactive_html.v1`, a short label, and self-contained offline HTML below 512 KiB. Use `body`, `block_json`, and `fields.source_markdown` for process/evidence material.
 
 ## Growth diary
 

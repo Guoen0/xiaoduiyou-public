@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.23.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.25.1"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -1108,8 +1108,9 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             "For ordinary chat, answer normally and do not call document tools. "
             "When the user explicitly asks to create, update, append to, or delete a document, "
             "call the appropriate xiaoduiyou document tool exactly once before your final reply. "
-            "For content packages, choose UI templates with ui_templates (currently xiaohongshu and/or moments) "
-            "and fill matching fields.publish_notes.<template> with final result data; process block_json/source_markdown should stay process-only. "
+            "For content packages, choose ui_templates from xiaohongshu, moments, travel_plan, or interactive_html. "
+            "Use fields.publish_notes for publish/travel results. For interactive_html, store a self-contained offline page at "
+            "fields.ui_payloads.interactive_html with schema xdy.interactive_html.v1, label, and html; process block_json/source_markdown should stay process-only. "
             "Do not merely promise to create a document."
         )
         image_urls = _extract_xiaoduiyou_image_urls_from_turn(turn)
@@ -2443,7 +2444,8 @@ def register(ctx) -> None:
         platform_hint=(
             "Xiaoduiyou is a document workspace. Use normal chat for ordinary replies. "
             "Only call xiaoduiyou document tools when the user explicitly asks for a document artifact or mutation. "
-            "Content packages may select ui_templates (xiaohongshu, moments) and fill fields.publish_notes for those templates."
+            "Content packages may select ui_templates (xiaohongshu, moments, travel_plan, interactive_html); "
+            "interactive_html uses fields.ui_payloads.interactive_html while publish/travel templates use fields.publish_notes."
         ),
         max_message_length=XiaoduiyouAdapter.MAX_MESSAGE_LENGTH,
         cron_deliver_env_var="XIAODUIYOU_HOME_CHANNEL",
@@ -2594,8 +2596,8 @@ def register(ctx) -> None:
                     "block_json": {"type": "object", "description": "Optional Xiaoduiyou Block JSON: {schema:'xdy.block_json.v1', blocks:[...]}"},
                     "ui_templates": {
                         "type": "array",
-                        "description": "Content-package UI templates to render. Currently supported: xiaohongshu and moments. Also written to fields.ui_templates.",
-                        "items": {"type": "string", "enum": ["xiaohongshu", "moments"]},
+                        "description": "Content-package UI templates to render. Supported: xiaohongshu, moments, travel_plan, and interactive_html. Also written to fields.ui_templates.",
+                        "items": {"type": "string", "enum": ["xiaohongshu", "moments", "travel_plan", "interactive_html"]},
                     },
                     "fields": {"type": "object", "description": "Optional metadata fields."},
                     "attach_to_session": {"type": "boolean", "description": "Attach as the current session document. Defaults true."},
@@ -2627,8 +2629,8 @@ def register(ctx) -> None:
                     "block_json": {"type": "object", "description": "Optional full Block JSON for overwrite."},
                     "ui_templates": {
                         "type": "array",
-                        "description": "Replace the content-package UI templates for this document. Currently supported: xiaohongshu and moments. Also written to fields.ui_templates.",
-                        "items": {"type": "string", "enum": ["xiaohongshu", "moments"]},
+                        "description": "Replace the content-package UI templates for this document. Supported: xiaohongshu, moments, travel_plan, and interactive_html. Also written to fields.ui_templates.",
+                        "items": {"type": "string", "enum": ["xiaohongshu", "moments", "travel_plan", "interactive_html"]},
                     },
                     "blocks": {
                         "type": "array",

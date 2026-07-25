@@ -111,8 +111,8 @@ const DocumentCreateSchema = {
     block_json: { type: "object", description: "Optional Xiaoduiyou Block JSON: {schema:'xdy.block_json.v1', blocks:[...]}", additionalProperties: true },
     ui_templates: {
       type: "array",
-      description: "Content-package UI templates to render. Currently supported: xiaohongshu and moments. Also written to fields.ui_templates.",
-      items: { type: "string", enum: ["xiaohongshu", "moments"] },
+      description: "Content-package UI templates to render. Supported: xiaohongshu, moments, travel_plan, and interactive_html. Also written to fields.ui_templates.",
+      items: { type: "string", enum: ["xiaohongshu", "moments", "travel_plan", "interactive_html"] },
     },
     fields: { type: "object", description: "Optional metadata fields.", additionalProperties: true },
     attach_to_session: { type: "boolean", description: "Attach as the current session document. Defaults true." },
@@ -135,8 +135,8 @@ const DocumentUpdateSchema = {
     block_json: { type: "object", description: "Optional full Block JSON for overwrite.", additionalProperties: true },
     ui_templates: {
       type: "array",
-      description: "Replace the content-package UI templates for this document. Currently supported: xiaohongshu and moments. Also written to fields.ui_templates.",
-      items: { type: "string", enum: ["xiaohongshu", "moments"] },
+      description: "Replace the content-package UI templates for this document. Supported: xiaohongshu, moments, travel_plan, and interactive_html. Also written to fields.ui_templates.",
+      items: { type: "string", enum: ["xiaohongshu", "moments", "travel_plan", "interactive_html"] },
     },
     blocks: {
       type: "array",
@@ -290,7 +290,7 @@ function normalizeBlockJson(blockJson, { title = "", body = "" } = {}) {
 function mergeUiTemplatesIntoFields(rawParams, fields) {
   const next = { ...(fields && typeof fields === "object" && !Array.isArray(fields) ? fields : {}) };
   if (Array.isArray(rawParams.ui_templates)) {
-    next.ui_templates = rawParams.ui_templates.filter((template) => template === "xiaohongshu" || template === "moments");
+    next.ui_templates = rawParams.ui_templates.filter((template) => ["xiaohongshu", "moments", "travel_plan", "interactive_html"].includes(template));
   }
   return next;
 }

@@ -20,8 +20,8 @@ from typing import Any
 from urllib import error, parse, request
 
 
-VERSION = "0.1.5"
-CONNECTOR_VERSION = "2026.7.5.2-codex"
+VERSION = "0.1.6"
+CONNECTOR_VERSION = "2026.7.25.1-codex"
 DEFAULT_CONFIG_PATH = Path.home() / ".codex" / "xiaoduiyou-connection.json"
 DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS = 25.0
 DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS = 10.0
@@ -437,7 +437,7 @@ def normalize_document_input(args: dict[str, Any], *, create: bool) -> dict[str,
     if isinstance(fields, dict):
         payload["fields"] = fields
     if isinstance(args.get("ui_templates"), list):
-        payload.setdefault("fields", {})["ui_templates"] = [value for value in args["ui_templates"] if value in ("xiaohongshu", "moments")]
+        payload.setdefault("fields", {})["ui_templates"] = [value for value in args["ui_templates"] if value in ("xiaohongshu", "moments", "travel_plan", "interactive_html")]
     return payload
 
 
@@ -920,12 +920,12 @@ TOOLS = [
     {
         "name": "xiaoduiyou_documents_create",
         "description": "Create a Xiaoduiyou document only when the user explicitly asks for a document artifact.",
-        "inputSchema": schema({"title": {"type": "string"}, "body": {"type": "string"}, "markdown": {"type": "string"}, "block_json": {"type": "object", "additionalProperties": True}, "fields": {"type": "object", "additionalProperties": True}, "ui_templates": {"type": "array", "items": {"type": "string", "enum": ["xiaohongshu", "moments"]}}, "attach_to_session": {"type": "boolean"}, "session_id": {"type": "string"}, "turn_id": {"type": "string"}, "document_id": {"type": "string"}}, ["title"]),
+        "inputSchema": schema({"title": {"type": "string"}, "body": {"type": "string"}, "markdown": {"type": "string"}, "block_json": {"type": "object", "additionalProperties": True}, "fields": {"type": "object", "additionalProperties": True}, "ui_templates": {"type": "array", "items": {"type": "string", "enum": ["xiaohongshu", "moments", "travel_plan", "interactive_html"]}}, "attach_to_session": {"type": "boolean"}, "session_id": {"type": "string"}, "turn_id": {"type": "string"}, "document_id": {"type": "string"}}, ["title"]),
     },
     {
         "name": "xiaoduiyou_documents_update",
         "description": "Update a Xiaoduiyou document by document_id, or omit document_id with turn_id/session_id to target the current screen/session document.",
-        "inputSchema": schema({"document_id": {"type": "string"}, "session_id": {"type": "string"}, "turn_id": {"type": "string"}, "command": {"type": "string", "enum": ["overwrite", "append_blocks", "patch_fields", "replace_publish_image", "upsert_image_grid", "sync_publish_images_to_document"]}, "idempotency_key": {"type": "string"}, "base_revision": {"type": "integer"}, "allow_overwrite_after_patch": {"type": "boolean"}, "title": {"type": "string"}, "body": {"type": "string"}, "markdown": {"type": "string"}, "block_json": {"type": "object", "additionalProperties": True}, "blocks": {"type": "array", "items": {"type": "object", "additionalProperties": True}}, "fields": {"type": "object", "additionalProperties": True}, "ui_templates": {"type": "array", "items": {"type": "string", "enum": ["xiaohongshu", "moments"]}}, "platform": {"type": "string"}, "index": {"type": "integer"}, "image_url": {"type": "string"}, "caption": {"type": "string"}, "history_caption": {"type": "string"}, "sync_process_doc": {"type": "boolean"}, "images": {"type": "array", "items": {"type": "object", "additionalProperties": True}}, "columns": {"type": "integer"}}),
+        "inputSchema": schema({"document_id": {"type": "string"}, "session_id": {"type": "string"}, "turn_id": {"type": "string"}, "command": {"type": "string", "enum": ["overwrite", "append_blocks", "patch_fields", "replace_publish_image", "upsert_image_grid", "sync_publish_images_to_document"]}, "idempotency_key": {"type": "string"}, "base_revision": {"type": "integer"}, "allow_overwrite_after_patch": {"type": "boolean"}, "title": {"type": "string"}, "body": {"type": "string"}, "markdown": {"type": "string"}, "block_json": {"type": "object", "additionalProperties": True}, "blocks": {"type": "array", "items": {"type": "object", "additionalProperties": True}}, "fields": {"type": "object", "additionalProperties": True}, "ui_templates": {"type": "array", "items": {"type": "string", "enum": ["xiaohongshu", "moments", "travel_plan", "interactive_html"]}}, "platform": {"type": "string"}, "index": {"type": "integer"}, "image_url": {"type": "string"}, "caption": {"type": "string"}, "history_caption": {"type": "string"}, "sync_process_doc": {"type": "boolean"}, "images": {"type": "array", "items": {"type": "object", "additionalProperties": True}}, "columns": {"type": "integer"}}),
     },
     {
         "name": "xiaoduiyou_documents_delete",

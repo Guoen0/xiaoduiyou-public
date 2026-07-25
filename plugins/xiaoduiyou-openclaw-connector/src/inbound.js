@@ -211,7 +211,7 @@ export async function handleXiaoduiyouTurn({ account, config, turn, runtime }) {
     "Agent-created records must include date as YYYY-MM-DD and occurred_at as YYYY-MM-DD HH:mm:ss with matching dates; short times like 19:20 are invalid and will be rejected.",
     "For ordinary chat, answer normally and do not call document tools.",
     "When the user explicitly asks to create, update, append to, or delete a document, call the appropriate xiaoduiyou document tool exactly once before your final reply.",
-    "For content packages, choose UI templates with ui_templates (currently xiaohongshu and/or moments) and fill matching fields.publish_notes.<template> with final result data; process block_json/source_markdown should stay process-only.",
+    "For content packages, choose ui_templates from xiaohongshu, moments, travel_plan, or interactive_html. Use fields.publish_notes for publish/travel results. For interactive_html, store a self-contained offline page at fields.ui_payloads.interactive_html with schema xdy.interactive_html.v1, label, and html; process block_json/source_markdown should stay process-only.",
     "Do not merely promise to create a document.",
   ].join(" ");
   const agentMessage = [

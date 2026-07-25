@@ -5,7 +5,7 @@ import path from "node:path";
 import tls from "node:tls";
 import { once } from "node:events";
 
-export const XIAODUIYOU_CONNECTOR_VERSION = "2026.7.8.1";
+export const XIAODUIYOU_CONNECTOR_VERSION = "2026.7.25.1";
 const WEBSOCKET_RETRY_MS = 3_000;
 const WEBSOCKET_IDLE_TIMEOUT_MS = 15_000;
 const DEFAULT_WEBSOCKET_PING_INTERVAL_MS = 25_000;
