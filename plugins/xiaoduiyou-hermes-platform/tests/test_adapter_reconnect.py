@@ -186,6 +186,78 @@ class ContentPackageTemplateTests(unittest.TestCase):
             ["xiaohongshu", "moments", "travel_plan", "interactive_html", "mini_app"],
         )
 
+    def test_create_document_returns_mini_app_validation_as_structured_tool_result(self):
+        old_active_tool_context = adapter._active_tool_context
+        old_request_json = adapter._request_json
+
+        def fake_context():
+            return {"base_url": "https://review.example.test", "token": "token"}
+
+        def reject_invalid_definition(*args, **kwargs):
+            del args, kwargs
+            raise RuntimeError(
+                'HTTP 400: {"error":"INVALID_MINI_APP_DEFINITION","capability_available":true,'
+                '"path":"fields.ui_payloads.mini_app.view.children[0].action",'
+                '"reason":"button.action must be an action object; received string",'
+                '"expected":{"type":"set","path":"<state_field>","value":"<value_or_expression>"},'
+                '"skill_reference":{"reference":"skills/xiaoduiyou/xiaoduiyou-doc-content-package/references/mini-app-contract.md",'
+                '"section":"Buttons and actions"}}'
+            )
+
+        adapter._active_tool_context = fake_context
+        adapter._request_json = reject_invalid_definition
+        try:
+            result = json.loads(adapter._tool_create_document({
+                "title": "坏的小程序",
+                "ui_templates": ["mini_app"],
+                "fields": {"ui_payloads": {"mini_app": {}}},
+            }))
+        finally:
+            adapter._active_tool_context = old_active_tool_context
+            adapter._request_json = old_request_json
+
+        self.assertEqual(result["ok"], False)
+        self.assertEqual(result["operation"], "create")
+        self.assertEqual(result["error"], "INVALID_MINI_APP_DEFINITION")
+        self.assertEqual(result["path"], "fields.ui_payloads.mini_app.view.children[0].action")
+        self.assertEqual(result["skill_reference"]["section"], "Buttons and actions")
+
+    def test_update_document_returns_mini_app_validation_as_structured_tool_result(self):
+        old_active_tool_context = adapter._active_tool_context
+        old_request_json = adapter._request_json
+
+        def fake_context():
+            return {"base_url": "https://review.example.test", "token": "token"}
+
+        def reject_invalid_definition(*args, **kwargs):
+            del args, kwargs
+            raise RuntimeError(
+                'HTTP 400: {"error":"INVALID_MINI_APP_DEFINITION","capability_available":true,'
+                '"path":"fields.ui_payloads.mini_app.state_schema.done.type",'
+                '"reason":"unknown state type \\"made_up_type\\"",'
+                '"expected":"string | number | boolean | string_set | string_list",'
+                '"skill_reference":{"reference":"skills/xiaoduiyou/xiaoduiyou-doc-content-package/references/mini-app-contract.md",'
+                '"section":"Choose the mode / Fixed vocabulary"}}'
+            )
+
+        adapter._active_tool_context = fake_context
+        adapter._request_json = reject_invalid_definition
+        try:
+            result = json.loads(adapter._tool_update_document({
+                "document_id": "doc_0125",
+                "command": "patch_fields",
+                "fields": {"ui_payloads": {"mini_app": {}}},
+            }))
+        finally:
+            adapter._active_tool_context = old_active_tool_context
+            adapter._request_json = old_request_json
+
+        self.assertEqual(result["ok"], False)
+        self.assertEqual(result["operation"], "update")
+        self.assertEqual(result["command"], "patch_fields")
+        self.assertEqual(result["document_id"], "doc_0125")
+        self.assertEqual(result["path"], "fields.ui_payloads.mini_app.state_schema.done.type")
+
 
 class AssetUploadToolTests(unittest.TestCase):
     def test_upload_tool_accepts_multiple_files(self):

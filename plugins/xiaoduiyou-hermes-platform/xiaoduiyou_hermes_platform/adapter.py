@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.28.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.28.2"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -699,6 +699,39 @@ def _request_json(url: str, *, method: str = "GET", payload: Optional[Dict[str, 
         headers=headers,
     )
     return _json_response(req, timeout=timeout)
+
+
+def _mini_app_validation_tool_result(
+    exc: RuntimeError,
+    *,
+    operation: str,
+    document_id: str = "",
+    command: str = "",
+) -> Optional[str]:
+    message = str(exc)
+    prefix = "HTTP 400: "
+    if not message.startswith(prefix):
+        return None
+    try:
+        error_payload = json.loads(message[len(prefix):])
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(error_payload, dict) or error_payload.get("error") != "INVALID_MINI_APP_DEFINITION":
+        return None
+    result: Dict[str, Any] = {
+        "ok": False,
+        "accepted": False,
+        "applied": False,
+        "persisted": False,
+        "state": "validation_failed",
+        "operation": operation,
+        **error_payload,
+    }
+    if document_id:
+        result["document_id"] = document_id
+    if command:
+        result["command"] = command
+    return json.dumps(result, ensure_ascii=False)
 
 
 
@@ -1756,13 +1789,19 @@ def _tool_create_document(args: Dict[str, Any], **_: Any) -> str:
     fields = _merge_ui_templates_into_fields(args, fields)
     if fields:
         payload["fields"] = fields
-    result = _request_json(
-        f"{context['base_url']}/api/docs",
-        method="POST",
-        payload=payload,
-        timeout=DEFAULT_TIMEOUT_SECONDS,
-        token=context["token"],
-    )
+    try:
+        result = _request_json(
+            f"{context['base_url']}/api/docs",
+            method="POST",
+            payload=payload,
+            timeout=DEFAULT_TIMEOUT_SECONDS,
+            token=context["token"],
+        )
+    except RuntimeError as exc:
+        validation_result = _mini_app_validation_tool_result(exc, operation="create")
+        if validation_result is not None:
+            return validation_result
+        raise
     document = result.get("document") if isinstance(result, dict) else result
     return json.dumps({
         "ok": True,
@@ -1854,13 +1893,24 @@ def _tool_update_document(args: Dict[str, Any], **_: Any) -> str:
     query_string = _document_scope_query(context) if target_document_id == "current" else ""
     if args.get("idempotency_key"):
         input_payload["idempotency_key"] = str(args.get("idempotency_key"))
-    result = _request_json(
-        f"{context['base_url']}/api/docs/{parse.quote(target_document_id, safe='')}/mutations{query_string}",
-        method="POST",
-        payload=input_payload,
-        timeout=DEFAULT_TIMEOUT_SECONDS,
-        token=context["token"],
-    )
+    try:
+        result = _request_json(
+            f"{context['base_url']}/api/docs/{parse.quote(target_document_id, safe='')}/mutations{query_string}",
+            method="POST",
+            payload=input_payload,
+            timeout=DEFAULT_TIMEOUT_SECONDS,
+            token=context["token"],
+        )
+    except RuntimeError as exc:
+        validation_result = _mini_app_validation_tool_result(
+            exc,
+            operation="update",
+            document_id=target_document_id,
+            command=command,
+        )
+        if validation_result is not None:
+            return validation_result
+        raise
     mutation = result.get("mutation") if isinstance(result, dict) and isinstance(result.get("mutation"), dict) else {}
     document = result.get("document") if isinstance(result, dict) and isinstance(result.get("document"), dict) else {}
     resolved_document_id = str(document.get("document_id") or mutation.get("target_document_id") or target_document_id)
