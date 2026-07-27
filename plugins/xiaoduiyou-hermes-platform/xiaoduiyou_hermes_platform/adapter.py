@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.25.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.27.1"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -1059,11 +1059,12 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
         turn_id = str(turn.get("turn_id") or "")
         session_id = str(turn.get("session_id") or session.get("session_id") or "")
         user_message = str(turn.get("user_message") or "").strip()
+        image_urls = _extract_xiaoduiyou_image_urls_from_turn(turn)
         agent_message = _agent_event_text_for_turn(turn)
         sender_name = _sender_display_name_from_turn(turn)
         sender_id = _sender_id_from_turn(turn)
         hermes_user_id = _hermes_user_id_from_turn(turn)
-        if not turn_id or not session_id or not user_message:
+        if not turn_id or not session_id or (not user_message and not image_urls):
             logger.warning("Xiaoduiyou claimed malformed turn: %s", claimed)
             await asyncio.sleep(self.poll_interval_seconds)
             return
@@ -1113,7 +1114,6 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             "fields.ui_payloads.interactive_html with schema xdy.interactive_html.v1, label, and html; process block_json/source_markdown should stay process-only. "
             "Do not merely promise to create a document."
         )
-        image_urls = _extract_xiaoduiyou_image_urls_from_turn(turn)
         media_paths, media_types = await asyncio.to_thread(
             _download_image_attachments,
             image_urls,

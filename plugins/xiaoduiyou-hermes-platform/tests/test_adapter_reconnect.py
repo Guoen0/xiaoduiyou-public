@@ -51,6 +51,7 @@ def _install_gateway_stubs() -> None:
 
     class MessageType:
         COMMAND = "command"
+        PHOTO = "photo"
         TEXT = "text"
 
     class SendResult:
@@ -252,6 +253,53 @@ class ExecApprovalTests(unittest.IsolatedAsyncioTestCase):
         actions = await self._approval_actions(smart_denied=True)
 
         self.assertEqual(actions, ["once", "deny"])
+
+
+class ClaimedTurnTests(unittest.IsolatedAsyncioTestCase):
+    def _new_adapter(self):
+        config = adapter.PlatformConfig(
+            extra={
+                "base_url": "https://review.example.test",
+                "connection_token": "token",
+                "poll_interval_seconds": 0.01,
+                "request_timeout_seconds": 0.01,
+            }
+        )
+        return adapter.XiaoduiyouAdapter(config)
+
+    async def test_image_only_turn_reaches_hermes(self):
+        instance = self._new_adapter()
+        image_url = "https://assets.example.test/uploads/photo.jpg"
+        claimed = {
+            "turn": {
+                "turn_id": "turn-image-only",
+                "session_id": "session-image-only",
+                "user_message": "",
+                "image_urls": [image_url],
+                "content_parts": [
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                ],
+            },
+            "session": {
+                "session_id": "session-image-only",
+                "title": "图片咨询",
+            },
+        }
+        original_download = adapter._download_image_attachments
+        adapter._download_image_attachments = lambda urls, timeout: (
+            ["/tmp/xiaoduiyou-image-only.jpg"],
+            ["image/jpeg"],
+        )
+        try:
+            await instance._handle_claimed_turn(claimed)
+        finally:
+            adapter._download_image_attachments = original_download
+
+        event = instance.last_message_event
+        self.assertEqual(event.message_id, "turn-image-only")
+        self.assertEqual(event.message_type, adapter.MessageType.PHOTO)
+        self.assertEqual(event.media_urls, ["/tmp/xiaoduiyou-image-only.jpg"])
+        self.assertEqual(event.raw_message["xiaoduiyou_image_urls"], [image_url])
 
 
 class TurnStreamReconnectTests(unittest.IsolatedAsyncioTestCase):
