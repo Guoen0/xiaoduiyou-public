@@ -1,6 +1,6 @@
 ---
 name: xiaoduiyou-doc-content-package
-description: "Xiaoduiyou document/content-package workflow for creating, updating, validating, and delivering artifacts with ui_templates, publish_notes, source_markdown, process docs, travel plans, Xiaohongshu/Moments publish tabs, and document actions. Use when the user asks for 旅游规划/旅行规划, 内容包, 文档产物, document artifact, publish-ready package, 小红书/朋友圈发布稿 tabs, or Xiaoduiyou document create/update/delete operations."
+description: "Xiaoduiyou document/content-package workflow for creating, updating, validating, and delivering artifacts with ui_templates, publish_notes, source_markdown, process docs, travel plans, interactive_html, stateful mini_app, Xiaohongshu/Moments publish tabs, and document actions. Use when the user asks for 旅游规划/旅行规划, 内容包, 文档产物, 互动网页/小程序, document artifact, publish-ready package, 小红书/朋友圈发布稿 tabs, or Xiaoduiyou document create/update/delete operations."
 ---
 
 # Xiaoduiyou Doc Content Package
@@ -26,6 +26,7 @@ Load this when the user asks for:
 6. For chat visual cards only, use `xiaoduiyou-im`; do not create a document unless explicitly requested.
 7. For 成长日记 records, use `xiaoduiyou-growth-diary`; do not encode diary records as content packages.
 8. If publish tabs were accidentally attached and `patch_fields` with `ui_templates: null` / `publish_notes: null` makes `view=field` return null but `summary.fields_keys` still contains those keys or the frontend still displays Xiaohongshu/Moments tabs, stop retrying and report a product bug. The likely fix is backend true key deletion or frontend gating on non-empty `ui_templates` plus matching `publish_notes`, not merely `fields_keys`/historical state.
+9. Keep the two mini-app modes distinct: `interactive_html` is free-form and stateless; `mini_app` is platform-rendered with family-shared state. Never invent an SDK, parent bridge, JavaScript state API, or `data-xdy-action` attributes.
 
 ## Case map owned by Doc Content Package
 
@@ -33,7 +34,8 @@ Load this when the user asks for:
 |---|---|---|
 | `旅游规划` / `旅行规划` / itinerary artifact | `references/travel-plan-planning-workflow.md` then `references/travel-plan-result-template.md` | Travel planning is a document/content artifact with process evidence and structured `travel_plan` UI data. |
 | Travel plan Xiaohongshu reference images | `references/travel-plan-xhs-reference-workflow.md` | Travel artifacts need durable uploaded reference images and clean provenance. |
-| `做成内容包` / `创建文档` / `文档产物` / `互动网页` | `references/content-package-contract.md` | Document artifact / `ui_templates` / result-payload contract. |
+| `做成内容包` / `创建文档` / `文档产物` | `references/content-package-contract.md` | Document artifact / `ui_templates` / result-payload contract. |
+| `互动网页` / `小程序` / 家庭共享的勾选、输入、计数、列表状态 | `references/mini-app-contract.md` | Choose stateless free HTML or structured family-shared state and emit the exact payload. |
 | `小红书发布稿` / `朋友圈发布稿` / publish tabs | `references/social-publish-result-template.md` | Platform-specific publish tab shape. |
 | Process/evidence doc Markdown fidelity | `references/process-document-markdown.md` | Keep process material separate and well-formed. |
 | Validate a content-package JSON before callback/document update | Prefer the first-class document tools' payload schema; optional local lint only if the script is present | Catch local paths, mismatched templates, process/result mixing. |
@@ -48,6 +50,7 @@ Load this when the user asks for:
 | Structured `travel_plan` result template | `references/travel-plan-result-template.md` |
 | Xiaohongshu reference-image workflow for travel plans | `references/travel-plan-xhs-reference-workflow.md` |
 | Content-package schema and `ui_templates` / `publish_notes` contract | `references/content-package-contract.md` |
+| Interactive HTML and stateful mini-app contract | `references/mini-app-contract.md` |
 | Social publish tab shape for Xiaohongshu/Moments | `references/social-publish-result-template.md` |
 | Process document Markdown fidelity | `references/process-document-markdown.md` |
 | Runtime/document/action endpoints | `references/runtime-api-reference.md` |
@@ -57,6 +60,8 @@ Load this when the user asks for:
 
 - Prefer the first-class document tools for read/create/update/delete: `xiaoduiyou_documents_get`, `xiaoduiyou_documents_create`, `xiaoduiyou_documents_update`, `xiaoduiyou_documents_delete`.
 - Before calling them, manually validate: every selected template has matching `fields.publish_notes` or `fields.ui_payloads`, visible result tabs contain only final material, and all publish images are browser-accessible `http(s)` URLs.
+- For `mini_app`, validate `schema`, `state_schema`, and `view` against `references/mini-app-contract.md`; do not send JavaScript handlers or unknown node/action types.
+- If a document tool returns `INVALID_MINI_APP_DEFINITION`, use its `path`, `reason`, `expected`, and `skill_reference` fields to correct and retry the definition. `capability_available: true` explicitly means the platform supports mini apps; never reinterpret this validation error as an unavailable capability.
 - A local validator script may exist in some Hermes installs as an optional lint aid, but public Xiaoduiyou usage skills must not depend on scripts being available.
 
 ## Tool use
@@ -64,10 +69,9 @@ Load this when the user asks for:
 - Use `xiaoduiyou_documents_create` only for new requested documents/artifacts.
 - Use `xiaoduiyou_documents_update` only for explicit edits/append/patches.
 - Use `xiaoduiyou_documents_delete` only when explicitly asked to delete.
-- Use `xiaoduiyou_documents_get` with default `view=summary`; use `view=field` for one field or `view=blocks` for paged blocks. Use `view=full` only when explicitly necessary.
+- Use `xiaoduiyou_documents_get` with default `view=summary`; when using `view=field`, always pass the field explicitly (for example `field="ui_payloads"`); use `view=blocks` for paged blocks. Use `view=full` only when explicitly necessary.
 - When updating a content package that has publish tabs, keep the process document and `fields.publish_notes.<template>` synchronized in the same operation. For Xiaohongshu, write the complete note shape (`platform`, `label`, `title`, `body`, `hashtags`, `images`, and any `image_plan`) plus `ui_templates: ["xiaohongshu"]`; partial `title/body` patches may not render in the publish page.
 - When generating multi-image Xiaohongshu carousel assets, use `delegate_task` subagents for independent image generation instead of serial `image_generate` calls. Define the shared visual system and exact per-image prompts in the parent, then spawn one subagent per image to call `image_generate` only. If multiple generated images need visual QA, also use `delegate_task` for parallel per-image analysis instead of inspecting one by one in the parent. After generation, normalize/verify image dimensions before upload; the image backend's nominal `portrait` can return inconsistent real pixel sizes, so inspect actual files and standardize to the target ratio (usually 3:4 / 1080×1440 for Xiaohongshu) before writing `publish_notes.xiaohongshu.images`.
-- Use `xiaoduiyou_documents_get` with default `view=summary`; use `view=field` for one field or `view=blocks` for paged blocks. Use `view=full` only when explicitly necessary.
 
 ## Xiaohongshu content-package editing pitfalls
 

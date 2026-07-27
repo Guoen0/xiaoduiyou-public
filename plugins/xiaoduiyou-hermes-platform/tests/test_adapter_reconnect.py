@@ -169,6 +169,24 @@ class DeliveryClassificationTests(unittest.TestCase):
                 self.assertTrue(adapter._looks_like_tool_progress(message))
 
 
+class ContentPackageTemplateTests(unittest.TestCase):
+    def test_normalize_ui_templates_preserves_all_supported_templates(self):
+        templates = adapter._normalize_ui_templates([
+            "xiaohongshu",
+            "moments",
+            "travel_plan",
+            "interactive_html",
+            "mini_app",
+            "mini_app",
+            "unknown",
+        ])
+
+        self.assertEqual(
+            templates,
+            ["xiaohongshu", "moments", "travel_plan", "interactive_html", "mini_app"],
+        )
+
+
 class AssetUploadToolTests(unittest.TestCase):
     def test_upload_tool_accepts_multiple_files(self):
         calls = []

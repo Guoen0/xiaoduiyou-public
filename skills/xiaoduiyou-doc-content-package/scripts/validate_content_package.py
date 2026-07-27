@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 URL_RE = re.compile(r"^https?://", re.I)
+UI_PAYLOAD_TEMPLATES = {"interactive_html", "mini_app"}
 
 
 def load_payload(path_or_json: str) -> Any:
@@ -41,19 +42,27 @@ def validate(obj: Any) -> tuple[list[str], list[str]]:
     data = dig_payload(obj)
     templates = data.get("ui_templates")
     publish_notes = data.get("publish_notes")
-    if templates is None and publish_notes is None:
-        warnings.append("No ui_templates or publish_notes found; this may be a process-only document, not a content package.")
+    ui_payloads = data.get("ui_payloads")
+    if templates is None and publish_notes is None and ui_payloads is None:
+        warnings.append("No ui_templates, publish_notes, or ui_payloads found; this may be a process-only document, not a content package.")
     if templates is not None:
         if not isinstance(templates, list) or not all(isinstance(x, str) for x in templates):
             errors.append("ui_templates must be a list of strings")
     if publish_notes is not None and not isinstance(publish_notes, dict):
         errors.append("publish_notes must be an object keyed by template/platform")
-    if isinstance(templates, list) and isinstance(publish_notes, dict):
+    if ui_payloads is not None and not isinstance(ui_payloads, dict):
+        errors.append("ui_payloads must be an object keyed by template")
+    if isinstance(templates, list):
         for t in templates:
-            if t not in publish_notes:
-                warnings.append(f"ui_templates includes {t!r} but publish_notes has no matching key")
+            payloads = ui_payloads if isinstance(ui_payloads, dict) else {}
+            notes = publish_notes if isinstance(publish_notes, dict) else {}
+            result_data = payloads if t in UI_PAYLOAD_TEMPLATES else notes
+            result_field = "ui_payloads" if t in UI_PAYLOAD_TEMPLATES else "publish_notes"
+            if t not in result_data:
+                warnings.append(f"ui_templates includes {t!r} but {result_field} has no matching key")
+    if isinstance(publish_notes, dict):
         for key, note in publish_notes.items():
-            if key not in templates:
+            if isinstance(templates, list) and key not in templates:
                 warnings.append(f"publish_notes has {key!r} but ui_templates does not include it")
             if not isinstance(note, dict):
                 errors.append(f"publish_notes.{key} must be an object")
@@ -72,6 +81,30 @@ def validate(obj: Any) -> tuple[list[str], list[str]]:
             body = str(note.get("body") or "")
             if any(marker in body.lower() for marker in ["source_markdown", "过程材料", "证据", "raw:", "debug"]):
                 warnings.append(f"publish_notes.{key}.body may contain process/debug material; keep visible publish tabs final-only")
+    if isinstance(ui_payloads, dict):
+        interactive_html = ui_payloads.get("interactive_html")
+        if interactive_html is not None:
+            if not isinstance(interactive_html, dict):
+                errors.append("ui_payloads.interactive_html must be an object")
+            elif interactive_html.get("schema") != "xdy.interactive_html.v1":
+                errors.append("ui_payloads.interactive_html.schema must be xdy.interactive_html.v1")
+            elif not isinstance(interactive_html.get("html"), str) or not interactive_html["html"].strip():
+                errors.append("ui_payloads.interactive_html.html must be a non-empty string")
+        mini_app = ui_payloads.get("mini_app")
+        if mini_app is not None:
+            if not isinstance(mini_app, dict):
+                errors.append("ui_payloads.mini_app must be an object")
+            else:
+                if mini_app.get("schema") != "xdy.mini_app.v1":
+                    errors.append("ui_payloads.mini_app.schema must be xdy.mini_app.v1")
+                if not isinstance(mini_app.get("state_schema"), dict):
+                    errors.append("ui_payloads.mini_app.state_schema must be an object")
+                if not isinstance(mini_app.get("view"), dict):
+                    errors.append("ui_payloads.mini_app.view must be an object")
+    if isinstance(ui_payloads, dict) and isinstance(templates, list):
+        for key in ui_payloads:
+            if key in UI_PAYLOAD_TEMPLATES and key not in templates:
+                warnings.append(f"ui_payloads has {key!r} but ui_templates does not include it")
     source_md = data.get("source_markdown")
     if source_md is not None and not isinstance(source_md, str):
         errors.append("source_markdown must be a string")

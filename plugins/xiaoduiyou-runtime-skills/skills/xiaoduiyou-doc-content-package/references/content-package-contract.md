@@ -27,7 +27,8 @@ Typical `blocks` fields:
 - `xiaohongshu`
 - `moments`
 - `travel_plan` — travel-planning execution UI: destination gallery, journey time, real maps, hotel cards, itinerary, baby rhythm.
-- `interactive_html` — a self-contained offline HTML page rendered as an interactive mini app.
+- `interactive_html` — a self-contained free-form offline HTML page. It is intentionally stateless.
+- `mini_app` — a platform-rendered structured mini app with family-shared state.
 
 The Agent may select one or more templates when creating a content package, and may change the list later through `xiaoduiyou_documents_update(command="patch_fields", ui_templates=[...])` or by setting `fields.ui_templates`.
 
@@ -46,7 +47,7 @@ The process document is no longer the editable source of truth for publish resul
 Use this split:
 
 - `fields.ui_templates` / `blocks.ui_templates`: which result templates to show.
-- `fields.ui_payloads` / `blocks.ui_payloads`: non-publish result payloads such as `interactive_html`.
+- `fields.ui_payloads` / `blocks.ui_payloads`: non-publish result payloads such as `interactive_html` and `mini_app`.
 - `fields.publish_notes.<template>` / `blocks.publish_notes.<template>`: final result data for each selected template.
 - `block_json` and `source_markdown`: process-only material such as references, reasoning, source evidence, image rationale, and visual direction.
 
@@ -64,9 +65,10 @@ Saving or updating the process document should not derive, overwrite, or backfil
 
 When creating a content package via `xiaoduiyou_documents_create`, pass:
 
-- `ui_templates`: selected templates, e.g. `["xiaohongshu", "moments"]`, `["travel_plan"]`, or `["interactive_html"]`.
+- `ui_templates`: selected templates, e.g. `["xiaohongshu", "moments"]`, `["travel_plan"]`, `["interactive_html"]`, or `["mini_app"]`.
 - `fields.publish_notes`: final result data for exactly those platforms/templates unless the user asks for more; for `travel_plan`, include structured `fields.publish_notes.travel_plan.travel_plan` data.
 - `fields.ui_payloads.interactive_html`: required when `interactive_html` is selected.
+- `fields.ui_payloads.mini_app`: required when `mini_app` is selected.
 - `fields.source_markdown` and/or `block_json`: process-only document content.
 
 When revising which result pages should exist, call `xiaoduiyou_documents_update` with `command="patch_fields"`, `ui_templates=[...]`, and updated `fields.publish_notes` as needed. To remove a template from display, remove its key from `ui_templates`; preserving old `publish_notes` data is allowed as hidden history unless the user asks to delete it.
@@ -131,11 +133,20 @@ When revising which result pages should exist, call `xiaoduiyou_documents_update
 - Do not attempt to access Xiaoduiyou cookies, storage, parent DOM, connector tokens, or APIs. No parent bridge exists in v1.
 - Use a short human-readable `label` for the result tab. Do not place process notes or raw evidence in the HTML page.
 
+### Stateful Mini App
+
+- Select with `ui_templates: ["mini_app"]`.
+- Store the structured payload at `fields.ui_payloads.mini_app` using schema `xdy.mini_app.v1`.
+- Use only the declared platform state types, view nodes, and actions. Do not write HTML, JavaScript handlers, an SDK bridge, or `data-xdy-action` attributes.
+- Use this mode when interactions must persist and synchronize among members of one family.
+- Full contract and example: `references/mini-app-contract.md`.
+
 ## Validation checklist
 
 - `ui_templates` selects only templates the user/Agent wants rendered.
 - Each selected publish/travel template has matching `publish_notes.<template>` result data; `travel_plan` must include `publish_notes.travel_plan.travel_plan`.
 - `interactive_html` has a valid `ui_payloads.interactive_html` payload using schema `xdy.interactive_html.v1`, a label, and non-empty self-contained HTML below 512 KiB.
+- `mini_app` has a valid `ui_payloads.mini_app` payload using schema `xdy.mini_app.v1`, a declared `state_schema`, and a supported `view`.
 - Publish tabs do not include process headings such as `过程材料`, `图片结构`, prompts, references, or research notes.
 - Xiaohongshu first image is the feed cover.
 - Publish body includes hashtags inline when needed; no separate topic section is required.

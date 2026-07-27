@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.27.1"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.28.1"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -636,7 +636,7 @@ def _normalize_block_json(value: Any, *, title: str = "", body: str = "") -> Dic
 def _normalize_ui_templates(value: Any) -> List[str]:
     if not isinstance(value, list):
         return []
-    allowed = {"xiaohongshu", "moments"}
+    allowed = {"xiaohongshu", "moments", "travel_plan", "interactive_html", "mini_app"}
     templates: List[str] = []
     for item in value:
         key = str(item or "").strip()
@@ -1109,9 +1109,11 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             "For ordinary chat, answer normally and do not call document tools. "
             "When the user explicitly asks to create, update, append to, or delete a document, "
             "call the appropriate xiaoduiyou document tool exactly once before your final reply. "
-            "For content packages, choose ui_templates from xiaohongshu, moments, travel_plan, or interactive_html. "
-            "Use fields.publish_notes for publish/travel results. For interactive_html, store a self-contained offline page at "
-            "fields.ui_payloads.interactive_html with schema xdy.interactive_html.v1, label, and html; process block_json/source_markdown should stay process-only. "
+            "For content packages, choose ui_templates from xiaohongshu, moments, travel_plan, interactive_html, or mini_app. "
+            "Use fields.publish_notes for publish/travel results. For interactive_html, store a self-contained stateless offline page at "
+            "fields.ui_payloads.interactive_html with schema xdy.interactive_html.v1, label, and html. For family-shared state, use "
+            "fields.ui_payloads.mini_app with schema xdy.mini_app.v1; never invent a JavaScript bridge or data-xdy-action attributes. "
+            "Process block_json/source_markdown should stay process-only. "
             "Do not merely promise to create a document."
         )
         media_paths, media_types = await asyncio.to_thread(
@@ -2444,8 +2446,9 @@ def register(ctx) -> None:
         platform_hint=(
             "Xiaoduiyou is a document workspace. Use normal chat for ordinary replies. "
             "Only call xiaoduiyou document tools when the user explicitly asks for a document artifact or mutation. "
-            "Content packages may select ui_templates (xiaohongshu, moments, travel_plan, interactive_html); "
-            "interactive_html uses fields.ui_payloads.interactive_html while publish/travel templates use fields.publish_notes."
+            "Content packages may select ui_templates (xiaohongshu, moments, travel_plan, interactive_html, mini_app); "
+            "interactive_html is free-form and stateless, mini_app is platform-rendered with family-shared state, "
+            "and publish/travel templates use fields.publish_notes."
         ),
         max_message_length=XiaoduiyouAdapter.MAX_MESSAGE_LENGTH,
         cron_deliver_env_var="XIAODUIYOU_HOME_CHANNEL",
@@ -2596,8 +2599,8 @@ def register(ctx) -> None:
                     "block_json": {"type": "object", "description": "Optional Xiaoduiyou Block JSON: {schema:'xdy.block_json.v1', blocks:[...]}"},
                     "ui_templates": {
                         "type": "array",
-                        "description": "Content-package UI templates to render. Supported: xiaohongshu, moments, travel_plan, and interactive_html. Also written to fields.ui_templates.",
-                        "items": {"type": "string", "enum": ["xiaohongshu", "moments", "travel_plan", "interactive_html"]},
+                        "description": "Content-package UI templates to render. Supported: xiaohongshu, moments, travel_plan, interactive_html, and mini_app. Also written to fields.ui_templates.",
+                        "items": {"type": "string", "enum": ["xiaohongshu", "moments", "travel_plan", "interactive_html", "mini_app"]},
                     },
                     "fields": {"type": "object", "description": "Optional metadata fields."},
                     "attach_to_session": {"type": "boolean", "description": "Attach as the current session document. Defaults true."},
@@ -2629,8 +2632,8 @@ def register(ctx) -> None:
                     "block_json": {"type": "object", "description": "Optional full Block JSON for overwrite."},
                     "ui_templates": {
                         "type": "array",
-                        "description": "Replace the content-package UI templates for this document. Supported: xiaohongshu, moments, travel_plan, and interactive_html. Also written to fields.ui_templates.",
-                        "items": {"type": "string", "enum": ["xiaohongshu", "moments", "travel_plan", "interactive_html"]},
+                        "description": "Replace the content-package UI templates for this document. Supported: xiaohongshu, moments, travel_plan, interactive_html, and mini_app. Also written to fields.ui_templates.",
+                        "items": {"type": "string", "enum": ["xiaohongshu", "moments", "travel_plan", "interactive_html", "mini_app"]},
                     },
                     "blocks": {
                         "type": "array",
