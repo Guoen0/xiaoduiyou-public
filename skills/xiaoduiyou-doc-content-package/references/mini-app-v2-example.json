@@ -1,0 +1,498 @@
+{
+  "schema": "xdy.mini_app.v2",
+  "manifest": {
+    "title": "家庭探索地图",
+    "description": "搜索、筛选并一起记录去过的地方",
+    "entry_page": "home",
+    "min_runtime": "2.0",
+    "capabilities": [
+      "state.member",
+      "state.family",
+      "navigation",
+      "share",
+      "resource.child_profile.read"
+    ],
+    "theme": {
+      "accent": "emerald",
+      "density": "comfortable"
+    }
+  },
+  "data": {
+    "places": [
+      {
+        "id": "west_lake",
+        "name": "西湖公园",
+        "city": "杭州",
+        "tags": ["户外", "自然"],
+        "score": 9
+      },
+      {
+        "id": "natural_museum",
+        "name": "自然博物馆",
+        "city": "上海",
+        "tags": ["室内", "科普"],
+        "score": 10
+      },
+      {
+        "id": "wetland",
+        "name": "西溪湿地",
+        "city": "杭州",
+        "tags": ["户外", "自然"],
+        "score": 8
+      },
+      {
+        "id": "science_center",
+        "name": "儿童科学中心",
+        "city": "深圳",
+        "tags": ["室内", "科普"],
+        "score": 9
+      },
+      {
+        "id": "forest_park",
+        "name": "城市森林公园",
+        "city": "成都",
+        "tags": ["户外", "运动"],
+        "score": 7
+      }
+    ]
+  },
+  "state": {
+    "query": {
+      "type": "string",
+      "scope": "session",
+      "default": ""
+    },
+    "cities": {
+      "type": "string_set",
+      "scope": "device",
+      "default": []
+    },
+    "tag": {
+      "type": "string",
+      "scope": "device",
+      "default": ""
+    },
+    "sort": {
+      "type": "string",
+      "scope": "device",
+      "default": "score"
+    },
+    "active_tab": {
+      "type": "string",
+      "scope": "device",
+      "default": "all"
+    },
+    "visited": {
+      "type": "string_set",
+      "scope": "family",
+      "default": []
+    },
+    "note": {
+      "type": "string",
+      "scope": "member",
+      "default": "",
+      "required": true,
+      "min_length": 2,
+      "max_length": 120
+    },
+    "selected_id": {
+      "type": "string",
+      "scope": "session",
+      "default": ""
+    },
+    "details_open": {
+      "type": "boolean",
+      "scope": "session",
+      "default": false
+    }
+  },
+  "computed": {
+    "visited_count": {
+      "$op": "count",
+      "input": {
+        "$path": "state.visited"
+      }
+    },
+    "visited_places": {
+      "$op": "filter",
+      "input": {
+        "$path": "data.places"
+      },
+      "where": {
+        "$op": "includes",
+        "args": [
+          {
+            "$path": "state.visited"
+          },
+          {
+            "$path": "item.id"
+          }
+        ]
+      }
+    },
+    "selected_place": {
+      "$op": "first",
+      "input": {
+        "$op": "filter",
+        "input": {
+          "$path": "data.places"
+        },
+        "where": {
+          "$op": "eq",
+          "args": [
+            {
+              "$path": "item.id"
+            },
+            {
+              "$path": "state.selected_id"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "actions": {
+    "open_details": {
+      "type": "state.batch",
+      "changes": [
+        {
+          "type": "state.set",
+          "path": "selected_id",
+          "value": {
+            "$path": "item.id"
+          }
+        },
+        {
+          "type": "state.set",
+          "path": "details_open",
+          "value": true
+        }
+      ]
+    },
+    "close_details": {
+      "type": "state.set",
+      "path": "details_open",
+      "value": false
+    },
+    "note_saved": {
+      "type": "toast",
+      "message": "我的备注已保存",
+      "tone": "success"
+    },
+    "go_stats": {
+      "type": "navigate",
+      "page": "stats"
+    },
+    "back_home": {
+      "type": "back"
+    },
+    "share_app": {
+      "type": "share",
+      "title": "家庭探索地图",
+      "text": "一起看看下次去哪儿"
+    }
+  },
+  "resources": {
+    "child": {
+      "type": "child_profile"
+    }
+  },
+  "pages": {
+    "home": {
+      "title": "家庭探索地图",
+      "root": {
+        "type": "column",
+        "children": [
+          {
+            "type": "grid",
+            "columns": 2,
+            "children": [
+              {
+                "type": "stat",
+                "label": "已打卡",
+                "value": {
+                  "$path": "computed.visited_count"
+                }
+              },
+              {
+                "type": "stat",
+                "label": "地点总数",
+                "value": {
+                  "$op": "count",
+                  "input": {
+                    "$path": "data.places"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "type": "tabs",
+            "state_path": "active_tab",
+            "tabs": [
+              {
+                "value": "all",
+                "label": "全部地点",
+                "content": {
+                  "type": "collection",
+                  "source": {
+                    "$path": "data.places"
+                  },
+                  "layout": "list",
+                  "browser": {
+                    "page_size": 2,
+                    "search": {
+                      "state_path": "query",
+                      "placeholder": "搜索地点、城市",
+                      "item_paths": ["name", "city", "tags"]
+                    },
+                    "filters": [
+                      {
+                        "label": "城市",
+                        "state_path": "cities",
+                        "item_path": "city",
+                        "multiple": true,
+                        "options": "auto"
+                      },
+                      {
+                        "label": "标签",
+                        "state_path": "tag",
+                        "item_path": "tags",
+                        "operator": "eq",
+                        "options": "auto"
+                      }
+                    ],
+                    "sort": {
+                      "state_path": "sort",
+                      "label": "排序",
+                      "options": [
+                        {
+                          "value": "score",
+                          "label": "评分优先",
+                          "by": [
+                            {
+                              "item_path": "score",
+                              "direction": "desc"
+                            },
+                            {
+                              "item_path": "name",
+                              "direction": "asc"
+                            }
+                          ]
+                        },
+                        {
+                          "value": "name",
+                          "label": "名称",
+                          "by": [
+                            {
+                              "item_path": "name",
+                              "direction": "asc"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "item": {
+                    "type": "card",
+                    "children": [
+                      {
+                        "type": "row",
+                        "children": [
+                          {
+                            "type": "text",
+                            "variant": "subtitle",
+                            "value": {
+                              "$path": "item.name"
+                            }
+                          },
+                          {
+                            "type": "tag",
+                            "value": {
+                              "$path": "item.city"
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "type": "progress",
+                        "label": "推荐指数",
+                        "value": {
+                          "$op": "multiply",
+                          "args": [
+                            {
+                              "$path": "item.score"
+                            },
+                            10
+                          ]
+                        }
+                      },
+                      {
+                        "type": "checkbox",
+                        "state_path": "visited",
+                        "value": {
+                          "$path": "item.id"
+                        },
+                        "label": "我们去过这里"
+                      },
+                      {
+                        "type": "button",
+                        "variant": "secondary",
+                        "label": "查看详情",
+                        "action": "open_details"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "value": "visited",
+                "label": "已打卡",
+                "content": {
+                  "type": "repeater",
+                  "source": {
+                    "$path": "computed.visited_places"
+                  },
+                  "item": {
+                    "type": "card",
+                    "children": [
+                      {
+                        "type": "text",
+                        "variant": "subtitle",
+                        "value": {
+                          "$path": "item.name"
+                        }
+                      },
+                      {
+                        "type": "tag",
+                        "value": {
+                          "$path": "item.city"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "type": "form",
+            "fields": ["note"],
+            "submit_action": "note_saved",
+            "submit_label": "保存我的备注",
+            "children": [
+              {
+                "type": "textarea",
+                "state_path": "note",
+                "label": "我的备注",
+                "placeholder": "例如：下次带上野餐垫"
+              }
+            ]
+          },
+          {
+            "type": "row",
+            "children": [
+              {
+                "type": "button",
+                "label": "查看统计",
+                "action": "go_stats"
+              },
+              {
+                "type": "button",
+                "variant": "secondary",
+                "label": "分享",
+                "action": "share_app"
+              }
+            ]
+          },
+          {
+            "type": "modal",
+            "state_path": "details_open",
+            "title": {
+              "$path": "computed.selected_place.name"
+            },
+            "children": [
+              {
+                "type": "stat",
+                "label": "推荐评分",
+                "value": {
+                  "$path": "computed.selected_place.score"
+                }
+              },
+              {
+                "type": "text",
+                "value": {
+                  "$op": "concat",
+                  "args": [
+                    "城市：",
+                    {
+                      "$path": "computed.selected_place.city"
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "button",
+                "label": "关闭",
+                "action": "close_details"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "stats": {
+      "title": "探索统计",
+      "root": {
+        "type": "column",
+        "children": [
+          {
+            "type": "bar_chart",
+            "title": "推荐评分",
+            "source": {
+              "$path": "data.places"
+            },
+            "label": {
+              "$path": "item.name"
+            },
+            "value": {
+              "$path": "item.score"
+            }
+          },
+          {
+            "type": "table",
+            "source": {
+              "$path": "data.places"
+            },
+            "columns": [
+              {
+                "label": "地点",
+                "value": {
+                  "$path": "item.name"
+                }
+              },
+              {
+                "label": "城市",
+                "value": {
+                  "$path": "item.city"
+                }
+              },
+              {
+                "label": "评分",
+                "value": {
+                  "$path": "item.score"
+                }
+              }
+            ]
+          },
+          {
+            "type": "button",
+            "variant": "secondary",
+            "label": "返回",
+            "action": "back_home"
+          }
+        ]
+      }
+    }
+  }
+}

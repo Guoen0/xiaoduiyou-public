@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.28.2"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.28.3"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -1141,11 +1141,14 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             "Agent-created records must include date as YYYY-MM-DD and occurred_at as YYYY-MM-DD HH:mm:ss with matching dates; short times like 19:20 are invalid and will be rejected. "
             "For ordinary chat, answer normally and do not call document tools. "
             "When the user explicitly asks to create, update, append to, or delete a document, "
-            "call the appropriate xiaoduiyou document tool exactly once before your final reply. "
+            "call the appropriate xiaoduiyou document tool before your final reply; never duplicate a successful mutation, "
+            "but correct and retry a structured validation failure. "
             "For content packages, choose ui_templates from xiaohongshu, moments, travel_plan, interactive_html, or mini_app. "
             "Use fields.publish_notes for publish/travel results. For interactive_html, store a self-contained stateless offline page at "
-            "fields.ui_payloads.interactive_html with schema xdy.interactive_html.v1, label, and html. For family-shared state, use "
-            "fields.ui_payloads.mini_app with schema xdy.mini_app.v1; never invent a JavaScript bridge or data-xdy-action attributes. "
+            "fields.ui_payloads.interactive_html with schema xdy.interactive_html.v1, label, and html. For a declarative mini app, load "
+            "skill xiaoduiyou-doc-content-package, call xiaoduiyou_mini_app_contract_get, then write fields.ui_payloads.mini_app with "
+            "schema xdy.mini_app.v2 and the required manifest/data/state/computed/actions/resources/pages objects. V1 is rejected; "
+            "never invent a JavaScript bridge or data-xdy-action attributes. "
             "Process block_json/source_markdown should stay process-only. "
             "Do not merely promise to create a document."
         )
@@ -1729,7 +1732,7 @@ def _looks_like_tool_progress(content: str) -> bool:
         stripped.startswith(prefix) for prefix in (
             '🔍', '🔎', '📖', '📚', '🛠', '⚙', '✅', '💻', '🌐', '📝', '📁', '🔧',
             '📋', '🐍', '🎨', '👁', '🧠', '⏰', '🍼', '👶', '🧸', '📄', '✏️', '🗑️', '🖼️',
-            '📎', '📨',
+            '📎', '📨', '🧩',
         )
     )
 
@@ -1984,6 +1987,25 @@ def _tool_get_document(args: Dict[str, Any], **_: Any) -> str:
         if isinstance(document, dict) and document.get("document_id"):
             safe_context["document_id"] = str(document.get("document_id") or "")
     return json.dumps({"ok": True, "context": safe_context, "document": result}, ensure_ascii=False)
+
+
+def _tool_mini_app_contract_get(args: Dict[str, Any], **_: Any) -> str:
+    del args
+    context = _active_tool_context()
+    result = _request_json(
+        f"{context['base_url']}/api/mini-apps/contract",
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+        token=context["token"],
+    )
+    contract = result.get("contract") if isinstance(result, dict) else None
+    if not isinstance(contract, dict):
+        raise RuntimeError("Xiaoduiyou mini-app contract endpoint returned an invalid response")
+    return json.dumps({
+        "ok": True,
+        "context": _safe_tool_context(context),
+        "contract": contract,
+        "guidance": "Use xdy.mini_app.v2 only, then validate against skill xiaoduiyou-doc-content-package before creating or updating the document.",
+    }, ensure_ascii=False)
 
 
 def _tool_im_send(args: Dict[str, Any], **_: Any) -> str:
@@ -2497,7 +2519,7 @@ def register(ctx) -> None:
             "Xiaoduiyou is a document workspace. Use normal chat for ordinary replies. "
             "Only call xiaoduiyou document tools when the user explicitly asks for a document artifact or mutation. "
             "Content packages may select ui_templates (xiaohongshu, moments, travel_plan, interactive_html, mini_app); "
-            "interactive_html is free-form and stateless, mini_app is platform-rendered with family-shared state, "
+            "interactive_html is free-form and stateless, mini_app uses strict xdy.mini_app.v2 declarative JSON, "
             "and publish/travel templates use fields.publish_notes."
         ),
         max_message_length=XiaoduiyouAdapter.MAX_MESSAGE_LENGTH,
@@ -2609,6 +2631,23 @@ def register(ctx) -> None:
     )
 
     ctx.register_tool(
+        name="xiaoduiyou_mini_app_contract_get",
+        toolset=TOOLSET,
+        description="Read the live Xiaoduiyou Mini App V2 schema, capabilities, state vocabulary, expressions, actions, components, resources, and limits before authoring a mini_app content package.",
+        emoji="🧩",
+        schema={
+            "name": "xiaoduiyou_mini_app_contract_get",
+            "description": "Read the live Mini App V2 contract from the current Xiaoduiyou review/runtime. Call this after loading skill xiaoduiyou-doc-content-package and before creating or updating fields.ui_payloads.mini_app. V1 is rejected.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+        handler=_tool_mini_app_contract_get,
+        check_fn=check_requirements,
+    )
+
+    ctx.register_tool(
         name="xiaoduiyou_documents_get",
         toolset=TOOLSET,
         description="Read the current Xiaoduiyou content-package document concisely through the connector-owned origin/token.",
@@ -2636,11 +2675,11 @@ def register(ctx) -> None:
     ctx.register_tool(
         name="xiaoduiyou_documents_create",
         toolset=TOOLSET,
-        description="Queue creation of a Xiaoduiyou document for the current Xiaoduiyou turn.",
+        description="Queue creation of a Xiaoduiyou document for the current Xiaoduiyou turn. For mini_app, use xdy.mini_app.v2 after calling xiaoduiyou_mini_app_contract_get.",
         emoji="📝",
         schema={
             "name": "xiaoduiyou_documents_create",
-            "description": "Create a Xiaoduiyou document only when the user explicitly asks for a document artifact.",
+            "description": "Create a Xiaoduiyou document only when the user explicitly asks for a document artifact. For ui_templates mini_app, load xiaoduiyou-doc-content-package, call xiaoduiyou_mini_app_contract_get, and send strict xdy.mini_app.v2.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -2664,11 +2703,11 @@ def register(ctx) -> None:
     ctx.register_tool(
         name="xiaoduiyou_documents_update",
         toolset=TOOLSET,
-        description="Queue update of an existing/current Xiaoduiyou document for the current Xiaoduiyou turn.",
+        description="Queue update of an existing/current Xiaoduiyou document for the current Xiaoduiyou turn. Mini-app definitions must use strict xdy.mini_app.v2.",
         emoji="✏️",
         schema={
             "name": "xiaoduiyou_documents_update",
-            "description": "Update a Xiaoduiyou document only when the user explicitly asks to modify a document. Omit document_id to target the current screen document/content package; Xiaoduiyou falls back to the current session document.",
+            "description": "Update a Xiaoduiyou document only when the user explicitly asks to modify a document. Omit document_id to target the current screen document/content package; Xiaoduiyou falls back to the current session document. For mini_app, call xiaoduiyou_mini_app_contract_get and send strict xdy.mini_app.v2.",
             "parameters": {
                 "type": "object",
                 "properties": {

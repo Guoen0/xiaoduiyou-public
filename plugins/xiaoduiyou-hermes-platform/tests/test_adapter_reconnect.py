@@ -136,6 +136,9 @@ class DeliveryClassificationTests(unittest.TestCase):
     def test_asset_upload_tool_progress_uses_attachment_icon(self):
         self.assertTrue(adapter._looks_like_tool_progress('📎 xiaoduiyou_assets_upload(file_path="/tmp/card.png")'))
 
+    def test_mini_app_contract_tool_progress_uses_puzzle_icon(self):
+        self.assertTrue(adapter._looks_like_tool_progress("🧩 xiaoduiyou_mini_app_contract_get()"))
+
     def test_all_hermes_friendly_tool_labels_are_tool_progress(self):
         messages = (
             "🔍 Searching the web for Hermes tool labels",
@@ -186,6 +189,46 @@ class ContentPackageTemplateTests(unittest.TestCase):
             ["xiaohongshu", "moments", "travel_plan", "interactive_html", "mini_app"],
         )
 
+    def test_mini_app_contract_tool_returns_live_v2_vocabulary(self):
+        old_active_tool_context = adapter._active_tool_context
+        old_request_json = adapter._request_json
+        calls = []
+
+        def fake_context():
+            return {"base_url": "https://review.example.test", "token": "token", "session_id": "sess_1"}
+
+        def return_contract(url, **kwargs):
+            calls.append({"url": url, **kwargs})
+            return {
+                "contract": {
+                    "schema": "xdy.mini_app.v2",
+                    "runtime_version": "2.0",
+                    "actions": ["state.set", "navigate"],
+                    "components": ["text", "button"],
+                }
+            }
+
+        adapter._active_tool_context = fake_context
+        adapter._request_json = return_contract
+        try:
+            result = json.loads(adapter._tool_mini_app_contract_get({}))
+        finally:
+            adapter._active_tool_context = old_active_tool_context
+            adapter._request_json = old_request_json
+
+        self.assertEqual(result["ok"], True)
+        self.assertEqual(result["contract"]["schema"], "xdy.mini_app.v2")
+        self.assertEqual(result["context"]["session_id"], "sess_1")
+        self.assertEqual(calls[0]["url"], "https://review.example.test/api/mini-apps/contract")
+        self.assertEqual(calls[0]["token"], "token")
+
+    def test_adapter_prompts_strict_v2_and_never_v1(self):
+        source = ADAPTER_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("xiaoduiyou_mini_app_contract_get", source)
+        self.assertIn("schema xdy.mini_app.v2", source)
+        self.assertNotIn("schema xdy.mini_app.v1", source)
+
     def test_create_document_returns_mini_app_validation_as_structured_tool_result(self):
         old_active_tool_context = adapter._active_tool_context
         old_request_json = adapter._request_json
@@ -197,11 +240,12 @@ class ContentPackageTemplateTests(unittest.TestCase):
             del args, kwargs
             raise RuntimeError(
                 'HTTP 400: {"error":"INVALID_MINI_APP_DEFINITION","capability_available":true,'
-                '"path":"fields.ui_payloads.mini_app.view.children[0].action",'
-                '"reason":"button.action must be an action object; received string",'
-                '"expected":{"type":"set","path":"<state_field>","value":"<value_or_expression>"},'
+                '"expected_schema":"xdy.mini_app.v2",'
+                '"path":"fields.ui_payloads.mini_app.pages.home.root.children[0].action",'
+                '"reason":"button.action must name a declared action",'
+                '"expected":["save"],'
                 '"skill_reference":{"reference":"skills/xiaoduiyou/xiaoduiyou-doc-content-package/references/mini-app-contract.md",'
-                '"section":"Buttons and actions"}}'
+                '"section":"Actions"}}'
             )
 
         adapter._active_tool_context = fake_context
@@ -219,8 +263,9 @@ class ContentPackageTemplateTests(unittest.TestCase):
         self.assertEqual(result["ok"], False)
         self.assertEqual(result["operation"], "create")
         self.assertEqual(result["error"], "INVALID_MINI_APP_DEFINITION")
-        self.assertEqual(result["path"], "fields.ui_payloads.mini_app.view.children[0].action")
-        self.assertEqual(result["skill_reference"]["section"], "Buttons and actions")
+        self.assertEqual(result["expected_schema"], "xdy.mini_app.v2")
+        self.assertEqual(result["path"], "fields.ui_payloads.mini_app.pages.home.root.children[0].action")
+        self.assertEqual(result["skill_reference"]["section"], "Actions")
 
     def test_update_document_returns_mini_app_validation_as_structured_tool_result(self):
         old_active_tool_context = adapter._active_tool_context
@@ -233,11 +278,12 @@ class ContentPackageTemplateTests(unittest.TestCase):
             del args, kwargs
             raise RuntimeError(
                 'HTTP 400: {"error":"INVALID_MINI_APP_DEFINITION","capability_available":true,'
-                '"path":"fields.ui_payloads.mini_app.state_schema.done.type",'
+                '"expected_schema":"xdy.mini_app.v2",'
+                '"path":"fields.ui_payloads.mini_app.state.done.type",'
                 '"reason":"unknown state type \\"made_up_type\\"",'
-                '"expected":"string | number | boolean | string_set | string_list",'
+                '"expected":"string | number | boolean | string_set | string_list | object | list",'
                 '"skill_reference":{"reference":"skills/xiaoduiyou/xiaoduiyou-doc-content-package/references/mini-app-contract.md",'
-                '"section":"Choose the mode / Fixed vocabulary"}}'
+                '"section":"V2 payload and vocabulary"}}'
             )
 
         adapter._active_tool_context = fake_context
@@ -256,7 +302,8 @@ class ContentPackageTemplateTests(unittest.TestCase):
         self.assertEqual(result["operation"], "update")
         self.assertEqual(result["command"], "patch_fields")
         self.assertEqual(result["document_id"], "doc_0125")
-        self.assertEqual(result["path"], "fields.ui_payloads.mini_app.state_schema.done.type")
+        self.assertEqual(result["path"], "fields.ui_payloads.mini_app.state.done.type")
+        self.assertEqual(result["skill_reference"]["section"], "V2 payload and vocabulary")
 
 
 class AssetUploadToolTests(unittest.TestCase):

@@ -12,6 +12,7 @@ This is the maintained Hermes Gateway platform plugin for Xiaoduiyou. Install it
 - Channel-directory compatibility for Xiaoduiyou targets: Hermes should list `xiaoduiyou:主对话` and current sidebar channel names, with family channels marked as `group`, even on Hermes versions that only read `channel_directory.json`
 - Cron delivery support through `deliver="xiaoduiyou:<channel name>"`; cron jobs must not schedule a future `send_message` call
 - Xiaoduiyou document tools registered in toolset `xiaoduiyou`
+- Live Mini App V2 discovery through `xiaoduiyou_mini_app_contract_get`, so Agent authoring follows the review/runtime contract before document creation
 
 ## Hermes install layout
 

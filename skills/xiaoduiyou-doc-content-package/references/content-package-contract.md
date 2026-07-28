@@ -136,17 +136,18 @@ When revising which result pages should exist, call `xiaoduiyou_documents_update
 ### Stateful Mini App
 
 - Select with `ui_templates: ["mini_app"]`.
-- Store the structured payload at `fields.ui_payloads.mini_app` using schema `xdy.mini_app.v1`.
-- Use only the declared platform state types, view nodes, and actions. Do not write HTML, JavaScript handlers, an SDK bridge, or `data-xdy-action` attributes.
-- Use this mode when interactions must persist and synchronize among members of one family.
-- Full contract and example: `references/mini-app-contract.md`.
+- Store the structured payload at `fields.ui_payloads.mini_app` using the strict schema `xdy.mini_app.v2`. V1 is rejected.
+- Include `manifest`, `data`, `state`, `computed`, `actions`, `resources`, and `pages`; do not use the removed V1 keys `label`, `content`, `state_schema`, or `view`.
+- Use only declared state, expressions, actions, resources, pages, and platform components. Do not write HTML, JavaScript handlers, an SDK bridge, or `data-xdy-action` attributes.
+- Use this mode for reusable search/filter/list/form/statistics/navigation UI and for `session`, `device`, private `member`, or shared `family` state.
+- When available, call `xiaoduiyou_mini_app_contract_get` before authoring. Full rules: `references/mini-app-contract.md`; executable starting point: `references/mini-app-v2-example.json`.
 
 ## Validation checklist
 
 - `ui_templates` selects only templates the user/Agent wants rendered.
 - Each selected publish/travel template has matching `publish_notes.<template>` result data; `travel_plan` must include `publish_notes.travel_plan.travel_plan`.
 - `interactive_html` has a valid `ui_payloads.interactive_html` payload using schema `xdy.interactive_html.v1`, a label, and non-empty self-contained HTML below 512 KiB.
-- `mini_app` has a valid `ui_payloads.mini_app` payload using schema `xdy.mini_app.v1`, a declared `state_schema`, and a supported `view`.
+- `mini_app` has a valid `ui_payloads.mini_app` payload using schema `xdy.mini_app.v2`, all required V2 top-level objects, declared capabilities/state/actions/pages, and a supported component tree.
 - Publish tabs do not include process headings such as `过程材料`, `图片结构`, prompts, references, or research notes.
 - Xiaohongshu first image is the feed cover.
 - Publish body includes hashtags inline when needed; no separate topic section is required.

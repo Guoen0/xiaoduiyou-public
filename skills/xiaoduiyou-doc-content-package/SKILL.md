@@ -26,7 +26,7 @@ Load this when the user asks for:
 6. For chat visual cards only, use `xiaoduiyou-im`; do not create a document unless explicitly requested.
 7. For 成长日记 records, use `xiaoduiyou-growth-diary`; do not encode diary records as content packages.
 8. If publish tabs were accidentally attached and `patch_fields` with `ui_templates: null` / `publish_notes: null` makes `view=field` return null but `summary.fields_keys` still contains those keys or the frontend still displays Xiaohongshu/Moments tabs, stop retrying and report a product bug. The likely fix is backend true key deletion or frontend gating on non-empty `ui_templates` plus matching `publish_notes`, not merely `fields_keys`/historical state.
-9. Keep the two mini-app modes distinct: `interactive_html` is free-form and stateless; `mini_app` is platform-rendered with family-shared state. Never invent an SDK, parent bridge, JavaScript state API, or `data-xdy-action` attributes.
+9. Keep the two mini-app modes distinct: `interactive_html` is free-form and stateless; `mini_app` is the platform-rendered declarative runtime. For `mini_app`, emit only `xdy.mini_app.v2`; V1 is rejected and must never be used as a fallback. Never invent an SDK, parent bridge, JavaScript state API, or `data-xdy-action` attributes.
 
 ## Case map owned by Doc Content Package
 
@@ -35,7 +35,7 @@ Load this when the user asks for:
 | `旅游规划` / `旅行规划` / itinerary artifact | `references/travel-plan-planning-workflow.md` then `references/travel-plan-result-template.md` | Travel planning is a document/content artifact with process evidence and structured `travel_plan` UI data. |
 | Travel plan Xiaohongshu reference images | `references/travel-plan-xhs-reference-workflow.md` | Travel artifacts need durable uploaded reference images and clean provenance. |
 | `做成内容包` / `创建文档` / `文档产物` | `references/content-package-contract.md` | Document artifact / `ui_templates` / result-payload contract. |
-| `互动网页` / `小程序` / 家庭共享的勾选、输入、计数、列表状态 | `references/mini-app-contract.md` | Choose stateless free HTML or structured family-shared state and emit the exact payload. |
+| `互动网页` / `小程序` / 搜索筛选、表单、列表、统计、导航、成员或家庭状态 | `references/mini-app-contract.md` | Choose stateless free HTML or the strict V2 declarative runtime and emit the exact payload. |
 | `小红书发布稿` / `朋友圈发布稿` / publish tabs | `references/social-publish-result-template.md` | Platform-specific publish tab shape. |
 | Process/evidence doc Markdown fidelity | `references/process-document-markdown.md` | Keep process material separate and well-formed. |
 | Validate a content-package JSON before callback/document update | Prefer the first-class document tools' payload schema; optional local lint only if the script is present | Catch local paths, mismatched templates, process/result mixing. |
@@ -60,8 +60,11 @@ Load this when the user asks for:
 
 - Prefer the first-class document tools for read/create/update/delete: `xiaoduiyou_documents_get`, `xiaoduiyou_documents_create`, `xiaoduiyou_documents_update`, `xiaoduiyou_documents_delete`.
 - Before calling them, manually validate: every selected template has matching `fields.publish_notes` or `fields.ui_payloads`, visible result tabs contain only final material, and all publish images are browser-accessible `http(s)` URLs.
-- For `mini_app`, validate `schema`, `state_schema`, and `view` against `references/mini-app-contract.md`; do not send JavaScript handlers or unknown node/action types.
-- If a document tool returns `INVALID_MINI_APP_DEFINITION`, use its `path`, `reason`, `expected`, and `skill_reference` fields to correct and retry the definition. `capability_available: true` explicitly means the platform supports mini apps; never reinterpret this validation error as an unavailable capability.
+- For every `mini_app` create or update, read `references/mini-app-contract.md`. When available, call `xiaoduiyou_mini_app_contract_get` before authoring so the live review/runtime vocabulary is decisive.
+- Start from `references/mini-app-v2-example.json`. Keep all eight V2 top-level keys even when an object is empty: `schema`, `manifest`, `data`, `state`, `computed`, `actions`, `resources`, and `pages`.
+- Validate V2 `manifest`, capability declarations, state scopes/types/defaults, expressions, declared actions, resources, pages, and component trees. Do not send V1 keys (`label`, `content`, `state_schema`, `view`), JavaScript handlers, HTML, or unknown node/action types.
+- If the optional local script is present, run `python scripts/validate_content_package.py <payload.json>` before the document call. The backend remains authoritative.
+- If a document tool returns `INVALID_MINI_APP_DEFINITION`, use `path`, `reason`, `expected`, `contract_endpoint`, and `skill_reference` to correct the definition and retry the same operation. `capability_available: true` means the platform supports mini apps; never reinterpret validation failure as unavailable capability.
 - A local validator script may exist in some Hermes installs as an optional lint aid, but public Xiaoduiyou usage skills must not depend on scripts being available.
 
 ## Tool use
