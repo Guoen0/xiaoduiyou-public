@@ -31,15 +31,21 @@ Never emit or retry with `xdy.mini_app.v1`.
 4. Choose state scopes deliberately. Use `session` or `device` for UI controls,
    `member` for private member data, and `family` only for truly shared data.
 5. Declare only capabilities the definition actually uses.
-6. If the optional validator exists, wrap the definition under
-   `fields.ui_payloads.mini_app` and run:
+6. Write the raw V2 definition to a JSON file such as
+   `/tmp/xdy-mini-app-weekend-board.json`. If the optional validator exists,
+   run it directly against that raw definition:
 
    ```bash
-   python scripts/validate_content_package.py payload.json
+   python "${HERMES_HOME:-$HOME/.hermes}/skills/xiaoduiyou-doc-content-package/scripts/validate_content_package.py" \
+     /tmp/xdy-mini-app-weekend-board.json
    ```
 
-7. Call `xiaoduiyou_documents_create` or `xiaoduiyou_documents_update`.
-8. If the platform returns `INVALID_MINI_APP_DEFINITION`, correct the exact
+7. Inspect the document tool schema. When it exposes `mini_app_path`, pass the
+   JSON file through that field and keep the tool call small; omit an inline
+   `fields.ui_payloads.mini_app` copy. Otherwise, send the validated definition
+   inline under `fields.ui_payloads.mini_app`.
+8. Call `xiaoduiyou_documents_create` or `xiaoduiyou_documents_update`.
+9. If the platform returns `INVALID_MINI_APP_DEFINITION`, correct the exact
    returned `path` and retry the same operation. Do not remove the mini app,
    switch to V1, or claim that the capability is unavailable.
 
@@ -111,6 +117,13 @@ Select `mini_app` and put the definition under
 The document tool already accepts top-level `ui_templates` and merges them into
 `fields.ui_templates`. Keep the payload internally consistent if both are
 present.
+
+Hermes document tools may also expose `mini_app_path`. It points to a local,
+UTF-8 `.json` file whose root is the raw `xdy.mini_app.v2` definition shown
+above. The connector reads and validates that file, injects it into
+`fields.ui_payloads.mini_app`, and selects the `mini_app` template. Prefer this
+transport for non-trivial definitions because the deferred `tool_call` bridge
+otherwise has to JSON-encode the whole definition a second time.
 
 ## V2 payload and vocabulary
 
@@ -308,6 +321,48 @@ State actions:
 - `state.move`
 - `state.clear`
 - `state.batch`
+
+Mutation types are not interchangeable:
+
+- `state.toggle` is only for a `boolean` field.
+- `state.increment` is only for a `number` field.
+- `state.add` and `state.remove` are for `string_set`, `string_list`, or
+  `list`.
+- `state.move` is only for `string_list` or `list`.
+- A `checkbox` bound to a `string_set` already adds/removes its `value`; it
+  does not need a separate `state.toggle` action.
+
+If a button must toggle membership in a shared set, declare add/remove actions
+and select between them with `conditional`:
+
+```json
+{
+  "actions": {
+    "mark_complete": {
+      "type": "state.add",
+      "path": "completed",
+      "value": {"$path": "item.id"}
+    },
+    "unmark_complete": {
+      "type": "state.remove",
+      "path": "completed",
+      "value": {"$path": "item.id"}
+    },
+    "toggle_complete": {
+      "type": "conditional",
+      "condition": {
+        "$op": "includes",
+        "args": [
+          {"$path": "state.completed"},
+          {"$path": "item.id"}
+        ]
+      },
+      "then": "unmark_complete",
+      "else": "mark_complete"
+    }
+  }
+}
+```
 
 Flow and platform actions:
 

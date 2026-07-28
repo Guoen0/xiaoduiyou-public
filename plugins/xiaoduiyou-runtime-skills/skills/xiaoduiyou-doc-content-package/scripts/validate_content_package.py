@@ -131,32 +131,15 @@ def _validate_mini_app_action(
         errors.append(f"{path}.type must be a supported V2 action")
         return
 
-    def state_path(change: dict[str, Any], change_path: str) -> None:
-        field_name = change.get("path")
-        if not isinstance(field_name, str) or field_name not in state:
-            errors.append(f"{change_path}.path must name a declared state field")
-
     if isinstance(action_type, str) and action_type.startswith("state.") and action_type != "state.batch":
-        state_path(action, path)
+        _validate_mini_app_mutation(action, path, state, errors)
     elif action_type == "state.batch":
         changes = action.get("changes")
-        if not isinstance(changes, list) or not changes:
-            errors.append(f"{path}.changes must be a non-empty array")
+        if not isinstance(changes, list) or not 1 <= len(changes) <= 100:
+            errors.append(f"{path}.changes must contain 1-100 mutations")
         else:
             for index, change in enumerate(changes):
-                change_path = f"{path}.changes[{index}]"
-                if not isinstance(change, dict) or change.get("type") not in {
-                    "state.set",
-                    "state.toggle",
-                    "state.increment",
-                    "state.add",
-                    "state.remove",
-                    "state.move",
-                    "state.clear",
-                }:
-                    errors.append(f"{change_path} must be a supported state mutation")
-                else:
-                    state_path(change, change_path)
+                _validate_mini_app_mutation(change, f"{path}.changes[{index}]", state, errors)
     elif action_type == "sequence":
         refs = action.get("actions")
         if not isinstance(refs, list) or not refs or any(ref not in actions for ref in refs):
@@ -172,6 +155,49 @@ def _validate_mini_app_action(
         resource = action.get("resource")
         if resource is not None and resource not in resources:
             errors.append(f"{path}.resource must name a declared resource")
+
+
+def _validate_mini_app_mutation(
+    mutation: Any,
+    path: str,
+    state: dict[str, Any],
+    errors: list[str],
+) -> None:
+    if not isinstance(mutation, dict) or mutation.get("type") not in {
+        "state.set",
+        "state.toggle",
+        "state.increment",
+        "state.add",
+        "state.remove",
+        "state.move",
+        "state.clear",
+    }:
+        errors.append(f"{path} must be a supported state mutation")
+        return
+    field_name = mutation.get("path")
+    if not isinstance(field_name, str) or field_name not in state:
+        errors.append(f"{path}.path must name a declared state field")
+        return
+    field_type = state[field_name].get("type") if isinstance(state[field_name], dict) else None
+    mutation_type = mutation["type"]
+    if mutation_type == "state.set" and "value" not in mutation:
+        errors.append(f"{path}.value is required for state.set")
+    elif mutation_type == "state.toggle" and field_type != "boolean":
+        errors.append(f"{path} state.toggle requires a boolean field")
+    elif mutation_type == "state.increment" and field_type != "number":
+        errors.append(f"{path} state.increment requires a number field")
+    elif mutation_type in {"state.add", "state.remove"}:
+        if field_type not in {"string_set", "string_list", "list"}:
+            errors.append(f"{path} {mutation_type} requires a set or list field")
+        if "value" not in mutation:
+            errors.append(f"{path}.value is required for {mutation_type}")
+    elif mutation_type == "state.move":
+        if field_type not in {"string_list", "list"}:
+            errors.append(f"{path} state.move requires a list field")
+        if "from" not in mutation:
+            errors.append(f"{path}.from is required for state.move")
+        if "to" not in mutation:
+            errors.append(f"{path}.to is required for state.move")
 
 
 def _validate_mini_app_node(
@@ -414,6 +440,8 @@ def validate(obj: Any) -> tuple[list[str], list[str]]:
     warnings: list[str] = []
     if not isinstance(obj, dict):
         return ["Top-level payload must be a JSON object"], []
+    if obj.get("schema") == MINI_APP_SCHEMA:
+        return validate_mini_app_v2(obj), []
     data = dig_payload(obj)
     templates = data.get("ui_templates")
     publish_notes = data.get("publish_notes")

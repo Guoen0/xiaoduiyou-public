@@ -13,6 +13,7 @@ This is the maintained Hermes Gateway platform plugin for Xiaoduiyou. Install it
 - Cron delivery support through `deliver="xiaoduiyou:<channel name>"`; cron jobs must not schedule a future `send_message` call
 - Xiaoduiyou document tools registered in toolset `xiaoduiyou`
 - Live Mini App V2 discovery through `xiaoduiyou_mini_app_contract_get`, so Agent authoring follows the review/runtime contract before document creation
+- File-backed Mini App V2 writes through `mini_app_path`, so complex definitions are validated once and are not double-encoded inside Hermes `tool_call` arguments
 
 ## Hermes install layout
 

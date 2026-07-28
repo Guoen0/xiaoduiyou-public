@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.28.3"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.28.4"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -41,6 +41,7 @@ WEBSOCKET_IDLE_REFRESH_SECONDS = 15.0
 DEFAULT_WEBSOCKET_PING_INTERVAL_SECONDS = 25.0
 DEFAULT_WEBSOCKET_PING_TIMEOUT_SECONDS = 10.0
 MAX_RECONNECT_DELAY_SECONDS = 60.0
+MAX_MINI_APP_FILE_BYTES = 1024 * 1024
 
 # First-class Xiaoduiyou tools (Growth Diary, assets, etc.) must use the
 # connector-owned origin/token for the active turn. The model should never have
@@ -650,6 +651,72 @@ def _merge_ui_templates_into_fields(args: Dict[str, Any], fields: Any) -> Dict[s
     templates = _normalize_ui_templates(args.get("ui_templates"))
     if templates:
         normalized_fields["ui_templates"] = templates
+    return normalized_fields
+
+
+def _read_mini_app_path(args: Dict[str, Any]) -> Dict[str, Any] | None:
+    path_value = str(args.get("mini_app_path") or "").strip()
+    if not path_value:
+        return None
+    if "\x00" in path_value:
+        raise RuntimeError("mini_app_path contains an invalid NUL byte")
+    candidate = Path(path_value).expanduser()
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    if candidate.suffix.lower() != ".json":
+        raise RuntimeError("mini_app_path must point to a .json file")
+    if candidate.is_symlink():
+        raise RuntimeError("mini_app_path must not be a symbolic link")
+    try:
+        resolved = candidate.resolve(strict=True)
+    except OSError as exc:
+        raise RuntimeError(f"mini_app_path cannot be read: {exc}") from exc
+    if not resolved.is_file():
+        raise RuntimeError("mini_app_path must point to a regular file")
+    allowed_roots = {
+        Path(tempfile.gettempdir()).resolve(),
+        Path("/tmp").resolve(),
+        Path.cwd().resolve(),
+        Path.home().resolve(),
+    }
+    if not any(resolved == root or resolved.is_relative_to(root) for root in allowed_roots):
+        raise RuntimeError("mini_app_path must be under the temporary directory, current working directory, or user home")
+    home = Path.home().resolve()
+    if resolved == home or resolved.is_relative_to(home):
+        relative = resolved.relative_to(home)
+        if any(part.startswith(".") for part in relative.parts):
+            raise RuntimeError("mini_app_path must not read from a hidden directory under the user home")
+    try:
+        size = resolved.stat().st_size
+    except OSError as exc:
+        raise RuntimeError(f"mini_app_path cannot be inspected: {exc}") from exc
+    if size <= 0 or size > MAX_MINI_APP_FILE_BYTES:
+        raise RuntimeError(f"mini_app_path must contain 1-{MAX_MINI_APP_FILE_BYTES} bytes")
+    try:
+        definition = json.loads(resolved.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"mini_app_path must contain valid UTF-8 JSON: {exc}") from exc
+    if not isinstance(definition, dict) or definition.get("schema") != "xdy.mini_app.v2":
+        raise RuntimeError("mini_app_path root must be an xdy.mini_app.v2 definition")
+    return definition
+
+
+def _document_fields_from_args(args: Dict[str, Any]) -> Dict[str, Any]:
+    fields = args.get("fields") if isinstance(args.get("fields"), dict) else {}
+    normalized_fields = _merge_ui_templates_into_fields(args, fields)
+    mini_app = _read_mini_app_path(args)
+    if mini_app is None:
+        return normalized_fields
+    ui_payloads = dict(normalized_fields.get("ui_payloads")) if isinstance(normalized_fields.get("ui_payloads"), dict) else {}
+    inline_mini_app = ui_payloads.get("mini_app")
+    if inline_mini_app is not None and inline_mini_app != mini_app:
+        raise RuntimeError("mini_app_path conflicts with fields.ui_payloads.mini_app; provide only one definition")
+    ui_payloads["mini_app"] = mini_app
+    normalized_fields["ui_payloads"] = ui_payloads
+    templates = _normalize_ui_templates(normalized_fields.get("ui_templates"))
+    if "mini_app" not in templates:
+        templates.append("mini_app")
+    normalized_fields["ui_templates"] = templates
     return normalized_fields
 
 
@@ -1788,8 +1855,7 @@ def _tool_create_document(args: Dict[str, Any], **_: Any) -> str:
         "created_by": "agent",
         "attach_to_session": _bool_arg(args.get("attach_to_session"), True),
     }
-    fields = args.get("fields") if isinstance(args.get("fields"), dict) else {}
-    fields = _merge_ui_templates_into_fields(args, fields)
+    fields = _document_fields_from_args(args)
     if fields:
         payload["fields"] = fields
     try:
@@ -1822,6 +1888,8 @@ def _tool_create_document(args: Dict[str, Any], **_: Any) -> str:
 def _tool_update_document(args: Dict[str, Any], **_: Any) -> str:
     document_id = str(args.get("document_id") or "").strip()
     command = str(args.get("command") or "overwrite").strip()
+    if args.get("mini_app_path") and command not in {"overwrite", "patch_fields"}:
+        raise RuntimeError("mini_app_path is supported only for overwrite or patch_fields")
     input_payload: Dict[str, Any]
     if command == "append_blocks":
         blocks = args.get("blocks")
@@ -1833,8 +1901,7 @@ def _tool_update_document(args: Dict[str, Any], **_: Any) -> str:
         input_payload = {"command": "patch_fields", "updated_by": "agent"}
         if args.get("title"):
             input_payload["title"] = str(args["title"])
-        fields = args.get("fields") if isinstance(args.get("fields"), dict) else {}
-        fields = _merge_ui_templates_into_fields(args, fields)
+        fields = _document_fields_from_args(args)
         if fields:
             input_payload["fields"] = fields
     elif command == "replace_publish_image":
@@ -1883,8 +1950,7 @@ def _tool_update_document(args: Dict[str, Any], **_: Any) -> str:
         }
         if title:
             input_payload["title"] = title
-        fields = args.get("fields") if isinstance(args.get("fields"), dict) else {}
-        fields = _merge_ui_templates_into_fields(args, fields)
+        fields = _document_fields_from_args(args)
         if fields:
             input_payload["fields"] = fields
     if args.get("base_revision") is not None:
@@ -2520,7 +2586,8 @@ def register(ctx) -> None:
             "Only call xiaoduiyou document tools when the user explicitly asks for a document artifact or mutation. "
             "Content packages may select ui_templates (xiaohongshu, moments, travel_plan, interactive_html, mini_app); "
             "interactive_html is free-form and stateless, mini_app uses strict xdy.mini_app.v2 declarative JSON, "
-            "and publish/travel templates use fields.publish_notes."
+            "and publish/travel templates use fields.publish_notes. For a non-trivial mini_app, write the raw V2 "
+            "definition to a local .json file, validate it, and pass mini_app_path instead of double-encoding it inline."
         ),
         max_message_length=XiaoduiyouAdapter.MAX_MESSAGE_LENGTH,
         cron_deliver_env_var="XIAODUIYOU_HOME_CHANNEL",
@@ -2679,7 +2746,7 @@ def register(ctx) -> None:
         emoji="📝",
         schema={
             "name": "xiaoduiyou_documents_create",
-            "description": "Create a Xiaoduiyou document only when the user explicitly asks for a document artifact. For ui_templates mini_app, load xiaoduiyou-doc-content-package, call xiaoduiyou_mini_app_contract_get, and send strict xdy.mini_app.v2.",
+            "description": "Create a Xiaoduiyou document only when the user explicitly asks for a document artifact. For mini_app, load xiaoduiyou-doc-content-package, call xiaoduiyou_mini_app_contract_get, write and validate a raw xdy.mini_app.v2 JSON file, then prefer mini_app_path so a large definition is not double-encoded through tool_call.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -2692,6 +2759,7 @@ def register(ctx) -> None:
                         "items": {"type": "string", "enum": ["xiaohongshu", "moments", "travel_plan", "interactive_html", "mini_app"]},
                     },
                     "fields": {"type": "object", "description": "Optional metadata fields."},
+                    "mini_app_path": {"type": "string", "description": "Preferred for non-trivial mini apps: local UTF-8 .json file containing the raw xdy.mini_app.v2 definition. The connector reads it, selects mini_app, and writes fields.ui_payloads.mini_app. Omit a conflicting inline mini_app definition."},
                     "attach_to_session": {"type": "boolean", "description": "Attach as the current session document. Defaults true."},
                 },
                 "required": ["title"],
@@ -2707,7 +2775,7 @@ def register(ctx) -> None:
         emoji="✏️",
         schema={
             "name": "xiaoduiyou_documents_update",
-            "description": "Update a Xiaoduiyou document only when the user explicitly asks to modify a document. Omit document_id to target the current screen document/content package; Xiaoduiyou falls back to the current session document. For mini_app, call xiaoduiyou_mini_app_contract_get and send strict xdy.mini_app.v2.",
+            "description": "Update a Xiaoduiyou document only when the user explicitly asks to modify a document. Omit document_id to target the current screen document/content package; Xiaoduiyou falls back to the current session document. For mini_app, call xiaoduiyou_mini_app_contract_get, write and validate a raw xdy.mini_app.v2 JSON file, then prefer mini_app_path with overwrite or patch_fields.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -2733,6 +2801,7 @@ def register(ctx) -> None:
                         },
                     },
                     "fields": {"type": "object", "description": "Metadata fields for patch_fields/overwrite."},
+                    "mini_app_path": {"type": "string", "description": "For overwrite or patch_fields: local UTF-8 .json file containing the raw xdy.mini_app.v2 definition. The connector reads it, selects mini_app, and writes fields.ui_payloads.mini_app. Omit a conflicting inline mini_app definition."},
                     "platform": {"type": "string", "description": "For content-package commands, e.g. xiaohongshu."},
                     "index": {"type": "integer", "description": "For replace_publish_image: 1-based image index to replace."},
                     "image_url": {"type": "string", "description": "For replace_publish_image: replacement image URL."},

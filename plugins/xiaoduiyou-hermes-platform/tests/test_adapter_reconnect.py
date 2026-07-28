@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -226,8 +227,109 @@ class ContentPackageTemplateTests(unittest.TestCase):
         source = ADAPTER_PATH.read_text(encoding="utf-8")
 
         self.assertIn("xiaoduiyou_mini_app_contract_get", source)
+        self.assertIn("mini_app_path", source)
         self.assertIn("schema xdy.mini_app.v2", source)
         self.assertNotIn("schema xdy.mini_app.v1", source)
+
+    def test_create_document_loads_large_mini_app_from_json_path(self):
+        old_active_tool_context = adapter._active_tool_context
+        old_request_json = adapter._request_json
+        calls = []
+        definition = {
+            "schema": "xdy.mini_app.v2",
+            "manifest": {"title": "任务板", "entry_page": "home", "min_runtime": "2.0", "capabilities": []},
+            "data": {},
+            "state": {},
+            "computed": {},
+            "actions": {},
+            "resources": {},
+            "pages": {"home": {"root": {"type": "text", "value": "ready"}}},
+        }
+
+        def fake_context():
+            return {"base_url": "https://review.example.test", "token": "token", "session_id": "sess_1"}
+
+        def capture_request(url, **kwargs):
+            calls.append({"url": url, **kwargs})
+            return {"document": {"document_id": "doc_1", "title": "任务板"}}
+
+        adapter._active_tool_context = fake_context
+        adapter._request_json = capture_request
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "xdy-mini-app-task-board.json"
+                path.write_text(json.dumps(definition, ensure_ascii=False), encoding="utf-8")
+                result = json.loads(adapter._tool_create_document({
+                    "title": "任务板",
+                    "mini_app_path": str(path),
+                }))
+        finally:
+            adapter._active_tool_context = old_active_tool_context
+            adapter._request_json = old_request_json
+
+        self.assertEqual(result["ok"], True)
+        self.assertEqual(calls[0]["payload"]["fields"]["ui_templates"], ["mini_app"])
+        self.assertEqual(calls[0]["payload"]["fields"]["ui_payloads"]["mini_app"], definition)
+
+    def test_mini_app_path_rejects_v1_and_hidden_home_paths(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as directory:
+            hidden = Path(directory) / ".private"
+            hidden.mkdir()
+            path = hidden / "mini-app.json"
+            path.write_text(json.dumps({"schema": "xdy.mini_app.v2"}), encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "hidden directory"):
+                adapter._read_mini_app_path({"mini_app_path": str(path)})
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "mini-app.json"
+            path.write_text(json.dumps({"schema": "xdy.mini_app.v1"}), encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "xdy.mini_app.v2"):
+                adapter._read_mini_app_path({"mini_app_path": str(path)})
+
+    def test_update_document_loads_mini_app_path_for_patch_fields(self):
+        old_active_tool_context = adapter._active_tool_context
+        old_request_json = adapter._request_json
+        calls = []
+        definition = {
+            "schema": "xdy.mini_app.v2",
+            "manifest": {"title": "任务板", "entry_page": "home", "min_runtime": "2.0", "capabilities": []},
+            "data": {},
+            "state": {},
+            "computed": {},
+            "actions": {},
+            "resources": {},
+            "pages": {"home": {"root": {"type": "text", "value": "updated"}}},
+        }
+
+        def fake_context():
+            return {"base_url": "https://review.example.test", "token": "token", "session_id": "sess_1"}
+
+        def capture_request(url, **kwargs):
+            calls.append({"url": url, **kwargs})
+            return {
+                "mutation": {"mutation_id": "mut_1", "state": "persisted", "target_document_id": "doc_1"},
+                "document": {"document_id": "doc_1", "title": "任务板"},
+            }
+
+        adapter._active_tool_context = fake_context
+        adapter._request_json = capture_request
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "xdy-mini-app-task-board.json"
+                path.write_text(json.dumps(definition, ensure_ascii=False), encoding="utf-8")
+                result = json.loads(adapter._tool_update_document({
+                    "document_id": "doc_1",
+                    "command": "patch_fields",
+                    "mini_app_path": str(path),
+                }))
+        finally:
+            adapter._active_tool_context = old_active_tool_context
+            adapter._request_json = old_request_json
+
+        self.assertEqual(result["ok"], True)
+        self.assertEqual(calls[0]["payload"]["command"], "patch_fields")
+        self.assertEqual(calls[0]["payload"]["fields"]["ui_templates"], ["mini_app"])
+        self.assertEqual(calls[0]["payload"]["fields"]["ui_payloads"]["mini_app"], definition)
 
     def test_create_document_returns_mini_app_validation_as_structured_tool_result(self):
         old_active_tool_context = adapter._active_tool_context

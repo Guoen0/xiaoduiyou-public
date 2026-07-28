@@ -46,6 +46,9 @@ def main() -> int:
     valid_errors, valid_warnings = validator.validate(valid_payload)
     if valid_errors or valid_warnings:
         failures.append(f"V2 example did not validate cleanly: errors={valid_errors}, warnings={valid_warnings}")
+    raw_errors, raw_warnings = validator.validate(example)
+    if raw_errors or raw_warnings:
+        failures.append(f"Raw V2 definition did not validate cleanly: errors={raw_errors}, warnings={raw_warnings}")
 
     v1_example = dict(example)
     v1_example["schema"] = "xdy.mini_app.v1"
@@ -74,6 +77,15 @@ def main() -> int:
     if not any("must name a declared action" in error for error in action_errors):
         failures.append("Validator did not detect an undeclared component action")
 
+    invalid_toggle_example = json.loads(json.dumps(example))
+    invalid_toggle_example["actions"]["mark_visited"] = {
+        "type": "state.toggle",
+        "path": "visited",
+    }
+    toggle_errors, _ = validator.validate(invalid_toggle_example)
+    if not any("state.toggle requires a boolean field" in error for error in toggle_errors):
+        failures.append("Validator did not reject state.toggle on a string_set field")
+
     if comparable_files(SKILL) != comparable_files(MIRROR):
         failures.append("Top-level content-package skill and runtime-skill mirror differ")
 
@@ -85,12 +97,14 @@ def main() -> int:
         failures.append("Hermes adapter constant and plugin.yaml version differ")
     if "xiaoduiyou_mini_app_contract_get" not in adapter_source:
         failures.append("Hermes adapter does not expose the live mini-app contract tool")
+    if "mini_app_path" not in adapter_source:
+        failures.append("Hermes adapter does not expose file-backed large mini-app transport")
     if "schema xdy.mini_app.v1" in adapter_source:
         failures.append("Hermes adapter still instructs Agents to author V1")
 
     runtime_manifest = json.loads(RUNTIME_MANIFEST.read_text(encoding="utf-8"))
-    if runtime_manifest.get("version") != "0.1.16":
-        failures.append("Runtime-skill plugin version must be 0.1.16 for the V2 skill release")
+    if runtime_manifest.get("version") != "0.1.17":
+        failures.append("Runtime-skill plugin version must be 0.1.17 for the V2 skill release")
 
     adjacent_main_example = ROOT.parent / "xiaoduiyou" / "docs" / "examples" / "mini-app-v2-places.json"
     if adjacent_main_example.exists() and adjacent_main_example.read_bytes() != EXAMPLE.read_bytes():
