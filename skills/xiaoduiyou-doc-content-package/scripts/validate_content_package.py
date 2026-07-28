@@ -158,7 +158,7 @@ def _validate_mini_app_expression(value: Any, path: str, errors: list[str], dept
         return
 
     operator = value.get("$op")
-    if operator not in MINI_APP_EXPRESSION_OPS:
+    if not isinstance(operator, str) or operator not in MINI_APP_EXPRESSION_OPS:
         errors.append(f"{path}.$op unknown expression operator {json.dumps(operator, ensure_ascii=False)}")
         return
 
@@ -207,7 +207,8 @@ def _validate_mini_app_expression(value: Any, path: str, errors: list[str], dept
                 errors.append(f"{path}.{required} is required for sort")
             else:
                 _validate_mini_app_expression(value[required], f"{path}.{required}", errors, depth + 1)
-        if value.get("direction", "asc") not in {"asc", "desc"}:
+        direction = value.get("direction", "asc")
+        if not isinstance(direction, str) or direction not in {"asc", "desc"}:
             errors.append(f"{path}.direction must be asc or desc")
         return
     if operator == "search":
@@ -256,7 +257,7 @@ def _validate_mini_app_action(
         errors.append(f"{path} must be an action object")
         return
     action_type = action.get("type")
-    if action_type not in MINI_APP_ACTION_TYPES:
+    if not isinstance(action_type, str) or action_type not in MINI_APP_ACTION_TYPES:
         errors.append(f"{path}.type must be a supported V2 action")
         return
 
@@ -271,18 +272,22 @@ def _validate_mini_app_action(
                 _validate_mini_app_mutation(change, f"{path}.changes[{index}]", state, errors)
     elif action_type == "sequence":
         refs = action.get("actions")
-        if not isinstance(refs, list) or not refs or any(ref not in actions for ref in refs):
+        if not isinstance(refs, list) or not refs or any(
+            not isinstance(ref, str) or ref not in actions for ref in refs
+        ):
             errors.append(f"{path}.actions must name declared actions")
     elif action_type == "conditional":
         for branch in ("then", "else"):
             ref = action.get(branch)
-            if ref is not None and ref not in actions:
+            if ref is not None and (not isinstance(ref, str) or ref not in actions):
                 errors.append(f"{path}.{branch} must name a declared action")
-    elif action_type == "navigate" and action.get("page") not in pages:
-        errors.append(f"{path}.page must name a declared page")
+    elif action_type == "navigate":
+        page = action.get("page")
+        if not isinstance(page, str) or page not in pages:
+            errors.append(f"{path}.page must name a declared page")
     elif action_type == "resource.refresh":
         resource = action.get("resource")
-        if resource is not None and resource not in resources:
+        if resource is not None and (not isinstance(resource, str) or resource not in resources):
             errors.append(f"{path}.resource must name a declared resource")
 
 
@@ -292,7 +297,8 @@ def _validate_mini_app_mutation(
     state: dict[str, Any],
     errors: list[str],
 ) -> None:
-    if not isinstance(mutation, dict) or mutation.get("type") not in {
+    mutation_type = mutation.get("type") if isinstance(mutation, dict) else None
+    if not isinstance(mutation_type, str) or mutation_type not in {
         "state.set",
         "state.toggle",
         "state.increment",
@@ -308,7 +314,6 @@ def _validate_mini_app_mutation(
         errors.append(f"{path}.path must name a declared state field")
         return
     field_type = state[field_name].get("type") if isinstance(state[field_name], dict) else None
-    mutation_type = mutation["type"]
     if mutation_type == "state.set" and "value" not in mutation:
         errors.append(f"{path}.value is required for state.set")
     elif mutation_type == "state.toggle" and field_type != "boolean":
@@ -316,12 +321,12 @@ def _validate_mini_app_mutation(
     elif mutation_type == "state.increment" and field_type != "number":
         errors.append(f"{path} state.increment requires a number field")
     elif mutation_type in {"state.add", "state.remove"}:
-        if field_type not in {"string_set", "string_list", "list"}:
+        if not isinstance(field_type, str) or field_type not in {"string_set", "string_list", "list"}:
             errors.append(f"{path} {mutation_type} requires a set or list field")
         if "value" not in mutation:
             errors.append(f"{path}.value is required for {mutation_type}")
     elif mutation_type == "state.move":
-        if field_type not in {"string_list", "list"}:
+        if not isinstance(field_type, str) or field_type not in {"string_list", "list"}:
             errors.append(f"{path} state.move requires a list field")
         if "from" not in mutation:
             errors.append(f"{path}.from is required for state.move")
@@ -350,7 +355,7 @@ def _validate_mini_app_node(
         errors.append("mini_app pages contain more than 1000 component nodes")
         return
     node_type = node.get("type")
-    if node_type not in MINI_APP_COMPONENT_TYPES:
+    if not isinstance(node_type, str) or node_type not in MINI_APP_COMPONENT_TYPES:
         errors.append(f"{path}.type must be a supported V2 component")
         return
     node_id = node.get("id")
@@ -367,7 +372,12 @@ def _validate_mini_app_node(
         if not isinstance(state_path, str) or state_path not in state:
             errors.append(f"{path}.state_path must name a declared state field")
             return
-        if allowed_types and state[state_path].get("type") not in allowed_types:
+        field = state[state_path]
+        if not isinstance(field, dict):
+            errors.append(f"{path}.state_path must name a valid state field")
+            return
+        field_type = field.get("type")
+        if allowed_types and (not isinstance(field_type, str) or field_type not in allowed_types):
             errors.append(f"{path}.state_path has an incompatible state type")
 
     if node_type in {"column", "row", "grid", "card", "section"}:
@@ -380,7 +390,13 @@ def _validate_mini_app_node(
     elif node_type == "checkbox":
         require_state({"boolean", "string_set"})
         state_path = node.get("state_path")
-        if isinstance(state_path, str) and state_path in state and state[state_path].get("type") == "string_set" and "value" not in node:
+        if (
+            isinstance(state_path, str)
+            and state_path in state
+            and isinstance(state[state_path], dict)
+            and state[state_path].get("type") == "string_set"
+            and "value" not in node
+        ):
             errors.append(f"{path}.value is required for string_set checkbox state")
     elif node_type == "switch":
         require_state({"boolean"})
@@ -393,7 +409,8 @@ def _validate_mini_app_node(
         if not isinstance(node.get("options"), list):
             errors.append(f"{path}.options must be an array")
     elif node_type == "button":
-        if node.get("action") not in actions:
+        action = node.get("action")
+        if not isinstance(action, str) or action not in actions:
             errors.append(f"{path}.action must name a declared action")
         if "label" not in node:
             errors.append(f"{path}.label is required")
@@ -430,9 +447,12 @@ def _validate_mini_app_node(
                 _validate_mini_app_node(tab.get("content"), f"{path}.tabs[{index}].content", state, actions, errors, node_ids, node_count, depth + 1)
     elif node_type == "form":
         fields = node.get("fields")
-        if not isinstance(fields, list) or any(field not in state for field in fields):
+        if not isinstance(fields, list) or any(
+            not isinstance(field, str) or field not in state for field in fields
+        ):
             errors.append(f"{path}.fields must name declared state fields")
-        if node.get("submit_action") not in actions:
+        submit_action = node.get("submit_action")
+        if not isinstance(submit_action, str) or submit_action not in actions:
             errors.append(f"{path}.submit_action must name a declared action")
         children = node.get("children")
         if not isinstance(children, list):
@@ -483,7 +503,10 @@ def validate_mini_app_v2(mini_app: Any) -> list[str]:
     if manifest.get("min_runtime") != "2.0":
         errors.append(f"{prefix}.manifest.min_runtime must be 2.0")
     capabilities = manifest.get("capabilities")
-    if not isinstance(capabilities, list) or any(capability not in MINI_APP_CAPABILITIES for capability in capabilities):
+    if not isinstance(capabilities, list) or any(
+        not isinstance(capability, str) or capability not in MINI_APP_CAPABILITIES
+        for capability in capabilities
+    ):
         errors.append(f"{prefix}.manifest.capabilities must contain only supported capabilities")
         capabilities_set: set[str] = set()
     else:
@@ -500,9 +523,9 @@ def validate_mini_app_v2(mini_app: Any) -> list[str]:
             continue
         state_type = field.get("type")
         scope = field.get("scope")
-        if state_type not in MINI_APP_STATE_TYPES:
+        if not isinstance(state_type, str) or state_type not in MINI_APP_STATE_TYPES:
             errors.append(f"{path}.type must be a supported state type")
-        if scope not in MINI_APP_STATE_SCOPES:
+        if not isinstance(scope, str) or scope not in MINI_APP_STATE_SCOPES:
             errors.append(f"{path}.scope must be session, device, member, or family")
         if "default" not in field:
             errors.append(f"{path}.default is required")
@@ -515,10 +538,11 @@ def validate_mini_app_v2(mini_app: Any) -> list[str]:
 
     for name, resource in resources.items():
         path = f"{prefix}.resources.{name}"
-        if not isinstance(resource, dict) or resource.get("type") not in MINI_APP_RESOURCE_CAPABILITY:
+        resource_type = resource.get("type") if isinstance(resource, dict) else None
+        if not isinstance(resource_type, str) or resource_type not in MINI_APP_RESOURCE_CAPABILITY:
             errors.append(f"{path}.type must be child_profile or growth_diary")
             continue
-        used_capabilities.add(MINI_APP_RESOURCE_CAPABILITY[resource["type"]])
+        used_capabilities.add(MINI_APP_RESOURCE_CAPABILITY[resource_type])
         _scan_mini_app_expressions(resource, path, errors)
 
     for name, expression in computed.items():
@@ -531,9 +555,10 @@ def validate_mini_app_v2(mini_app: Any) -> list[str]:
         _validate_mini_app_action(action, action_path, state, actions, pages, resources, errors)
         _scan_mini_app_expressions(action, action_path, errors)
         if isinstance(action, dict):
-            if action.get("type") in {"navigate", "back"}:
+            action_type = action.get("type")
+            if isinstance(action_type, str) and action_type in {"navigate", "back"}:
                 used_capabilities.add("navigation")
-            if action.get("type") == "share":
+            if action_type == "share":
                 used_capabilities.add("share")
 
     missing_capabilities = sorted(used_capabilities - capabilities_set)
@@ -586,12 +611,13 @@ def validate(obj: Any) -> tuple[list[str], list[str]]:
     if templates is not None:
         if not isinstance(templates, list) or not all(isinstance(x, str) for x in templates):
             errors.append("ui_templates must be a list of strings")
+    template_names = templates if isinstance(templates, list) and all(isinstance(x, str) for x in templates) else []
     if publish_notes is not None and not isinstance(publish_notes, dict):
         errors.append("publish_notes must be an object keyed by template/platform")
     if ui_payloads is not None and not isinstance(ui_payloads, dict):
         errors.append("ui_payloads must be an object keyed by template")
-    if isinstance(templates, list):
-        for t in templates:
+    if template_names:
+        for t in template_names:
             payloads = ui_payloads if isinstance(ui_payloads, dict) else {}
             notes = publish_notes if isinstance(publish_notes, dict) else {}
             result_data = payloads if t in UI_PAYLOAD_TEMPLATES else notes
@@ -600,7 +626,7 @@ def validate(obj: Any) -> tuple[list[str], list[str]]:
                 warnings.append(f"ui_templates includes {t!r} but {result_field} has no matching key")
     if isinstance(publish_notes, dict):
         for key, note in publish_notes.items():
-            if isinstance(templates, list) and key not in templates:
+            if template_names and key not in template_names:
                 warnings.append(f"publish_notes has {key!r} but ui_templates does not include it")
             if not isinstance(note, dict):
                 errors.append(f"publish_notes.{key} must be an object")
@@ -631,9 +657,9 @@ def validate(obj: Any) -> tuple[list[str], list[str]]:
         mini_app = ui_payloads.get("mini_app")
         if mini_app is not None:
             errors.extend(validate_mini_app_v2(mini_app))
-    if isinstance(ui_payloads, dict) and isinstance(templates, list):
+    if isinstance(ui_payloads, dict) and template_names:
         for key in ui_payloads:
-            if key in UI_PAYLOAD_TEMPLATES and key not in templates:
+            if key in UI_PAYLOAD_TEMPLATES and key not in template_names:
                 warnings.append(f"ui_payloads has {key!r} but ui_templates does not include it")
     source_md = data.get("source_markdown")
     if source_md is not None and not isinstance(source_md, str):

@@ -92,6 +92,23 @@ def main() -> int:
     if not any("unknown expression operator" in error for error in expression_errors):
         failures.append("Validator did not reject an unknown expression operator")
 
+    invalid_expression_type = json.loads(json.dumps(example))
+    invalid_expression_type["computed"]["bad"] = {"$op": {"unexpected": True}}
+    expression_type_errors, _ = validator.validate(invalid_expression_type)
+    if not any("unknown expression operator" in error for error in expression_type_errors):
+        failures.append("Validator crashed or failed to reject a non-string expression operator")
+
+    invalid_action_refs = json.loads(json.dumps(example))
+    invalid_action_refs["actions"]["bad"] = {
+        "type": "conditional",
+        "condition": True,
+        "then": {"unexpected": True},
+        "else": [],
+    }
+    action_ref_errors, _ = validator.validate(invalid_action_refs)
+    if not any(".then must name a declared action" in error for error in action_ref_errors):
+        failures.append("Validator crashed or failed to reject a non-string conditional action reference")
+
     if comparable_files(SKILL) != comparable_files(MIRROR):
         failures.append("Top-level content-package skill and runtime-skill mirror differ")
 
@@ -109,8 +126,8 @@ def main() -> int:
         failures.append("Hermes adapter still instructs Agents to author V1")
 
     runtime_manifest = json.loads(RUNTIME_MANIFEST.read_text(encoding="utf-8"))
-    if runtime_manifest.get("version") != "0.1.19":
-        failures.append("Runtime-skill plugin version must be 0.1.19 for the V2 skill release")
+    if runtime_manifest.get("version") != "0.1.20":
+        failures.append("Runtime-skill plugin version must be 0.1.20 for the V2 skill release")
 
     adjacent_main_example = ROOT.parent / "xiaoduiyou" / "docs" / "examples" / "mini-app-v2-places.json"
     if adjacent_main_example.exists() and adjacent_main_example.read_bytes() != EXAMPLE.read_bytes():
