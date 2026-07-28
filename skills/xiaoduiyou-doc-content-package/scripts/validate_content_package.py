@@ -84,6 +84,20 @@ MINI_APP_RESOURCE_CAPABILITY = {
     "growth_diary": "resource.growth_diary.read",
 }
 MINI_APP_LEGACY_KEYS = {"label", "content", "state_schema", "view"}
+MINI_APP_BLOCKED_PATH_SEGMENTS = {"__proto__", "prototype", "constructor"}
+MINI_APP_COMPARISON_OPS = {"eq", "neq", "gt", "gte", "lt", "lte"}
+MINI_APP_VARIADIC_OPS = {"and", "or", "add", "multiply", "concat", "coalesce"}
+MINI_APP_UNARY_OPS = {"not", "lower", "upper", "trim", "length", "is_empty"}
+MINI_APP_BINARY_OPS = {"subtract", "divide", "contains", "contains_ci", "starts_with", "ends_with", "includes"}
+MINI_APP_COLLECTION_OPS = {"filter", "map", "sort", "search", "count", "sum", "first", "group"}
+MINI_APP_EXPRESSION_OPS = (
+    MINI_APP_COMPARISON_OPS
+    | MINI_APP_VARIADIC_OPS
+    | MINI_APP_UNARY_OPS
+    | MINI_APP_BINARY_OPS
+    | MINI_APP_COLLECTION_OPS
+    | {"if"}
+)
 
 
 def _mini_app_default_matches(state_type: str, value: Any) -> bool:
@@ -112,6 +126,121 @@ def _mini_app_named_object(value: Any, path: str, maximum: int, errors: list[str
         if not MINI_APP_IDENTIFIER_RE.fullmatch(str(name)):
             errors.append(f"{path}.{name} must be a valid identifier")
     return value
+
+
+def _validate_mini_app_expression(value: Any, path: str, errors: list[str], depth: int = 0) -> None:
+    if depth > 30:
+        errors.append(f"{path} expression nesting exceeds the maximum depth of 30")
+        return
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return
+    if not isinstance(value, dict):
+        errors.append(f"{path} must be a JSON primitive, {{$literal}}, {{$path}}, or {{$op}} expression")
+        return
+    if "$literal" in value:
+        try:
+            json.dumps(value["$literal"], ensure_ascii=False)
+        except (TypeError, ValueError):
+            errors.append(f"{path}.$literal must be JSON-serializable")
+        return
+    if "$path" in value:
+        expression_path = value["$path"]
+        if not isinstance(expression_path, str) or not expression_path.strip():
+            errors.append(f"{path}.$path must be a non-empty string")
+            return
+        segments = [segment for segment in expression_path.split(".") if segment]
+        if any(segment in MINI_APP_BLOCKED_PATH_SEGMENTS for segment in segments):
+            errors.append(f"{path}.$path contains a blocked segment")
+            return
+        allowed_roots = {"data", "state", "computed", "resources", "context", "params", "item", "index", "event"}
+        if not segments or segments[0] not in allowed_roots:
+            errors.append(f"{path}.$path has an unknown expression root")
+        return
+
+    operator = value.get("$op")
+    if operator not in MINI_APP_EXPRESSION_OPS:
+        errors.append(f"{path}.$op unknown expression operator {json.dumps(operator, ensure_ascii=False)}")
+        return
+
+    def validate_args(minimum: int, maximum: int) -> None:
+        args = value.get("args")
+        if not isinstance(args, list) or not minimum <= len(args) <= maximum:
+            count = str(minimum) if minimum == maximum else f"{minimum}-{maximum}"
+            errors.append(f"{path}.args {operator} requires {count} argument(s)")
+            return
+        for index, argument in enumerate(args):
+            _validate_mini_app_expression(argument, f"{path}.args[{index}]", errors, depth + 1)
+
+    if operator in MINI_APP_COMPARISON_OPS or operator in MINI_APP_BINARY_OPS:
+        validate_args(2, 2)
+        return
+    if operator in MINI_APP_UNARY_OPS:
+        validate_args(1, 1)
+        return
+    if operator in MINI_APP_VARIADIC_OPS:
+        validate_args(1, 50)
+        return
+    if operator == "if":
+        for key in ("condition", "then", "else"):
+            if key not in value:
+                errors.append(f"{path}.{key} is required for if")
+            else:
+                _validate_mini_app_expression(value[key], f"{path}.{key}", errors, depth + 1)
+        return
+    if operator in {"count", "first"}:
+        if "input" not in value:
+            errors.append(f"{path}.input is required for {operator}")
+        else:
+            _validate_mini_app_expression(value["input"], f"{path}.input", errors, depth + 1)
+        return
+    if operator in {"filter", "map", "group"}:
+        key = "where" if operator == "filter" else "select" if operator == "map" else "by"
+        for required in ("input", key):
+            if required not in value:
+                errors.append(f"{path}.{required} is required for {operator}")
+            else:
+                _validate_mini_app_expression(value[required], f"{path}.{required}", errors, depth + 1)
+        return
+    if operator == "sort":
+        for required in ("input", "by"):
+            if required not in value:
+                errors.append(f"{path}.{required} is required for sort")
+            else:
+                _validate_mini_app_expression(value[required], f"{path}.{required}", errors, depth + 1)
+        if value.get("direction", "asc") not in {"asc", "desc"}:
+            errors.append(f"{path}.direction must be asc or desc")
+        return
+    if operator == "search":
+        for required in ("input", "query"):
+            if required not in value:
+                errors.append(f"{path}.{required} is required for search")
+            else:
+                _validate_mini_app_expression(value[required], f"{path}.{required}", errors, depth + 1)
+        paths = value.get("paths")
+        if not isinstance(paths, list) or not 1 <= len(paths) <= 20 or any(
+            not isinstance(item_path, str) or not item_path.strip() for item_path in paths
+        ):
+            errors.append(f"{path}.paths must contain 1-20 non-empty item paths")
+        return
+    if operator == "sum":
+        if "input" not in value:
+            errors.append(f"{path}.input is required for sum")
+        else:
+            _validate_mini_app_expression(value["input"], f"{path}.input", errors, depth + 1)
+        if "select" in value:
+            _validate_mini_app_expression(value["select"], f"{path}.select", errors, depth + 1)
+
+
+def _scan_mini_app_expressions(value: Any, path: str, errors: list[str]) -> None:
+    if isinstance(value, dict):
+        if any(key in value for key in ("$literal", "$path", "$op")):
+            _validate_mini_app_expression(value, path, errors)
+            return
+        for key, child in value.items():
+            _scan_mini_app_expressions(child, f"{path}.{key}", errors)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _scan_mini_app_expressions(child, f"{path}[{index}]", errors)
 
 
 def _validate_mini_app_action(
@@ -345,7 +474,6 @@ def validate_mini_app_v2(mini_app: Any) -> list[str]:
     del data
     state = _mini_app_named_object(mini_app.get("state"), f"{prefix}.state", 200, errors)
     computed = _mini_app_named_object(mini_app.get("computed"), f"{prefix}.computed", 100, errors)
-    del computed
     actions = _mini_app_named_object(mini_app.get("actions"), f"{prefix}.actions", 100, errors)
     resources = _mini_app_named_object(mini_app.get("resources"), f"{prefix}.resources", 20, errors)
     pages = _mini_app_named_object(mini_app.get("pages"), f"{prefix}.pages", 20, errors)
@@ -391,11 +519,17 @@ def validate_mini_app_v2(mini_app: Any) -> list[str]:
             errors.append(f"{path}.type must be child_profile or growth_diary")
             continue
         used_capabilities.add(MINI_APP_RESOURCE_CAPABILITY[resource["type"]])
+        _scan_mini_app_expressions(resource, path, errors)
+
+    for name, expression in computed.items():
+        _validate_mini_app_expression(expression, f"{prefix}.computed.{name}", errors)
 
     if len(pages) > 1:
         used_capabilities.add("navigation")
     for name, action in actions.items():
-        _validate_mini_app_action(action, f"{prefix}.actions.{name}", state, actions, pages, resources, errors)
+        action_path = f"{prefix}.actions.{name}"
+        _validate_mini_app_action(action, action_path, state, actions, pages, resources, errors)
+        _scan_mini_app_expressions(action, action_path, errors)
         if isinstance(action, dict):
             if action.get("type") in {"navigate", "back"}:
                 used_capabilities.add("navigation")
@@ -414,6 +548,7 @@ def validate_mini_app_v2(mini_app: Any) -> list[str]:
             errors.append(f"{path} must be an object")
             continue
         _validate_mini_app_node(page.get("root"), f"{path}.root", state, actions, errors, node_ids, node_count)
+        _scan_mini_app_expressions(page, path, errors)
     if not pages:
         errors.append(f"{prefix}.pages must contain at least one page")
     return errors

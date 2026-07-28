@@ -31,7 +31,7 @@ from gateway.session import SessionSource
 logger = logging.getLogger(__name__)
 
 TOOLSET = "xiaoduiyou"
-XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.28.4"
+XIAODUIYOU_HERMES_PLUGIN_VERSION = "2026.7.28.5"
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -792,6 +792,15 @@ def _mini_app_validation_tool_result(
         "persisted": False,
         "state": "validation_failed",
         "operation": operation,
+        "completion_blocked": True,
+        "required_next_action": (
+            f"Correct the definition, rerun the local validator, then call xiaoduiyou_documents_{operation} "
+            "again with the same mini_app_path. Do not send a completion reply yet."
+        ),
+        "success_gate": (
+            "Only a later document tool result with ok=true, applied=true, persisted=true, and a document_id "
+            "proves that the mini app was saved. Local file or validator success is not persistence."
+        ),
         **error_payload,
     }
     if document_id:
@@ -1209,7 +1218,9 @@ class XiaoduiyouAdapter(BasePlatformAdapter):
             "For ordinary chat, answer normally and do not call document tools. "
             "When the user explicitly asks to create, update, append to, or delete a document, "
             "call the appropriate xiaoduiyou document tool before your final reply; never duplicate a successful mutation, "
-            "but correct and retry a structured validation failure. "
+            "but correct and retry a structured validation failure. Local file creation and validator success do not persist "
+            "a document. If a document result has ok=false or persisted=false, do not claim completion: fix it and call the "
+            "same document tool again. Only ok=true, applied=true, persisted=true, and a document_id prove the write. "
             "For content packages, choose ui_templates from xiaohongshu, moments, travel_plan, interactive_html, or mini_app. "
             "Use fields.publish_notes for publish/travel results. For interactive_html, store a self-contained stateless offline page at "
             "fields.ui_payloads.interactive_html with schema xdy.interactive_html.v1, label, and html. For a declarative mini app, load "
@@ -2746,7 +2757,7 @@ def register(ctx) -> None:
         emoji="📝",
         schema={
             "name": "xiaoduiyou_documents_create",
-            "description": "Create a Xiaoduiyou document only when the user explicitly asks for a document artifact. For mini_app, load xiaoduiyou-doc-content-package, call xiaoduiyou_mini_app_contract_get, write and validate a raw xdy.mini_app.v2 JSON file, then prefer mini_app_path so a large definition is not double-encoded through tool_call.",
+            "description": "Create a Xiaoduiyou document only when the user explicitly asks for a document artifact. For mini_app, load xiaoduiyou-doc-content-package, call xiaoduiyou_mini_app_contract_get, write and validate a raw xdy.mini_app.v2 JSON file, then prefer mini_app_path so a large definition is not double-encoded through tool_call. A local validator success is not a write: do not report completion until this tool returns ok=true, applied=true, persisted=true, and a document_id. Correct validation failures and call this tool again.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -2775,7 +2786,7 @@ def register(ctx) -> None:
         emoji="✏️",
         schema={
             "name": "xiaoduiyou_documents_update",
-            "description": "Update a Xiaoduiyou document only when the user explicitly asks to modify a document. Omit document_id to target the current screen document/content package; Xiaoduiyou falls back to the current session document. For mini_app, call xiaoduiyou_mini_app_contract_get, write and validate a raw xdy.mini_app.v2 JSON file, then prefer mini_app_path with overwrite or patch_fields.",
+            "description": "Update a Xiaoduiyou document only when the user explicitly asks to modify a document. Omit document_id to target the current screen document/content package; Xiaoduiyou falls back to the current session document. For mini_app, call xiaoduiyou_mini_app_contract_get, write and validate a raw xdy.mini_app.v2 JSON file, then prefer mini_app_path with overwrite or patch_fields. A local validator success is not a write: do not report completion until this tool returns ok=true, applied=true, persisted=true, and a document_id. Correct validation failures and call this tool again.",
             "parameters": {
                 "type": "object",
                 "properties": {

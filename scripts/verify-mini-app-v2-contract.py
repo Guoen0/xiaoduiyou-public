@@ -86,6 +86,12 @@ def main() -> int:
     if not any("state.toggle requires a boolean field" in error for error in toggle_errors):
         failures.append("Validator did not reject state.toggle on a string_set field")
 
+    invalid_expression_example = json.loads(json.dumps(example))
+    invalid_expression_example["computed"]["bad"] = {"$op": "let", "input": {"$path": "data.places"}}
+    expression_errors, _ = validator.validate(invalid_expression_example)
+    if not any("unknown expression operator" in error for error in expression_errors):
+        failures.append("Validator did not reject an unknown expression operator")
+
     if comparable_files(SKILL) != comparable_files(MIRROR):
         failures.append("Top-level content-package skill and runtime-skill mirror differ")
 
@@ -103,8 +109,8 @@ def main() -> int:
         failures.append("Hermes adapter still instructs Agents to author V1")
 
     runtime_manifest = json.loads(RUNTIME_MANIFEST.read_text(encoding="utf-8"))
-    if runtime_manifest.get("version") != "0.1.18":
-        failures.append("Runtime-skill plugin version must be 0.1.18 for the V2 skill release")
+    if runtime_manifest.get("version") != "0.1.19":
+        failures.append("Runtime-skill plugin version must be 0.1.19 for the V2 skill release")
 
     adjacent_main_example = ROOT.parent / "xiaoduiyou" / "docs" / "examples" / "mini-app-v2-places.json"
     if adjacent_main_example.exists() and adjacent_main_example.read_bytes() != EXAMPLE.read_bytes():

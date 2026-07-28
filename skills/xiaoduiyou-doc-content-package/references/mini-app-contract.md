@@ -46,8 +46,12 @@ Never emit or retry with `xdy.mini_app.v1`.
    inline under `fields.ui_payloads.mini_app`.
 8. Call `xiaoduiyou_documents_create` or `xiaoduiyou_documents_update`.
 9. If the platform returns `INVALID_MINI_APP_DEFINITION`, correct the exact
-   returned `path` and retry the same operation. Do not remove the mini app,
-   switch to V1, or claim that the capability is unavailable.
+   returned `path`, rerun the validator, and call the same document tool again
+   with the same `mini_app_path`. Do not remove the mini app, switch to V1, or
+   claim that the capability is unavailable.
+10. Finish only after the latest document tool result contains `ok: true`,
+    `applied: true`, `persisted: true`, and a non-empty `document_id`. A local
+    file or clean validator result proves only local validity, not persistence.
 
 ## Choose the mode
 
@@ -587,7 +591,10 @@ The backend is authoritative. A failed create/update returns structured data:
 - `skill_reference`
 
 Correct the field at `path`, reread the referenced section or call
-`xiaoduiyou_mini_app_contract_get`, then retry the same create/update.
+`xiaoduiyou_mini_app_contract_get`, rerun the local validator, then retry the
+same create/update with the same `mini_app_path`. Do not send a completion reply
+until that later tool call returns `ok: true`, `applied: true`,
+`persisted: true`, and a non-empty `document_id`.
 
 Do not:
 

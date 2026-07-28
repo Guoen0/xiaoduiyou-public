@@ -368,6 +368,10 @@ class ContentPackageTemplateTests(unittest.TestCase):
         self.assertEqual(result["expected_schema"], "xdy.mini_app.v2")
         self.assertEqual(result["path"], "fields.ui_payloads.mini_app.pages.home.root.children[0].action")
         self.assertEqual(result["skill_reference"]["section"], "Actions")
+        self.assertEqual(result["persisted"], False)
+        self.assertEqual(result["completion_blocked"], True)
+        self.assertIn("xiaoduiyou_documents_create", result["required_next_action"])
+        self.assertIn("ok=true", result["success_gate"])
 
     def test_update_document_returns_mini_app_validation_as_structured_tool_result(self):
         old_active_tool_context = adapter._active_tool_context
