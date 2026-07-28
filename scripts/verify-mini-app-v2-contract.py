@@ -103,8 +103,8 @@ def main() -> int:
         failures.append("Hermes adapter still instructs Agents to author V1")
 
     runtime_manifest = json.loads(RUNTIME_MANIFEST.read_text(encoding="utf-8"))
-    if runtime_manifest.get("version") != "0.1.17":
-        failures.append("Runtime-skill plugin version must be 0.1.17 for the V2 skill release")
+    if runtime_manifest.get("version") != "0.1.18":
+        failures.append("Runtime-skill plugin version must be 0.1.18 for the V2 skill release")
 
     adjacent_main_example = ROOT.parent / "xiaoduiyou" / "docs" / "examples" / "mini-app-v2-places.json"
     if adjacent_main_example.exists() and adjacent_main_example.read_bytes() != EXAMPLE.read_bytes():

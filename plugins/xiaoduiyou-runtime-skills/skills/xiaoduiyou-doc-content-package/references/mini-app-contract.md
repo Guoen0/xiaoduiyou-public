@@ -36,7 +36,7 @@ Never emit or retry with `xdy.mini_app.v1`.
    run it directly against that raw definition:
 
    ```bash
-   python "${HERMES_HOME:-$HOME/.hermes}/skills/xiaoduiyou-doc-content-package/scripts/validate_content_package.py" \
+   python "${HERMES_HOME:-$HOME/.hermes}/skills/xiaoduiyou/xiaoduiyou-doc-content-package/scripts/validate_content_package.py" \
      /tmp/xdy-mini-app-weekend-board.json
    ```
 
